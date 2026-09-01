@@ -15,8 +15,8 @@ export function OperationsHomePage() {
         </p>
         <h1 className="mt-3 text-3xl font-bold tracking-[-0.04em]">Backoffice foundation</h1>
         <p className="mt-3 max-w-2xl text-sm leading-7 text-[var(--color-text-muted)]">
-          No fake dashboard metrics are shown. Management capabilities appear only when their backend
-          contract and frontend checkpoint are approved.
+          No fake dashboard metrics are shown. Management capabilities appear only when their
+          backend contract and frontend checkpoint are approved.
         </p>
 
         <div className="mt-7 grid gap-3 md:grid-cols-3">

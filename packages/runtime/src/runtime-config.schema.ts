@@ -12,7 +12,10 @@ export const runtimeConfigSchema = z.object({
     productName: z.string().min(1),
     businessName: z.string().min(1).optional(),
     logoUrl: z.string().min(1).optional(),
-    accentColor: z.string().regex(/^#[0-9A-Fa-f]{6}$/).optional(),
+    accentColor: z
+      .string()
+      .regex(/^#[0-9A-Fa-f]{6}$/)
+      .optional(),
   }),
   capabilities: z.object({
     notifications: z.boolean(),

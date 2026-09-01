@@ -5,7 +5,8 @@ const FOUNDATION_POINTS = [
   {
     icon: Layers3,
     title: 'Domain boundaries first',
-    description: 'Cashier workflow will consume backend facts through query and command boundaries.',
+    description:
+      'Cashier workflow will consume backend facts through query and command boundaries.',
   },
   {
     icon: ShieldCheck,
@@ -34,8 +35,8 @@ export function SellFoundationPage() {
                   Foundation ready for the transaction experience.
                 </h1>
                 <p className="mt-5 max-w-xl text-sm leading-7 text-[var(--color-text-muted)] lg:text-base">
-                  This screen intentionally contains no fake cart or transaction data. The next approved
-                  checkpoint will connect real selling catalog and Sale behavior.
+                  This screen intentionally contains no fake cart or transaction data. The next
+                  approved checkpoint will connect real selling catalog and Sale behavior.
                 </p>
               </div>
 
@@ -58,7 +59,9 @@ export function SellFoundationPage() {
                       <Icon className="size-4.5 text-[var(--color-brand)]" />
                     </div>
                     <h2 className="mt-4 text-sm font-bold">{title}</h2>
-                    <p className="mt-2 text-sm leading-6 text-[var(--color-text-muted)]">{description}</p>
+                    <p className="mt-2 text-sm leading-6 text-[var(--color-text-muted)]">
+                      {description}
+                    </p>
                   </article>
                 ))}
               </div>

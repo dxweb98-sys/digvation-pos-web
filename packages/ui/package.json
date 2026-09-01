@@ -15,5 +15,7 @@
     "react": "^19.2.0",
     "tailwindcss": "^4.3.3"
   },
-  "scripts": { "typecheck": "tsc -p tsconfig.json" }
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json"
+  }
 }

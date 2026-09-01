@@ -23,12 +23,7 @@ interface CashierProvidersProps {
   router: RouterProviderProps['router'];
 }
 
-export function CashierProviders({
-  runtime,
-  session,
-  authPort,
-  router,
-}: CashierProvidersProps) {
+export function CashierProviders({ runtime, session, authPort, router }: CashierProvidersProps) {
   return (
     <RuntimeProvider config={runtime}>
       <AuthProvider session={session} authPort={authPort}>

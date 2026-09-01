@@ -10,7 +10,8 @@ const expectedSpecSha = '9008e605b96660b5183e937b1b15088d5f6faa27';
 const errors = [];
 
 if (lock.backend?.release !== 'v0.3.0') errors.push('backend.release must remain v0.3.0');
-if (lock.backend?.sha !== expectedBackendSha) errors.push('backend.sha does not match locked v0.3.0');
+if (lock.backend?.sha !== expectedBackendSha)
+  errors.push('backend.sha does not match locked v0.3.0');
 if (lock.auth?.specificationSha !== expectedSpecSha) {
   errors.push('auth.specificationSha does not match locked AUTH-01 specification');
 }

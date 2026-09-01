@@ -11,6 +11,11 @@ export async function bootstrapCashier() {
   const [runtime, session] = await Promise.all([runtimePort.load(), authPort.me()]);
 
   return (
-    <CashierProviders runtime={runtime} session={session} authPort={authPort} router={cashierRouter} />
+    <CashierProviders
+      runtime={runtime}
+      session={session}
+      authPort={authPort}
+      router={cashierRouter}
+    />
   );
 }

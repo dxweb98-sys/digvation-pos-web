@@ -25,7 +25,10 @@ export function AccountPage() {
             ['Version', version.version],
             ['Build', version.revision],
           ].map(([label, value]) => (
-            <div key={label} className="rounded-2xl border border-[var(--color-border)] bg-white p-5">
+            <div
+              key={label}
+              className="rounded-2xl border border-[var(--color-border)] bg-white p-5"
+            >
               <dt className="text-xs font-semibold uppercase tracking-[0.12em] text-[var(--color-text-muted)]">
                 {label}
               </dt>

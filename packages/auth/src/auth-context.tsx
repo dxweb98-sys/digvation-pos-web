@@ -14,11 +14,7 @@ interface AuthProviderProps extends AuthContextValue {
 }
 
 export function AuthProvider({ session, authPort, children }: AuthProviderProps) {
-  return (
-    <AuthContext.Provider value={{ session, authPort }}>
-      {children}
-    </AuthContext.Provider>
-  );
+  return <AuthContext.Provider value={{ session, authPort }}>{children}</AuthContext.Provider>;
 }
 
 export function useAuth(): AuthContextValue {
