@@ -1,0 +1,48 @@
+{
+  "name": "@digvation/pos-web",
+  "version": "0.0.0",
+  "private": true,
+  "packageManager": "pnpm@11.22.0",
+  "engines": {
+    "node": ">=24.0.0 <25",
+    "pnpm": ">=11.0.0 <12"
+  },
+  "scripts": {
+    "dev:cashier": "pnpm --filter @digvation/pos-cashier dev",
+    "dev:backoffice": "pnpm --filter @digvation/pos-backoffice dev",
+    "build": "pnpm -r --if-present build",
+    "build:cashier": "pnpm --filter @digvation/pos-cashier build",
+    "build:backoffice": "pnpm --filter @digvation/pos-backoffice build",
+    "typecheck": "pnpm -r --if-present typecheck",
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:e2e": "playwright test",
+    "contract:check": "node tooling/scripts/check-contract.mjs",
+    "naming:check": "node tooling/scripts/check-naming.mjs",
+    "verify": "pnpm contract:check && pnpm naming:check && pnpm format:check && pnpm lint && pnpm typecheck && pnpm test && pnpm build",
+    "verify:ci": "pnpm verify && pnpm test:e2e"
+  },
+  "devDependencies": {
+    "@eslint/js": "10.9.1",
+    "@playwright/test": "1.62.1",
+    "@testing-library/dom": "10.4.1",
+    "@testing-library/jest-dom": "7.0.1",
+    "@testing-library/react": "16.3.2",
+    "@types/node": "24.5.0",
+    "@types/react": "19.2.18",
+    "@types/react-dom": "19.2.5",
+    "@vitejs/plugin-react": "6.1.1",
+    "eslint": "10.9.1",
+    "eslint-plugin-react-hooks": "7.1.1",
+    "globals": "16.4.0",
+    "jsdom": "26.1.0",
+    "prettier": "3.9.6",
+    "typescript": "5.9.3",
+    "typescript-eslint": "8.68.0",
+    "vite": "8.2.2",
+    "vitest": "4.1.10"
+  }
+}

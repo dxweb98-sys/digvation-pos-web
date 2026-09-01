@@ -4,9 +4,9 @@ Frontend product workspace for the Digvation white-label POS platform.
 
 ## Repository status
 
-This repository is intentionally initialized with a minimal repository seed. Product implementation starts from the `dev` integration branch through capability-scoped working branches.
+Product implementation is performed from `dev` through capability-scoped working branches. `main` remains release/stable only.
 
-Initial frontend implementation checkpoint:
+Current implementation checkpoint:
 
 ```text
 Frontend Foundation
@@ -31,20 +31,84 @@ feat/* | fix/* | refactor/* | chore/*
   ↑ implementation work
 ```
 
-Normal implementation must not be performed directly on `main` or `dev`.
+## Applications
 
-## Product boundary
+- `apps/cashier` — operational cashier experience.
+- `apps/backoffice` — management/configuration experience.
 
-The frontend consumes the Digvation POS backend contract while preserving POS/CORE product separation. Client differences are configuration/capability driven; client-specific or business-type source forks are forbidden.
-
-Cashier and Backoffice are separate frontend applications in one monorepo and share only deliberate reusable packages.
+Both applications consume deliberate shared packages from `packages/*`; they never import each other's internals.
 
 ## Authentication during early frontend development
 
-Until production POS AUTH-01 is accepted by the backend track, frontend development uses the approved `AuthPort` abstraction with a development-only `MockAuthAdapter`. Business screens must not depend on token storage or authentication transport details.
+Production POS AUTH-01 is still implemented in the backend track. Frontend Foundation therefore uses the approved `AuthPort` with a development-only `MockAuthAdapter`. Business screens do not know token storage or transport mechanics.
 
-## Engineering source of truth
+When AUTH-01 is accepted, `MockAuthAdapter` is replaced by the production adapter without redesigning business screens.
 
-Architecture, naming, versioning, validation, API/state interaction, Git workflow, and backend-reconciliation standards are added during Frontend Foundation from the approved Digvation POS frontend architecture freeze.
+## Development
 
-Do not expand a checkpoint merely because a future capability can be anticipated.
+Requirements:
+
+```text
+Node.js 24.x
+pnpm 11.x
+```
+
+Install:
+
+```bash
+corepack enable
+pnpm install
+```
+
+Official validation before checkpoint handoff:
+
+```bash
+pnpm verify
+```
+
+Run Cashier:
+
+```bash
+pnpm dev:cashier
+```
+
+Run Backoffice:
+
+```bash
+pnpm dev:backoffice
+```
+
+## Product boundary
+
+Digvation POS remains a domain-neutral, tenant-aware, white-label transactional product. Runtime differences are configuration/capability driven. Client-specific source forks and business-type conditionals are forbidden.
+
+Deployment topology and branding are separate concerns:
+
+```text
+Deployment Profile
+├── SHARED
+├── BUSINESS_ISOLATED
+└── DEDICATED
+
+Branding Mode
+├── DIGVATION_DEFAULT
+└── WHITE_LABEL
+```
+
+## Backend compatibility
+
+Current locked backend transactional baseline:
+
+```text
+Digvation POS backend v0.3.0
+SHA d58327fa17322d1a98049d842f43742635e744f7
+```
+
+AUTH-01 specification baseline:
+
+```text
+SHA 9008e605b96660b5183e937b1b15088d5f6faa27
+target backend release v0.4.0 after approval
+```
+
+See `contracts/contract-lock.json` and `docs/integration/FRONTEND_BACKEND_RECONCILIATION_STANDARD.md`.
