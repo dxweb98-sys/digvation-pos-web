@@ -30,9 +30,18 @@ jobs:
         run: corepack prepare pnpm@11.22.0 --activate
 
       - name: Install dependencies
-        run: pnpm install --no-frozen-lockfile
+        run: pnpm install --no-frozen-lockfile 2>&1 | tee install.log
+
+      - name: Preserve install diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: install-diagnostics
+          path: install.log
+          if-no-files-found: error
 
       - name: Preserve initial lockfile
+        if: success()
         uses: actions/upload-artifact@v4
         with:
           name: pnpm-lock
