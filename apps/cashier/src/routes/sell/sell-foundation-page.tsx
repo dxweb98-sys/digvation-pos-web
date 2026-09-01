@@ -28,11 +28,6 @@ export function SellFoundationPage() {
     <section className="px-5 py-6 lg:px-8 lg:py-8">
       <div className="mx-auto max-w-6xl">
         <div className="overflow-hidden rounded-[var(--radius-panel)] border border-[var(--color-border)] bg-[var(--color-surface)] shadow-[var(--shadow-panel)]">
-          <div
-            className="h-1.5 w-full"
-            style={{ background: 'var(--gradient-brand-spectrum)' }}
-            aria-hidden="true"
-          />
           <div className="grid min-h-[420px] lg:grid-cols-[1.1fr_0.9fr]">
             <div className="flex flex-col justify-between p-7 lg:p-10">
               <div>

@@ -83,7 +83,7 @@ No client name, salon name, business type, or white-label identity may be hardco
 
 The default Digvation presentation is light-first.
 
-Default surfaces use white/off-white with dark navy text. Digvation identity is expressed through the controlled multi-color accent system:
+Default surfaces use white/off-white with dark navy text. Digvation identity is expressed through a controlled multi-color accent palette:
 
 - Yellow `#F8E85D`;
 - Mint `#BFE4D2`;
@@ -92,6 +92,8 @@ Default surfaces use white/off-white with dark navy text. Digvation identity is 
 - Coral `#F3A08B`.
 
 Dark `#0B0D10`, Navy `#0F172A`, and Indigo `#121A2F` are anchors, not the default page background.
+
+The accent colors are used individually and intentionally. Standard Digvation UI must not combine the palette into rainbow, spectrum, or multi-color gradients for identity bars, logo tiles, buttons, navigation, or other persistent chrome.
 
 The runtime theme can override semantic tokens such as background, surface, text, border, brand, focus, and the five accent colors. Shape can be varied through the approved radius profile.
 

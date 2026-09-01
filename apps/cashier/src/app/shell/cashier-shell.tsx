@@ -30,17 +30,8 @@ export function CashierShell() {
   return (
     <div className="flex h-screen flex-col overflow-hidden bg-[var(--color-background)] lg:grid lg:grid-cols-[248px_minmax(0,1fr)]">
       <aside className="shrink-0 border-b border-[var(--color-border)] bg-[var(--color-surface)] px-4 py-4 lg:h-screen lg:border-b-0 lg:border-r">
-        <div
-          className="mb-4 h-1 w-full rounded-full"
-          style={{ background: 'var(--gradient-brand-spectrum)' }}
-          aria-hidden="true"
-        />
-
         <div className="flex items-center gap-3 px-2 py-2">
-          <div
-            className="grid size-10 shrink-0 place-items-center overflow-hidden rounded-[var(--radius-control)] text-[var(--color-text)] shadow-sm"
-            style={{ background: 'var(--gradient-brand-spectrum)' }}
-          >
+          <div className="grid size-10 shrink-0 place-items-center overflow-hidden rounded-[var(--radius-control)] bg-[var(--color-accent-sky)] text-[var(--color-text)] shadow-sm">
             {runtime.branding.logoUrl ? (
               <img
                 src={runtime.branding.logoUrl}

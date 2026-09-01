@@ -26,4 +26,4 @@ After stable release:
 
 Frontend/backend versions are independent. Every frontend release records the supported backend release and SHA in `contracts/contract-lock.json`.
 
-During Frontend Foundation implementation packages use `0.1.0-alpha.0`. Acceptance promotes the frontend application baseline to `0.1.0-alpha.1`.
+Frontend Foundation was accepted at `0.1.0-alpha.1`. Subsequent prerelease increments occur only when the next meaningful checkpoint or release boundary is accepted.

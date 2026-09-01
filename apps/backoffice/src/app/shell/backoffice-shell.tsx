@@ -20,10 +20,7 @@ export function BackofficeShell() {
       <header className="border-b border-[var(--color-border)] bg-[var(--color-surface)] px-5 lg:px-8">
         <div className="flex min-h-18 items-center justify-between gap-4">
           <div className="flex min-w-0 items-center gap-3">
-            <div
-              className="grid size-10 shrink-0 place-items-center overflow-hidden rounded-[var(--radius-control)] text-[var(--color-text)]"
-              style={{ background: 'var(--gradient-brand-spectrum)' }}
-            >
+            <div className="grid size-10 shrink-0 place-items-center overflow-hidden rounded-[var(--radius-control)] bg-[var(--color-accent-lavender)] text-[var(--color-text)]">
               {runtime.branding.logoUrl ? (
                 <img
                   src={runtime.branding.logoUrl}
@@ -45,11 +42,6 @@ export function BackofficeShell() {
 
       <div className="flex min-h-0 flex-col lg:grid lg:grid-cols-[210px_minmax(0,1fr)]">
         <aside className="shrink-0 border-b border-[var(--color-border)] bg-[var(--color-surface)] p-4 lg:border-b-0 lg:border-r">
-          <div
-            className="mb-4 hidden h-1 w-full rounded-full lg:block"
-            style={{ background: 'var(--gradient-brand-spectrum)' }}
-            aria-hidden="true"
-          />
           <nav className="flex gap-2 lg:flex-col">
             {NAVIGATION.map(({ to, label, icon: Icon }) => (
               <NavLink

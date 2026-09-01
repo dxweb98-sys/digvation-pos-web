@@ -6,15 +6,10 @@ Frontend product workspace for the Digvation white-label POS platform.
 
 Product implementation is performed from `dev` through capability-scoped working branches. `main` remains release/stable only.
 
-Current implementation checkpoint:
+Accepted frontend baseline:
 
 ```text
 Frontend Foundation
-```
-
-The first accepted application prerelease will be:
-
-```text
 0.1.0-alpha.1
 ```
 
@@ -125,7 +120,7 @@ Runtime application availability can disable Cashier or Backoffice for a workspa
 
 Branding can provide product, company, business, and logo identity. Theme configuration can override semantic colors and approved shape tokens without forking application source.
 
-The Digvation default is light-first: white/off-white surfaces with the controlled Yellow, Mint, Sky, Lavender, and Coral accent system.
+The Digvation default is light-first: white/off-white surfaces with controlled Yellow, Mint, Sky, Lavender, and Coral accent tokens. Standard Digvation UI uses those accents individually; it does not combine them into rainbow or spectrum gradients.
 
 See `docs/architecture/FRONTEND_RUNTIME_BRANDING_AND_APP_TOPOLOGY.md`.
 
