@@ -1,12 +1,42 @@
 export type DeploymentProfile = 'SHARED' | 'BUSINESS_ISOLATED' | 'DEDICATED';
 export type BrandingMode = 'DIGVATION_DEFAULT' | 'WHITE_LABEL';
+export type ThemePreset = 'DIGVATION_LIGHT' | 'CUSTOM';
+export type ThemeRadius = 'COMPACT' | 'SOFT' | 'ROUNDED';
+export type ApplicationId = 'cashier' | 'backoffice';
 
 export interface BrandingConfig {
   mode: BrandingMode;
   productName: string;
+  companyName?: string | undefined;
   businessName?: string | undefined;
   logoUrl?: string | undefined;
-  accentColor?: string | undefined;
+}
+
+export interface ThemeColorConfig {
+  background?: string | undefined;
+  surface?: string | undefined;
+  surfaceMuted?: string | undefined;
+  text?: string | undefined;
+  textMuted?: string | undefined;
+  border?: string | undefined;
+  brand?: string | undefined;
+  focus?: string | undefined;
+  accentYellow?: string | undefined;
+  accentMint?: string | undefined;
+  accentSky?: string | undefined;
+  accentLavender?: string | undefined;
+  accentCoral?: string | undefined;
+}
+
+export interface ThemeConfig {
+  preset: ThemePreset;
+  radius: ThemeRadius;
+  colors?: ThemeColorConfig | undefined;
+}
+
+export interface ApplicationAvailabilityConfig {
+  cashier: boolean;
+  backoffice: boolean;
 }
 
 export interface CapabilityConfig {
@@ -23,7 +53,9 @@ export interface RuntimeConfig {
   currency: string;
   defaultCountry: string;
   deploymentProfile: DeploymentProfile;
+  applications: ApplicationAvailabilityConfig;
   branding: BrandingConfig;
+  theme: ThemeConfig;
   capabilities: CapabilityConfig;
 }
 

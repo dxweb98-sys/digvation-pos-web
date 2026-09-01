@@ -11,42 +11,74 @@
     BlinkMacSystemFont,
     'Segoe UI',
     sans-serif;
-  color: #17191d;
-  background: #f5f6f8;
+  color: #0f172a;
+  background: #f8f6f1;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
 
-  --color-background: #f5f6f8;
+  --color-background: #f8f6f1;
   --color-surface: #ffffff;
-  --color-surface-muted: #f0f2f5;
-  --color-text: #17191d;
-  --color-text-muted: #69707d;
-  --color-border: #e0e3e8;
-  --color-brand: #263dff;
-  --color-focus: #6476ff;
+  --color-surface-muted: #f4f2ed;
+  --color-text: #0f172a;
+  --color-text-muted: #667085;
+  --color-border: #e8e3d8;
+  --color-brand: #121a2f;
+  --color-focus: #0f172a;
   --color-success: #1c9b66;
-  --color-warning: #d59018;
-  --color-danger: #cf3b49;
-  --shadow-panel: 0 12px 36px rgb(16 24 40 / 0.06);
+  --color-warning: #b9780e;
+  --color-danger: #c63e4c;
+  --color-accent-yellow: #f8e85d;
+  --color-accent-mint: #bfe4d2;
+  --color-accent-sky: #b9d8ef;
+  --color-accent-lavender: #cec4f5;
+  --color-accent-coral: #f3a08b;
+  --gradient-brand-spectrum: linear-gradient(
+    105deg,
+    var(--color-accent-yellow) 0%,
+    var(--color-accent-mint) 25%,
+    var(--color-accent-sky) 50%,
+    var(--color-accent-lavender) 75%,
+    var(--color-accent-coral) 100%
+  );
+  --radius-control: 12px;
+  --radius-card: 18px;
+  --radius-panel: 24px;
+  --shadow-panel: 0 12px 36px rgb(15 23 42 / 0.06);
+}
+
+:root[data-theme-radius='COMPACT'] {
+  --radius-control: 8px;
+  --radius-card: 12px;
+  --radius-panel: 16px;
+}
+
+:root[data-theme-radius='ROUNDED'] {
+  --radius-control: 16px;
+  --radius-card: 24px;
+  --radius-panel: 32px;
 }
 
 * {
   box-sizing: border-box;
 }
 
-html {
+html,
+body,
+#root {
   min-width: 320px;
+  width: 100%;
+  height: 100%;
   min-height: 100%;
+}
+
+html {
   background: var(--color-background);
 }
 
 body {
-  min-width: 320px;
-  min-height: 100vh;
   margin: 0;
-  background:
-    radial-gradient(circle at 80% -10%, rgb(38 61 255 / 0.08), transparent 28rem),
-    var(--color-background);
+  overflow: hidden;
+  background: var(--color-background);
   color: var(--color-text);
 }
 
@@ -58,5 +90,6 @@ textarea {
 }
 
 ::selection {
-  background: rgb(38 61 255 / 0.18);
+  background: var(--color-accent-sky);
+  color: var(--color-text);
 }

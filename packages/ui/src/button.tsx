@@ -21,7 +21,7 @@ export function Button({ className, variant = 'primary', type = 'button', ...pro
     <button
       type={type}
       className={cn(
-        'inline-flex min-h-11 items-center justify-center rounded-xl px-4 text-sm font-semibold transition-[background,filter,transform,color,border-color] duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-focus)] focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-45',
+        'inline-flex min-h-11 items-center justify-center rounded-[var(--radius-control)] px-4 text-sm font-semibold transition-[background,filter,transform,color,border-color] duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-focus)] focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-45',
         VARIANT_CLASS[variant],
         className,
       )}

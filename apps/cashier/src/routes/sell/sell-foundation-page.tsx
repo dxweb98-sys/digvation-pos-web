@@ -4,17 +4,20 @@ import { ArrowRight, Layers3, ShieldCheck, Sparkles } from 'lucide-react';
 const FOUNDATION_POINTS = [
   {
     icon: Layers3,
+    accent: 'var(--color-accent-sky)',
     title: 'Domain boundaries first',
     description:
       'Cashier workflow will consume backend facts through query and command boundaries.',
   },
   {
     icon: ShieldCheck,
+    accent: 'var(--color-accent-mint)',
     title: 'Auth adapter ready',
     description: 'Mock authentication is isolated and can be replaced when AUTH-01 is approved.',
   },
   {
     icon: Sparkles,
+    accent: 'var(--color-accent-lavender)',
     title: 'White-label runtime',
     description: 'Branding and deployment topology are runtime configuration, not source forks.',
   },
@@ -24,7 +27,12 @@ export function SellFoundationPage() {
   return (
     <section className="px-5 py-6 lg:px-8 lg:py-8">
       <div className="mx-auto max-w-6xl">
-        <div className="overflow-hidden rounded-[28px] border border-[var(--color-border)] bg-[var(--color-surface)] shadow-[var(--shadow-panel)]">
+        <div className="overflow-hidden rounded-[var(--radius-panel)] border border-[var(--color-border)] bg-[var(--color-surface)] shadow-[var(--shadow-panel)]">
+          <div
+            className="h-1.5 w-full"
+            style={{ background: 'var(--gradient-brand-spectrum)' }}
+            aria-hidden="true"
+          />
           <div className="grid min-h-[420px] lg:grid-cols-[1.1fr_0.9fr]">
             <div className="flex flex-col justify-between p-7 lg:p-10">
               <div>
@@ -50,13 +58,16 @@ export function SellFoundationPage() {
 
             <div className="border-t border-[var(--color-border)] bg-[var(--color-surface-muted)] p-5 lg:border-l lg:border-t-0 lg:p-7">
               <div className="grid h-full gap-3">
-                {FOUNDATION_POINTS.map(({ icon: Icon, title, description }) => (
+                {FOUNDATION_POINTS.map(({ icon: Icon, accent, title, description }) => (
                   <article
                     key={title}
-                    className="rounded-2xl border border-white bg-white/80 p-5 shadow-sm transition-transform duration-200 hover:-translate-y-0.5"
+                    className="rounded-[var(--radius-card)] border border-[var(--color-border)] bg-[var(--color-surface)] p-5 shadow-sm transition-transform duration-200 hover:-translate-y-0.5"
                   >
-                    <div className="grid size-9 place-items-center rounded-xl bg-[var(--color-surface-muted)]">
-                      <Icon className="size-4.5 text-[var(--color-brand)]" />
+                    <div
+                      className="grid size-9 place-items-center rounded-[var(--radius-control)]"
+                      style={{ backgroundColor: accent }}
+                    >
+                      <Icon className="size-4.5 text-[var(--color-text)]" />
                     </div>
                     <h2 className="mt-4 text-sm font-bold">{title}</h2>
                     <p className="mt-2 text-sm leading-6 text-[var(--color-text-muted)]">

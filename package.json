@@ -8,11 +8,15 @@
     "pnpm": ">=11.0.0 <12"
   },
   "scripts": {
+    "dev": "pnpm --parallel --filter @digvation/pos-cashier --filter @digvation/pos-backoffice dev",
     "dev:cashier": "pnpm --filter @digvation/pos-cashier dev",
     "dev:backoffice": "pnpm --filter @digvation/pos-backoffice dev",
     "build": "pnpm -r --if-present build",
     "build:cashier": "pnpm --filter @digvation/pos-cashier build",
     "build:backoffice": "pnpm --filter @digvation/pos-backoffice build",
+    "preview": "pnpm --parallel --filter @digvation/pos-cashier --filter @digvation/pos-backoffice preview",
+    "preview:cashier": "pnpm --filter @digvation/pos-cashier preview",
+    "preview:backoffice": "pnpm --filter @digvation/pos-backoffice preview",
     "typecheck": "pnpm -r --if-present typecheck",
     "lint": "eslint .",
     "format": "prettier --write .",
