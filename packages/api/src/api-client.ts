@@ -6,18 +6,30 @@ export interface ApiClientOptions {
   getAccessToken?: () => Promise<string | null>;
 }
 
+export interface ApiRequestOptions {
+  signal?: AbortSignal | undefined;
+  headers?: HeadersInit | undefined;
+}
+
 export class ApiClient {
   public constructor(private readonly options: ApiClientOptions) {}
 
-  public get<T>(path: string, signal?: AbortSignal): Promise<T> {
-    return this.request<T>(path, { method: 'GET', signal: signal ?? null });
+  public get<T>(path: string, options: ApiRequestOptions = {}): Promise<T> {
+    return this.request<T>(path, {
+      method: 'GET',
+      signal: options.signal ?? null,
+      headers: new Headers(options.headers),
+    });
   }
 
-  public post<T>(path: string, body: unknown, signal?: AbortSignal): Promise<T> {
+  public post<T>(path: string, body: unknown, options: ApiRequestOptions = {}): Promise<T> {
+    const headers = new Headers(options.headers);
+    headers.set('content-type', 'application/json');
+
     return this.request<T>(path, {
       method: 'POST',
-      signal: signal ?? null,
-      headers: { 'content-type': 'application/json' },
+      signal: options.signal ?? null,
+      headers,
       body: JSON.stringify(body),
     });
   }
