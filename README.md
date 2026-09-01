@@ -4,12 +4,12 @@ Frontend product workspace for the Digvation white-label POS platform.
 
 ## Repository status
 
-This repository is intentionally initialized with a minimal seed commit. Product implementation starts from the `dev` integration branch through checkpoint-scoped working branches.
+This repository is intentionally initialized with a minimal repository seed. Product implementation starts from the `dev` integration branch through capability-scoped working branches.
 
 Initial frontend implementation checkpoint:
 
 ```text
-F0 — Foundation Lock
+Frontend Foundation
 ```
 
 The first accepted application prerelease will be:
@@ -45,6 +45,6 @@ Until production POS AUTH-01 is accepted by the backend track, frontend developm
 
 ## Engineering source of truth
 
-Architecture, naming, versioning, validation, API/state interaction, Git workflow, and backend-reconciliation standards are added as part of F0 from the approved Digvation POS frontend architecture freeze.
+Architecture, naming, versioning, validation, API/state interaction, Git workflow, and backend-reconciliation standards are added during Frontend Foundation from the approved Digvation POS frontend architecture freeze.
 
 Do not expand a checkpoint merely because a future capability can be anticipated.
