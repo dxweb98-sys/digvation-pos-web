@@ -1,5 +1,5 @@
-import { setupServer, type SetupServerApi } from 'msw/node';
+import { setupServer } from 'msw/node';
 
-export function createMockServer(): SetupServerApi {
+export function createMockServer() {
   return setupServer();
 }
