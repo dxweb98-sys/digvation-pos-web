@@ -51,6 +51,20 @@ jobs:
           path: pnpm-lock.yaml
           if-no-files-found: error
 
+      # Temporary remediation aid while bootstrapping the repository.
+      # The generated patch is committed, then this step is removed before acceptance.
+      - name: Generate deterministic formatting remediation
+        run: |
+          pnpm format
+          git diff --binary > formatting.patch
+
+      - name: Preserve formatting remediation
+        uses: actions/upload-artifact@v4
+        with:
+          name: formatting-remediation
+          path: formatting.patch
+          if-no-files-found: error
+
       - name: Verify foundation
         env:
           VITE_BUILD_REVISION: ${{ github.sha }}
