@@ -1,0 +1,22 @@
+{
+  "schemaVersion": 1,
+  "backend": {
+    "repository": "https://github.com/dxweb98-sys/digvation-pos-service",
+    "release": "v0.3.0",
+    "sha": "d58327fa17322d1a98049d842f43742635e744f7"
+  },
+  "auth": {
+    "status": "implementation-in-progress",
+    "specificationSha": "9008e605b96660b5183e937b1b15088d5f6faa27",
+    "targetRelease": "v0.4.0"
+  },
+  "transport": {
+    "apiPrefix": "/api/v1",
+    "openApiPath": "/openapi.json",
+    "credentials": false
+  },
+  "openApiSnapshot": {
+    "status": "pending-approved-runtime-export",
+    "reason": "Do not fabricate an OpenAPI snapshot. Export it from the approved backend runtime before generated transport becomes an acceptance gate."
+  }
+}
