@@ -31,7 +31,13 @@ export default tseslint.config(
       '@typescript-eslint/naming-convention': [
         'error',
         { selector: 'default', format: ['camelCase'] },
-        { selector: 'variable', modifiers: ['const'], format: ['camelCase', 'UPPER_CASE', 'PascalCase'] },
+        {
+          selector: 'variable',
+          modifiers: ['const'],
+          format: ['camelCase', 'UPPER_CASE', 'PascalCase'],
+        },
+        { selector: 'function', format: ['camelCase', 'PascalCase'] },
+        { selector: 'parameter', format: ['camelCase', 'PascalCase'] },
         { selector: 'typeLike', format: ['PascalCase'] },
         { selector: 'enumMember', format: ['UPPER_CASE'] },
         { selector: 'objectLiteralProperty', format: null },
@@ -42,6 +48,9 @@ export default tseslint.config(
   },
   {
     files: ['**/*.config.{js,mjs,ts}', 'tooling/**/*.mjs'],
+    languageOptions: {
+      globals: globals.node,
+    },
     rules: {
       '@typescript-eslint/naming-convention': 'off',
     },
