@@ -4,9 +4,9 @@ export type BrandingMode = 'DIGVATION_DEFAULT' | 'WHITE_LABEL';
 export interface BrandingConfig {
   mode: BrandingMode;
   productName: string;
-  businessName?: string;
-  logoUrl?: string;
-  accentColor?: string;
+  businessName?: string | undefined;
+  logoUrl?: string | undefined;
+  accentColor?: string | undefined;
 }
 
 export interface CapabilityConfig {
