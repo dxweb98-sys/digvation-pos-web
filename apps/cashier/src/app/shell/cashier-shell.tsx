@@ -55,10 +55,9 @@ export function CashierShell() {
             <Building2 className="size-4" />
             <span className="text-[11px] font-semibold uppercase tracking-[0.14em]">Branch</span>
           </div>
-          <p className="mt-2 text-sm font-semibold text-[var(--color-text)]">Not selected yet</p>
+          <p className="mt-2 text-sm font-semibold text-[var(--color-text)]">Transaction context</p>
           <p className="mt-1 text-xs leading-5 text-[var(--color-text-muted)]">
-            Branch selection is connected with the transaction workspace, without inventing local
-            branch data.
+            Select the current Branch in Sell. An active Sale is never moved when Branch changes.
           </p>
         </div>
 

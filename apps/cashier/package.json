@@ -10,7 +10,9 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@digvation/pos-api": "workspace:*",
     "@digvation/pos-auth": "workspace:*",
+    "@digvation/pos-money": "workspace:*",
     "@digvation/pos-runtime": "workspace:*",
     "@digvation/pos-ui": "workspace:*",
     "@tanstack/react-query": "5.102.8",
