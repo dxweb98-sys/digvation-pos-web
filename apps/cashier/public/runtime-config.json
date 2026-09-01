@@ -1,0 +1,19 @@
+{
+  "apiBaseUrl": "http://127.0.0.1:4003",
+  "workspace": "local-development",
+  "locale": "id-ID",
+  "currency": "IDR",
+  "defaultCountry": "ID",
+  "deploymentProfile": "SHARED",
+  "branding": {
+    "mode": "DIGVATION_DEFAULT",
+    "productName": "Digvation POS",
+    "businessName": "Development Workspace"
+  },
+  "capabilities": {
+    "notifications": false,
+    "fulfillment": false,
+    "customers": false,
+    "loyalty": false
+  }
+}
