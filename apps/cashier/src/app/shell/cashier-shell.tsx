@@ -1,12 +1,6 @@
 import { useAuth } from '@digvation/pos-auth';
 import { useConnectivity, useRuntime } from '@digvation/pos-runtime';
-import {
-  Building2,
-  CircleUserRound,
-  LayoutGrid,
-  ReceiptText,
-  Rows3,
-} from 'lucide-react';
+import { Building2, CircleUserRound, LayoutGrid, ReceiptText, Rows3 } from 'lucide-react';
 import { NavLink, Outlet } from 'react-router';
 
 import { getAppVersion } from '../version/app-version';
