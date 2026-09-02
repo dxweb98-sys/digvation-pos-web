@@ -19,6 +19,9 @@ export const cashierTransactionKeys = {
       sellingLocationId,
       currency,
     ] as const,
+  employees: () => ['cashier-transaction', 'employees'] as const,
+  contributionPreview: (saleId: string, saleLineId: string) =>
+    ['cashier-transaction', 'contribution-preview', saleId, saleLineId] as const,
   sales: () => ['cashier-transaction', 'sales'] as const,
   sale: (saleId: string) => ['cashier-transaction', 'sale', saleId] as const,
 };
