@@ -1,6 +1,6 @@
 import { compareDecimalStrings, createDecimal, formatMoney } from '@digvation/pos-money';
 import { Button } from '@digvation/pos-ui';
-import { Minus, Plus, Trash2 } from 'lucide-react';
+import { Minus, Plus, SlidersHorizontal, Trash2 } from 'lucide-react';
 
 import type { SaleLine } from '../cashier-transaction.types';
 import type { ActionAvailability } from '../sale-workspace-view-model';
@@ -11,6 +11,7 @@ interface SaleLineRowProps {
   availability: ActionAvailability;
   onQuantityChange: (line: SaleLine, quantity: string) => void;
   onRemove: (line: SaleLine) => void;
+  onManage: (line: SaleLine) => void;
 }
 
 export function SaleLineRow({
@@ -19,17 +20,16 @@ export function SaleLineRow({
   availability,
   onQuantityChange,
   onRemove,
+  onManage,
 }: SaleLineRowProps) {
   const isDisabled = availability.state !== 'AVAILABLE';
   const canDecrease = !isDisabled && compareDecimalStrings(line.quantity, '1') > 0;
+  const assignedCount = line.participations.filter((participation) => participation.assigned).length;
+  const contributorCount = line.participations.filter((participation) => participation.shareRate !== null).length;
 
-  const increase = () => {
-    onQuantityChange(line, createDecimal(line.quantity).plus('1').toFixed());
-  };
-
+  const increase = () => onQuantityChange(line, createDecimal(line.quantity).plus('1').toFixed());
   const decrease = () => {
-    if (!canDecrease) return;
-    onQuantityChange(line, createDecimal(line.quantity).minus('1').toFixed());
+    if (canDecrease) onQuantityChange(line, createDecimal(line.quantity).minus('1').toFixed());
   };
 
   return (
@@ -47,6 +47,20 @@ export function SaleLineRow({
         </p>
       </div>
 
+      <div className="mt-3 flex flex-wrap gap-1.5 text-[11px] font-semibold text-[var(--color-text-muted)]">
+        {line.fulfillment ? (
+          <span className="rounded-full bg-[var(--color-accent-sky)]/45 px-2 py-1">{line.fulfillment.status}</span>
+        ) : null}
+        {assignedCount > 0 ? (
+          <span className="rounded-full bg-[var(--color-accent-mint)]/55 px-2 py-1">{assignedCount} assigned</span>
+        ) : null}
+        {contributorCount > 0 ? (
+          <span className="rounded-full bg-[var(--color-accent-lavender)]/55 px-2 py-1">{contributorCount} contributors</span>
+        ) : null}
+        {line.overrideAmount ? <span className="rounded-full bg-[var(--color-accent-yellow)]/50 px-2 py-1">Override</span> : null}
+        {line.discountType ? <span className="rounded-full bg-[var(--color-accent-coral)]/30 px-2 py-1">Discount</span> : null}
+      </div>
+
       <div className="mt-3 flex items-center justify-between gap-3">
         <div className="flex items-center rounded-[var(--radius-control)] border border-[var(--color-border)] bg-[var(--color-surface-muted)] p-1">
           <button
@@ -58,9 +72,7 @@ export function SaleLineRow({
           >
             <Minus className="size-4" />
           </button>
-          <span className="min-w-12 px-2 text-center text-sm font-bold tabular-nums">
-            {line.quantity}
-          </span>
+          <span className="min-w-12 px-2 text-center text-sm font-bold tabular-nums">{line.quantity}</span>
           <button
             type="button"
             aria-label={`Increase ${line.itemNameSnapshot} quantity`}
@@ -72,15 +84,20 @@ export function SaleLineRow({
           </button>
         </div>
 
-        <Button
-          variant="ghost"
-          aria-label={`Remove ${line.itemNameSnapshot}`}
-          disabled={isDisabled}
-          onClick={() => onRemove(line)}
-          className="px-3"
-        >
-          <Trash2 className="size-4" />
-        </Button>
+        <div className="flex gap-1">
+          <Button variant="ghost" aria-label={`Manage ${line.itemNameSnapshot}`} onClick={() => onManage(line)} className="px-3">
+            <SlidersHorizontal className="size-4" />
+          </Button>
+          <Button
+            variant="ghost"
+            aria-label={`Remove ${line.itemNameSnapshot}`}
+            disabled={isDisabled}
+            onClick={() => onRemove(line)}
+            className="px-3"
+          >
+            <Trash2 className="size-4" />
+          </Button>
+        </div>
       </div>
 
       <p className="mt-2 text-xs text-[var(--color-text-muted)]">
