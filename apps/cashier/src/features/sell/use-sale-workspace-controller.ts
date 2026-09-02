@@ -72,6 +72,11 @@ export function useSaleWorkspaceController({
     queryFn: ({ signal }) => client.getSale(routeSaleId!, signal),
     enabled: Boolean(routeSaleId),
   });
+  const employeesQuery = useQuery({
+    queryKey: ['cashier-transaction', 'employees'],
+    queryFn: ({ signal }) => client.listEmployees(signal),
+    enabled: Boolean(routeSaleId),
+  });
 
   useEffect(() => {
     const sale = saleQuery.data;
@@ -209,8 +214,94 @@ export function useSaleWorkspaceController({
     onError: async (error, intent) => recoverFailure(error, intent.saleId),
   });
 
+  const contributionMutation = useMutation({
+    mutationFn: async (intent: {
+      sale: Sale;
+      line: SaleLine;
+      employeeIds: string[];
+      contributors: Array<{ employeeId: string; shareRate?: string }>;
+    }) => {
+      if (connectivity === 'OFFLINE') throw new Error('Reconnect before changing this Sale.');
+      let latest = intent.sale;
+      if (intent.line.employeeAssignmentModeSnapshot !== 'NONE') {
+        latest = await client.setSaleLineAssignments(latest.id, intent.line.id, {
+          expectedVersion: latest.version,
+          employeeIds: intent.employeeIds,
+        });
+      }
+      if (intent.line.allowEmployeeContributionSnapshot) {
+        latest = await client.setSaleLineContributions(latest.id, intent.line.id, {
+          expectedVersion: latest.version,
+          contributors: intent.contributors,
+        });
+      }
+      return latest;
+    },
+    onSuccess: (sale) => {
+      queryClient.setQueryData(cashierTransactionKeys.sale(sale.id), sale);
+      queryClient.invalidateQueries({ queryKey: cashierTransactionKeys.sales() });
+      setSynchronization('CLEAN');
+      setNotice(null);
+    },
+    onError: async (error, intent) => recoverFailure(error, intent.sale.id),
+  });
+
+  const paymentMutation = useMutation({
+    mutationFn: (intent: {
+      sale: Sale;
+      method: 'CASH' | 'BANK_TRANSFER' | 'WALLET' | 'QRIS';
+      appliedAmount: string;
+      tenderedAmount?: string;
+      providerReference?: string;
+    }) => {
+      if (connectivity === 'OFFLINE') throw new Error('Reconnect before changing this Sale.');
+      return client.createPayment(
+        intent.sale.id,
+        {
+          expectedVersion: intent.sale.version,
+          method: intent.method,
+          appliedAmount: intent.appliedAmount,
+          ...(intent.tenderedAmount ? { tenderedAmount: intent.tenderedAmount } : {}),
+          ...(intent.providerReference ? { providerReference: intent.providerReference } : {}),
+        },
+        createIdempotencyKey('create-payment'),
+      );
+    },
+    onSuccess: (sale) => {
+      queryClient.setQueryData(cashierTransactionKeys.sale(sale.id), sale);
+      queryClient.invalidateQueries({ queryKey: cashierTransactionKeys.sales() });
+      setNotice(null);
+    },
+    onError: async (error, intent) => recoverFailure(error, intent.sale.id),
+  });
+
+  const settlementMutation = useMutation({
+    mutationFn: (intent: {
+      sale: Sale;
+      paymentId: string;
+      status: 'SUCCEEDED' | 'FAILED' | 'CANCELLED' | 'EXPIRED';
+    }) => {
+      if (connectivity === 'OFFLINE') throw new Error('Reconnect before changing this Sale.');
+      return client.settlePayment(intent.sale.id, intent.paymentId, {
+        expectedVersion: intent.sale.version,
+        status: intent.status,
+      });
+    },
+    onSuccess: (sale) => {
+      queryClient.setQueryData(cashierTransactionKeys.sale(sale.id), sale);
+      queryClient.invalidateQueries({ queryKey: cashierTransactionKeys.sales() });
+      setNotice(null);
+    },
+    onError: async (error, intent) => recoverFailure(error, intent.sale.id),
+  });
+
   const isMutating =
-    addItemMutation.isPending || quantityMutation.isPending || removeMutation.isPending;
+    addItemMutation.isPending ||
+    quantityMutation.isPending ||
+    removeMutation.isPending ||
+    contributionMutation.isPending ||
+    paymentMutation.isPending ||
+    settlementMutation.isPending;
   const effectiveSynchronization: SynchronizationState = isMutating ? 'MUTATING' : synchronization;
   const viewModel = createSaleWorkspaceViewModel(
     saleQuery.data ?? null,
@@ -271,6 +362,42 @@ export function useSaleWorkspaceController({
     addItem,
     changeQuantity,
     removeLine,
+    employees: (employeesQuery.data?.items ?? []).filter(
+      (employee) => employee.status === 'ACTIVE',
+    ),
+    saveLineTeam: (
+      line: SaleLine,
+      employeeIds: string[],
+      contributors: Array<{ employeeId: string; shareRate?: string }>,
+    ) => {
+      const sale = saleQuery.data;
+      if (!sale || viewModel.monetaryMutation.state !== 'AVAILABLE') return;
+      contributionMutation.mutate({ sale, line, employeeIds, contributors });
+    },
+    createPayment: (
+      method: 'CASH' | 'BANK_TRANSFER' | 'WALLET' | 'QRIS',
+      appliedAmount: string,
+      tenderedAmount?: string,
+      providerReference?: string,
+    ) => {
+      const sale = saleQuery.data;
+      if (!sale || sale.status !== 'OPEN') return;
+      paymentMutation.mutate({
+        sale,
+        method,
+        appliedAmount,
+        ...(tenderedAmount === undefined ? {} : { tenderedAmount }),
+        ...(providerReference === undefined ? {} : { providerReference }),
+      });
+    },
+    settlePayment: (
+      paymentId: string,
+      status: 'SUCCEEDED' | 'FAILED' | 'CANCELLED' | 'EXPIRED',
+    ) => {
+      const sale = saleQuery.data;
+      if (!sale || sale.status !== 'OPEN') return;
+      settlementMutation.mutate({ sale, paymentId, status });
+    },
     retryLastAdd: () => {
       if (!retryIntent || addItemMutation.isPending) return;
       setNotice(null);

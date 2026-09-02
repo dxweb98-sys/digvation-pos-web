@@ -84,6 +84,10 @@ export function SellPage() {
               locale={workspace.locale}
               onQuantityChange={workspace.changeQuantity}
               onRemove={workspace.removeLine}
+              employees={workspace.employees}
+              onSaveLineTeam={workspace.saveLineTeam}
+              onCreatePayment={workspace.createPayment}
+              onSettlePayment={workspace.settlePayment}
               onNewSale={workspace.newSale}
               onOpenSales={workspace.openSales}
             />

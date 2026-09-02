@@ -5,6 +5,7 @@ import type {
   CatalogCategory,
   CatalogItem,
   CatalogVariant,
+  Employee,
   ResolvedPrice,
   Sale,
   SellingLocation,
@@ -28,6 +29,29 @@ export interface AddSaleLineInput {
 export interface SetSaleLineQuantityInput {
   expectedVersion: number;
   quantity: string;
+}
+
+export interface SetSaleLineAssignmentsInput {
+  expectedVersion: number;
+  employeeIds: string[];
+}
+
+export interface SetSaleLineContributionsInput {
+  expectedVersion: number;
+  contributors: Array<{ employeeId: string; shareRate?: string }>;
+}
+
+export interface CreatePaymentInput {
+  expectedVersion: number;
+  method: 'CASH' | 'BANK_TRANSFER' | 'WALLET' | 'QRIS';
+  appliedAmount: string;
+  tenderedAmount?: string;
+  providerReference?: string;
+}
+
+export interface SettlePaymentInput {
+  expectedVersion: number;
+  status: 'SUCCEEDED' | 'FAILED' | 'CANCELLED' | 'EXPIRED';
 }
 
 export interface SellingCatalogQuery {
@@ -55,6 +79,7 @@ export interface OpenSalesQuery {
 }
 
 export interface SaleTransactionClient {
+  listEmployees(signal?: AbortSignal): Promise<ApiPage<Employee>>;
   getSale(saleId: string, signal?: AbortSignal): Promise<Sale>;
   createSale(input: CreateSaleInput, idempotencyKey: string): Promise<Sale>;
   addSaleLine(saleId: string, input: AddSaleLineInput, idempotencyKey: string): Promise<Sale>;
@@ -64,6 +89,18 @@ export interface SaleTransactionClient {
     input: SetSaleLineQuantityInput,
   ): Promise<Sale>;
   removeSaleLine(saleId: string, saleLineId: string, expectedVersion: number): Promise<Sale>;
+  setSaleLineAssignments(
+    saleId: string,
+    saleLineId: string,
+    input: SetSaleLineAssignmentsInput,
+  ): Promise<Sale>;
+  setSaleLineContributions(
+    saleId: string,
+    saleLineId: string,
+    input: SetSaleLineContributionsInput,
+  ): Promise<Sale>;
+  createPayment(saleId: string, input: CreatePaymentInput, idempotencyKey: string): Promise<Sale>;
+  settlePayment(saleId: string, paymentId: string, input: SettlePaymentInput): Promise<Sale>;
 }
 
 function pagePath(path: string): string {
@@ -131,6 +168,10 @@ export class HttpCashierTransactionAdapter
     return this.client.get<ApiPage<Sale>>(pagePath(`${API_PREFIX}/sales`), { signal });
   }
 
+  public listEmployees(signal?: AbortSignal): Promise<ApiPage<Employee>> {
+    return this.client.get<ApiPage<Employee>>(pagePath(`${API_PREFIX}/employees`), { signal });
+  }
+
   public getSale(saleId: string, signal?: AbortSignal): Promise<Sale> {
     return this.client.get<Sale>(`${API_PREFIX}/sales/${saleId}`, { signal });
   }
@@ -170,5 +211,48 @@ export class HttpCashierTransactionAdapter
     return this.client.post<Sale>(`${API_PREFIX}/sales/${saleId}/lines/${saleLineId}/remove`, {
       expectedVersion,
     });
+  }
+
+  public setSaleLineAssignments(
+    saleId: string,
+    saleLineId: string,
+    input: SetSaleLineAssignmentsInput,
+  ): Promise<Sale> {
+    return this.client.post<Sale>(
+      `${API_PREFIX}/sales/${saleId}/lines/${saleLineId}/assignments`,
+      input,
+    );
+  }
+
+  public setSaleLineContributions(
+    saleId: string,
+    saleLineId: string,
+    input: SetSaleLineContributionsInput,
+  ): Promise<Sale> {
+    return this.client.post<Sale>(
+      `${API_PREFIX}/sales/${saleId}/lines/${saleLineId}/contributions`,
+      input,
+    );
+  }
+
+  public createPayment(
+    saleId: string,
+    input: CreatePaymentInput,
+    idempotencyKey: string,
+  ): Promise<Sale> {
+    return this.client.post<Sale>(`${API_PREFIX}/sales/${saleId}/payments`, input, {
+      headers: { 'Idempotency-Key': idempotencyKey },
+    });
+  }
+
+  public settlePayment(
+    saleId: string,
+    paymentId: string,
+    input: SettlePaymentInput,
+  ): Promise<Sale> {
+    return this.client.post<Sale>(
+      `${API_PREFIX}/sales/${saleId}/payments/${paymentId}/status`,
+      input,
+    );
   }
 }

@@ -2,15 +2,33 @@ import { formatMoney } from '@digvation/pos-money';
 import { Button } from '@digvation/pos-ui';
 import { ArrowRightLeft, Plus, ShoppingBag } from 'lucide-react';
 
-import type { SaleLine } from '../cashier-transaction.types';
+import type { Employee, SaleLine } from '../cashier-transaction.types';
 import { actionBlockMessage, type SaleWorkspaceViewModel } from '../sale-workspace-view-model';
 import { SaleLineRow } from './sale-line-row';
+import { SaleLineTeamPanel } from './sale-line-team-panel';
+import { PaymentPanel } from './payment-panel';
 
 interface CurrentSalePaneProps {
   viewModel: SaleWorkspaceViewModel;
   locale: string;
   onQuantityChange: (line: SaleLine, quantity: string) => void;
   onRemove: (line: SaleLine) => void;
+  employees: Employee[];
+  onSaveLineTeam: (
+    line: SaleLine,
+    employeeIds: string[],
+    contributors: Array<{ employeeId: string; shareRate?: string }>,
+  ) => void;
+  onCreatePayment: (
+    method: 'CASH' | 'BANK_TRANSFER' | 'WALLET' | 'QRIS',
+    appliedAmount: string,
+    tenderedAmount?: string,
+    providerReference?: string,
+  ) => void;
+  onSettlePayment: (
+    paymentId: string,
+    status: 'SUCCEEDED' | 'FAILED' | 'CANCELLED' | 'EXPIRED',
+  ) => void;
   onNewSale: () => void;
   onOpenSales: () => void;
 }
@@ -20,6 +38,10 @@ export function CurrentSalePane({
   locale,
   onQuantityChange,
   onRemove,
+  employees,
+  onSaveLineTeam,
+  onCreatePayment,
+  onSettlePayment,
   onNewSale,
   onOpenSales,
 }: CurrentSalePaneProps) {
@@ -100,14 +122,22 @@ export function CurrentSalePane({
           </div>
         ) : (
           viewModel.activeLines.map((line) => (
-            <SaleLineRow
-              key={line.id}
-              line={line}
-              locale={locale}
-              availability={viewModel.monetaryMutation}
-              onQuantityChange={onQuantityChange}
-              onRemove={onRemove}
-            />
+            <div key={line.id}>
+              <SaleLineRow
+                line={line}
+                locale={locale}
+                availability={viewModel.monetaryMutation}
+                onQuantityChange={onQuantityChange}
+                onRemove={onRemove}
+              />
+              <SaleLineTeamPanel
+                key={`${line.id}-${sale.version}`}
+                line={line}
+                employees={employees}
+                availability={viewModel.monetaryMutation}
+                onSave={onSaveLineTeam}
+              />
+            </div>
           ))
         )}
       </div>
@@ -132,6 +162,13 @@ export function CurrentSalePane({
           <Plus className="mr-2 size-4" /> New Sale
         </Button>
       </div>
+      <PaymentPanel
+        sale={sale}
+        locale={locale}
+        disabled={viewModel.connectivity === 'OFFLINE' || sale.status !== 'OPEN'}
+        onCreate={onCreatePayment}
+        onSettle={onSettlePayment}
+      />
     </section>
   );
 }

@@ -64,8 +64,31 @@ export interface ResolvedPrice {
 
 export interface SalePaymentSummary {
   id: string;
+  saleId: string;
+  method: 'CASH' | 'BANK_TRANSFER' | 'WALLET' | 'QRIS';
   status: PaymentStatus;
+  currency: string;
   appliedAmount: string;
+  tenderedAmount: string | null;
+  changeAmount: string | null;
+  providerReference: string | null;
+  terminalAt: string | null;
+}
+
+export interface Employee {
+  id: string;
+  code: string;
+  displayName: string;
+  status: RecordStatus;
+  version: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface SaleParticipation {
+  employeeId: string;
+  assigned: boolean;
+  shareRate: string | null;
 }
 
 export interface SaleLine {
@@ -79,6 +102,8 @@ export interface SaleLine {
   variantCodeSnapshot: string | null;
   variantNameSnapshot: string | null;
   fulfillmentBehaviorSnapshot: 'INSTANT' | 'TRACKED';
+  employeeAssignmentModeSnapshot: 'NONE' | 'OPTIONAL' | 'REQUIRED' | null;
+  allowEmployeeContributionSnapshot: boolean;
   quantity: string;
   currency: string;
   resolvedUnitPrice: string;
@@ -88,6 +113,7 @@ export interface SaleLine {
   taxAmount: string;
   totalAmount: string;
   removedAt: string | null;
+  participations: SaleParticipation[];
 }
 
 export interface Sale {

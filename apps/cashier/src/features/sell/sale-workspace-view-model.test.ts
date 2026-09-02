@@ -35,8 +35,15 @@ describe('createSaleWorkspaceViewModel', () => {
         payments: [
           {
             id: '44444444-4444-4444-8444-444444444444',
+            saleId: baseSale.id,
+            method: 'BANK_TRANSFER',
             status: 'PENDING',
+            currency: 'IDR',
             appliedAmount: '50000.0000',
+            tenderedAmount: null,
+            changeAmount: null,
+            providerReference: null,
+            terminalAt: null,
           },
         ],
       },
