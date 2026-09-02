@@ -5,6 +5,12 @@ import type {
   CatalogCategory,
   CatalogItem,
   CatalogVariant,
+  ContributionPreview,
+  DiscountType,
+  Employee,
+  FulfillmentStatus,
+  PaymentMethod,
+  PaymentStatus,
   ResolvedPrice,
   Sale,
   SellingLocation,
@@ -30,6 +36,47 @@ export interface SetSaleLineQuantityInput {
   quantity: string;
 }
 
+export interface PriceOverrideInput {
+  expectedVersion: number;
+  amount: string;
+  reason: string;
+}
+
+export interface DiscountInput {
+  expectedVersion: number;
+  type: DiscountType;
+  value: string;
+  reason: string;
+}
+
+export interface AssignmentInput {
+  expectedVersion: number;
+  employeeIds: string[];
+}
+
+export interface ContributionInput {
+  expectedVersion: number;
+  contributors: Array<{ employeeId: string; shareRate?: string }>;
+}
+
+export interface FulfillmentInput {
+  expectedVersion: number;
+  status: Exclude<FulfillmentStatus, 'WAITING'>;
+}
+
+export interface CreatePaymentInput {
+  expectedVersion: number;
+  method: PaymentMethod;
+  appliedAmount: string;
+  tenderedAmount?: string;
+  providerReference?: string;
+}
+
+export interface PaymentTransitionInput {
+  expectedVersion: number;
+  status: Exclude<PaymentStatus, 'PENDING'>;
+}
+
 export interface SellingCatalogQuery {
   listSellingLocations(signal?: AbortSignal): Promise<ApiPage<SellingLocation>>;
   listCatalogCategories(signal?: AbortSignal): Promise<ApiPage<CatalogCategory>>;
@@ -50,6 +97,10 @@ export interface SellingCatalogQuery {
   ): Promise<ResolvedPrice>;
 }
 
+export interface EmployeeQuery {
+  listEmployees(signal?: AbortSignal): Promise<ApiPage<Employee>>;
+}
+
 export interface OpenSalesQuery {
   listSales(signal?: AbortSignal): Promise<ApiPage<Sale>>;
 }
@@ -64,6 +115,48 @@ export interface SaleTransactionClient {
     input: SetSaleLineQuantityInput,
   ): Promise<Sale>;
   removeSaleLine(saleId: string, saleLineId: string, expectedVersion: number): Promise<Sale>;
+  setSaleLinePriceOverride(
+    saleId: string,
+    saleLineId: string,
+    input: PriceOverrideInput,
+  ): Promise<Sale>;
+  clearSaleLinePriceOverride(
+    saleId: string,
+    saleLineId: string,
+    expectedVersion: number,
+  ): Promise<Sale>;
+  setSaleLineDiscount(saleId: string, saleLineId: string, input: DiscountInput): Promise<Sale>;
+  clearSaleLineDiscount(saleId: string, saleLineId: string, expectedVersion: number): Promise<Sale>;
+  setSaleDiscount(saleId: string, input: DiscountInput): Promise<Sale>;
+  clearSaleDiscount(saleId: string, expectedVersion: number): Promise<Sale>;
+  setSaleLineAssignments(saleId: string, saleLineId: string, input: AssignmentInput): Promise<Sale>;
+  setSaleLineContributions(
+    saleId: string,
+    saleLineId: string,
+    input: ContributionInput,
+  ): Promise<Sale>;
+  getSaleLineContributionPreview(
+    saleId: string,
+    saleLineId: string,
+    signal?: AbortSignal,
+  ): Promise<ContributionPreview>;
+  transitionSaleLineFulfillment(
+    saleId: string,
+    saleLineId: string,
+    input: FulfillmentInput,
+  ): Promise<Sale>;
+  createSalePayment(
+    saleId: string,
+    input: CreatePaymentInput,
+    idempotencyKey: string,
+  ): Promise<Sale>;
+  transitionSalePayment(
+    saleId: string,
+    paymentId: string,
+    input: PaymentTransitionInput,
+  ): Promise<Sale>;
+  finalizeSale(saleId: string, expectedVersion: number, idempotencyKey: string): Promise<Sale>;
+  voidSale(saleId: string, expectedVersion: number, idempotencyKey: string): Promise<Sale>;
 }
 
 function pagePath(path: string): string {
@@ -71,7 +164,7 @@ function pagePath(path: string): string {
 }
 
 export class HttpCashierTransactionAdapter
-  implements SellingCatalogQuery, OpenSalesQuery, SaleTransactionClient
+  implements SellingCatalogQuery, EmployeeQuery, OpenSalesQuery, SaleTransactionClient
 {
   public constructor(private readonly client: ApiClient) {}
 
@@ -119,12 +212,14 @@ export class HttpCashierTransactionAdapter
       currency: input.currency,
       effectiveAt: input.effectiveAt,
     });
-
     if (input.catalogVariantId) query.set('catalogVariantId', input.catalogVariantId);
-
     return this.client.get<ResolvedPrice>(`${API_PREFIX}/pricing/resolve?${query.toString()}`, {
       signal,
     });
+  }
+
+  public listEmployees(signal?: AbortSignal): Promise<ApiPage<Employee>> {
+    return this.client.get<ApiPage<Employee>>(pagePath(`${API_PREFIX}/employees`), { signal });
   }
 
   public listSales(signal?: AbortSignal): Promise<ApiPage<Sale>> {
@@ -170,5 +265,144 @@ export class HttpCashierTransactionAdapter
     return this.client.post<Sale>(`${API_PREFIX}/sales/${saleId}/lines/${saleLineId}/remove`, {
       expectedVersion,
     });
+  }
+
+  public setSaleLinePriceOverride(
+    saleId: string,
+    saleLineId: string,
+    input: PriceOverrideInput,
+  ): Promise<Sale> {
+    return this.client.post<Sale>(
+      `${API_PREFIX}/sales/${saleId}/lines/${saleLineId}/price-override`,
+      input,
+    );
+  }
+
+  public clearSaleLinePriceOverride(
+    saleId: string,
+    saleLineId: string,
+    expectedVersion: number,
+  ): Promise<Sale> {
+    return this.client.post<Sale>(
+      `${API_PREFIX}/sales/${saleId}/lines/${saleLineId}/price-override/remove`,
+      { expectedVersion },
+    );
+  }
+
+  public setSaleLineDiscount(
+    saleId: string,
+    saleLineId: string,
+    input: DiscountInput,
+  ): Promise<Sale> {
+    return this.client.post<Sale>(
+      `${API_PREFIX}/sales/${saleId}/lines/${saleLineId}/discount`,
+      input,
+    );
+  }
+
+  public clearSaleLineDiscount(
+    saleId: string,
+    saleLineId: string,
+    expectedVersion: number,
+  ): Promise<Sale> {
+    return this.client.post<Sale>(
+      `${API_PREFIX}/sales/${saleId}/lines/${saleLineId}/discount/remove`,
+      { expectedVersion },
+    );
+  }
+
+  public setSaleDiscount(saleId: string, input: DiscountInput): Promise<Sale> {
+    return this.client.post<Sale>(`${API_PREFIX}/sales/${saleId}/discount`, input);
+  }
+
+  public clearSaleDiscount(saleId: string, expectedVersion: number): Promise<Sale> {
+    return this.client.post<Sale>(`${API_PREFIX}/sales/${saleId}/discount/remove`, {
+      expectedVersion,
+    });
+  }
+
+  public setSaleLineAssignments(
+    saleId: string,
+    saleLineId: string,
+    input: AssignmentInput,
+  ): Promise<Sale> {
+    return this.client.post<Sale>(
+      `${API_PREFIX}/sales/${saleId}/lines/${saleLineId}/assignments`,
+      input,
+    );
+  }
+
+  public setSaleLineContributions(
+    saleId: string,
+    saleLineId: string,
+    input: ContributionInput,
+  ): Promise<Sale> {
+    return this.client.post<Sale>(
+      `${API_PREFIX}/sales/${saleId}/lines/${saleLineId}/contributions`,
+      input,
+    );
+  }
+
+  public getSaleLineContributionPreview(
+    saleId: string,
+    saleLineId: string,
+    signal?: AbortSignal,
+  ): Promise<ContributionPreview> {
+    return this.client.get<ContributionPreview>(
+      `${API_PREFIX}/sales/${saleId}/lines/${saleLineId}/contributions`,
+      { signal },
+    );
+  }
+
+  public transitionSaleLineFulfillment(
+    saleId: string,
+    saleLineId: string,
+    input: FulfillmentInput,
+  ): Promise<Sale> {
+    return this.client.post<Sale>(
+      `${API_PREFIX}/sales/${saleId}/lines/${saleLineId}/fulfillment`,
+      input,
+    );
+  }
+
+  public createSalePayment(
+    saleId: string,
+    input: CreatePaymentInput,
+    idempotencyKey: string,
+  ): Promise<Sale> {
+    return this.client.post<Sale>(`${API_PREFIX}/sales/${saleId}/payments`, input, {
+      headers: { 'Idempotency-Key': idempotencyKey },
+    });
+  }
+
+  public transitionSalePayment(
+    saleId: string,
+    paymentId: string,
+    input: PaymentTransitionInput,
+  ): Promise<Sale> {
+    return this.client.post<Sale>(
+      `${API_PREFIX}/sales/${saleId}/payments/${paymentId}/status`,
+      input,
+    );
+  }
+
+  public finalizeSale(
+    saleId: string,
+    expectedVersion: number,
+    idempotencyKey: string,
+  ): Promise<Sale> {
+    return this.client.post<Sale>(
+      `${API_PREFIX}/sales/${saleId}/finalize`,
+      { expectedVersion },
+      { headers: { 'Idempotency-Key': idempotencyKey } },
+    );
+  }
+
+  public voidSale(saleId: string, expectedVersion: number, idempotencyKey: string): Promise<Sale> {
+    return this.client.post<Sale>(
+      `${API_PREFIX}/sales/${saleId}/void`,
+      { expectedVersion },
+      { headers: { 'Idempotency-Key': idempotencyKey } },
+    );
   }
 }

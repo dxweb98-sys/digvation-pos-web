@@ -4,6 +4,8 @@ import { useParams } from 'react-router';
 
 import { BranchSelector } from '../../features/sell/components/branch-selector';
 import { CurrentSalePane } from '../../features/sell/components/current-sale-pane';
+import { SaleCompletionDialog } from '../../features/sell/components/sale-completion-dialog';
+import { SaleLineTaskDialog } from '../../features/sell/components/sale-line-task-dialog';
 import { SellingCatalogPane } from '../../features/sell/components/selling-catalog-pane';
 import { VariantPicker } from '../../features/sell/components/variant-picker';
 import { useCashierTransactionWorkspace } from '../../features/sell/use-cashier-transaction-workspace';
@@ -22,8 +24,8 @@ export function SellPage() {
             </p>
             <h1 className="mt-2 text-3xl font-bold tracking-[-0.04em]">Sell</h1>
             <p className="mt-2 max-w-2xl text-sm leading-6 text-[var(--color-text-muted)]">
-              Choose from the selling catalog. Sale state, captured price, tax, and totals remain
-              authoritative on the POS backend.
+              Sale, fulfillment and payment progress independently. The POS backend remains
+              authoritative for every committed transaction fact.
             </p>
           </div>
 
@@ -45,8 +47,8 @@ export function SellPage() {
               </div>
             </div>
             <div className="flex shrink-0 gap-2">
-              {workspace.canRetryLastAdd ? (
-                <Button variant="secondary" onClick={workspace.retryLastAdd}>
+              {workspace.canRetryLastCommand ? (
+                <Button variant="secondary" onClick={workspace.retryLastCommand}>
                   <RotateCcw className="mr-2 size-4" /> Retry same command
                 </Button>
               ) : null}
@@ -84,6 +86,8 @@ export function SellPage() {
               locale={workspace.locale}
               onQuantityChange={workspace.changeQuantity}
               onRemove={workspace.removeLine}
+              onManageLine={workspace.openLineTask}
+              onContinue={workspace.openCompletion}
               onNewSale={workspace.newSale}
               onOpenSales={workspace.openSales}
             />
@@ -96,6 +100,47 @@ export function SellPage() {
           {...workspace.variantPicker}
           onSelect={workspace.selectVariant}
           onClose={workspace.closeVariantPicker}
+        />
+      ) : null}
+
+      {workspace.lineTask ? (
+        <SaleLineTaskDialog
+          key={`${workspace.lineTask.id}:${workspace.lineTask.updatedAt}`}
+          line={workspace.lineTask}
+          employees={workspace.employees}
+          contributionPreview={workspace.contributionPreview}
+          locale={workspace.locale}
+          monetaryAvailability={workspace.viewModel.monetaryMutation}
+          operationalAvailability={workspace.viewModel.operationalMutation}
+          isBusy={workspace.isCoreMutating}
+          onClose={workspace.closeLineTask}
+          onSetPriceOverride={workspace.setPriceOverride}
+          onClearPriceOverride={workspace.clearPriceOverride}
+          onSetLineDiscount={workspace.setLineDiscount}
+          onClearLineDiscount={workspace.clearLineDiscount}
+          onSetAssignments={workspace.setAssignments}
+          onSetContributions={workspace.setContributions}
+          onTransitionFulfillment={workspace.transitionFulfillment}
+        />
+      ) : null}
+
+      {workspace.isCompletionOpen && workspace.viewModel.sale ? (
+        <SaleCompletionDialog
+          key={`${workspace.viewModel.sale.id}:${workspace.viewModel.sale.version}`}
+          viewModel={workspace.viewModel}
+          locale={workspace.locale}
+          isBusy={workspace.isCoreMutating}
+          onClose={workspace.closeCompletion}
+          onSetOrderDiscount={workspace.setOrderDiscount}
+          onClearOrderDiscount={workspace.clearOrderDiscount}
+          onCreatePayment={workspace.createPayment}
+          onTransitionPayment={workspace.transitionPayment}
+          onFinalize={workspace.finalizeSale}
+          onVoid={() => {
+            if (window.confirm('Void this unpaid OPEN Sale? This action is terminal.')) {
+              workspace.voidSale();
+            }
+          }}
         />
       ) : null}
     </section>

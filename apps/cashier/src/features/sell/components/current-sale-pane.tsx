@@ -1,6 +1,13 @@
 import { formatMoney } from '@digvation/pos-money';
 import { Button } from '@digvation/pos-ui';
-import { ArrowRightLeft, Plus, ShoppingBag } from 'lucide-react';
+import {
+  ArrowRight,
+  ArrowRightLeft,
+  BadgeCheck,
+  CircleAlert,
+  Plus,
+  ShoppingBag,
+} from 'lucide-react';
 
 import type { SaleLine } from '../cashier-transaction.types';
 import { actionBlockMessage, type SaleWorkspaceViewModel } from '../sale-workspace-view-model';
@@ -11,8 +18,30 @@ interface CurrentSalePaneProps {
   locale: string;
   onQuantityChange: (line: SaleLine, quantity: string) => void;
   onRemove: (line: SaleLine) => void;
+  onManageLine: (line: SaleLine) => void;
+  onContinue: () => void;
   onNewSale: () => void;
   onOpenSales: () => void;
+}
+
+function workspaceMessage(viewModel: SaleWorkspaceViewModel): string | null {
+  switch (viewModel.primaryMode) {
+    case 'PAYMENT_PENDING_ATTENTION':
+      return 'Payment is pending. Monetary changes are locked while safe operational work can continue.';
+    case 'PAID_WORK_REMAINING':
+      return 'Payment complete. Service work still needs attention before this Sale can finalize.';
+    case 'READY_TO_FINALIZE':
+      return 'Payment and operational requirements are ready for finalization.';
+    case 'CONFLICT_REVIEW':
+      return 'Review the latest backend Sale state before continuing.';
+    case 'FINALIZED':
+      return 'This Sale is finalized and immutable.';
+    case 'VOIDED':
+      return 'This Sale is voided and terminal.';
+    case 'EMPTY':
+    case 'OPEN_ACTIVE':
+      return null;
+  }
 }
 
 export function CurrentSalePane({
@@ -20,6 +49,8 @@ export function CurrentSalePane({
   locale,
   onQuantityChange,
   onRemove,
+  onManageLine,
+  onContinue,
   onNewSale,
   onOpenSales,
 }: CurrentSalePaneProps) {
@@ -54,6 +85,8 @@ export function CurrentSalePane({
     viewModel.monetaryMutation.state === 'DISABLED'
       ? actionBlockMessage(viewModel.monetaryMutation.reason)
       : null;
+  const statusMessage = workspaceMessage(viewModel);
+  const isTerminal = sale.status !== 'OPEN';
 
   return (
     <section
@@ -76,13 +109,26 @@ export function CurrentSalePane({
           </Button>
         </div>
 
-        {viewModel.hasPendingPayment ? (
-          <div className="mt-4 rounded-[var(--radius-control)] bg-[var(--color-accent-yellow)]/45 px-3 py-2 text-xs font-semibold">
-            Payment is pending. Monetary Sale changes are locked by the backend.
+        {statusMessage ? (
+          <div
+            className={`mt-4 flex gap-2 rounded-[var(--radius-control)] px-3 py-2 text-xs font-semibold ${
+              viewModel.primaryMode === 'READY_TO_FINALIZE'
+                ? 'bg-[var(--color-accent-mint)]/45'
+                : viewModel.primaryMode === 'PAID_WORK_REMAINING'
+                  ? 'bg-[var(--color-accent-sky)]/40'
+                  : 'bg-[var(--color-accent-yellow)]/40'
+            }`}
+          >
+            {viewModel.primaryMode === 'READY_TO_FINALIZE' ? (
+              <BadgeCheck className="mt-0.5 size-3.5 shrink-0" />
+            ) : (
+              <CircleAlert className="mt-0.5 size-3.5 shrink-0" />
+            )}
+            <span>{statusMessage}</span>
           </div>
         ) : null}
 
-        {disabledMessage && !viewModel.hasPendingPayment ? (
+        {disabledMessage && !statusMessage ? (
           <div className="mt-4 rounded-[var(--radius-control)] bg-[var(--color-surface-muted)] px-3 py-2 text-xs font-semibold text-[var(--color-text-muted)]">
             {disabledMessage}
           </div>
@@ -107,6 +153,7 @@ export function CurrentSalePane({
               availability={viewModel.monetaryMutation}
               onQuantityChange={onQuantityChange}
               onRemove={onRemove}
+              onManage={onManageLine}
             />
           ))
         )}
@@ -118,6 +165,14 @@ export function CurrentSalePane({
             <dt>Gross</dt>
             <dd className="tabular-nums">{formatMoney(sale.grossAmount, sale.currency, locale)}</dd>
           </div>
+          {sale.discountAmount !== '0.0000' ? (
+            <div className="flex justify-between gap-4 text-[var(--color-text-muted)]">
+              <dt>Discount</dt>
+              <dd className="tabular-nums">
+                −{formatMoney(sale.discountAmount, sale.currency, locale)}
+              </dd>
+            </div>
+          ) : null}
           <div className="flex justify-between gap-4 text-[var(--color-text-muted)]">
             <dt>Tax</dt>
             <dd className="tabular-nums">{formatMoney(sale.taxAmount, sale.currency, locale)}</dd>
@@ -128,9 +183,42 @@ export function CurrentSalePane({
           </div>
         </dl>
 
-        <Button variant="secondary" className="mt-4 w-full" onClick={onNewSale}>
-          <Plus className="mr-2 size-4" /> New Sale
+        <div className="mt-4 grid grid-cols-3 gap-2 rounded-[var(--radius-control)] border border-[var(--color-border)] bg-[var(--color-surface)] p-3 text-center">
+          <div>
+            <p className="text-[10px] font-bold uppercase tracking-[0.1em] text-[var(--color-text-muted)]">
+              Paid
+            </p>
+            <p className="mt-1 text-xs font-bold tabular-nums">
+              {formatMoney(viewModel.paidAmount, sale.currency, locale)}
+            </p>
+          </div>
+          <div className="border-x border-[var(--color-border)] px-2">
+            <p className="text-[10px] font-bold uppercase tracking-[0.1em] text-[var(--color-text-muted)]">
+              Pending
+            </p>
+            <p className="mt-1 text-xs font-bold tabular-nums">
+              {formatMoney(viewModel.pendingAmount, sale.currency, locale)}
+            </p>
+          </div>
+          <div>
+            <p className="text-[10px] font-bold uppercase tracking-[0.1em] text-[var(--color-text-muted)]">
+              Available to pay
+            </p>
+            <p className="mt-1 text-xs font-bold tabular-nums">
+              {formatMoney(viewModel.availableToPay, sale.currency, locale)}
+            </p>
+          </div>
+        </div>
+
+        <Button className="mt-4 w-full" onClick={onContinue}>
+          {isTerminal ? 'View Sale Completion' : 'Continue'}
+          <ArrowRight className="ml-2 size-4" />
         </Button>
+        {!isTerminal ? (
+          <Button variant="secondary" className="mt-2 w-full" onClick={onNewSale}>
+            <Plus className="mr-2 size-4" /> New Sale
+          </Button>
+        ) : null}
       </div>
     </section>
   );

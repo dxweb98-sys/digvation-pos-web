@@ -1,7 +1,11 @@
 export type RecordStatus = 'ACTIVE' | 'INACTIVE';
 export type CatalogLifecycle = 'DRAFT' | 'ACTIVE' | 'INACTIVE' | 'ARCHIVED';
 export type SaleStatus = 'OPEN' | 'FINALIZED' | 'VOIDED';
+export type PaymentMethod = 'CASH' | 'BANK_TRANSFER' | 'WALLET' | 'QRIS';
 export type PaymentStatus = 'PENDING' | 'SUCCEEDED' | 'FAILED' | 'CANCELLED' | 'EXPIRED';
+export type FulfillmentStatus = 'WAITING' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELED';
+export type EmployeeAssignmentMode = 'NONE' | 'OPTIONAL' | 'REQUIRED';
+export type DiscountType = 'PERCENTAGE' | 'FIXED_AMOUNT';
 
 export interface ApiPage<T> {
   items: T[];
@@ -22,9 +26,19 @@ export interface NamedRecord {
 export type SellingLocation = NamedRecord;
 export type CatalogCategory = NamedRecord;
 
+export interface Employee {
+  id: string;
+  code: string;
+  displayName: string;
+  status: RecordStatus;
+  version: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface ServiceDefinition {
   defaultDurationMinutes: number | null;
-  employeeAssignmentMode: 'NONE' | 'OPTIONAL' | 'REQUIRED';
+  employeeAssignmentMode: EmployeeAssignmentMode;
   allowEmployeeContribution: boolean;
 }
 
@@ -62,10 +76,67 @@ export interface ResolvedPrice {
   };
 }
 
-export interface SalePaymentSummary {
+export interface SaleLineFulfillment {
+  saleId: string;
+  saleLineId: string;
+  status: FulfillmentStatus;
+  startedAt: string | null;
+  completedAt: string | null;
+  canceledAt: string | null;
+}
+
+export interface SaleParticipation {
+  saleId: string;
+  saleLineId: string;
+  employeeId: string;
+  assigned: boolean;
+  shareRate: string | null;
+}
+
+export interface EmployeeContribution {
+  saleId: string;
+  saleLineId: string;
+  employeeId: string;
+  employeeCodeSnapshot: string;
+  employeeDisplayNameSnapshot: string;
+  shareRate: string;
+  contributionBaseAmount: string;
+  contributionAmount: string;
+  finalizedAt: string;
+}
+
+export interface Payment {
   id: string;
+  saleId: string;
+  method: PaymentMethod;
   status: PaymentStatus;
+  currency: string;
   appliedAmount: string;
+  tenderedAmount: string | null;
+  changeAmount: string | null;
+  providerReference: string | null;
+  idempotencyKey: string;
+  createdByActorId: string;
+  createdByActorKind: string;
+  settledByActorId: string | null;
+  settledByActorKind: string | null;
+  terminalAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ContributionPreviewAmount {
+  employeeId: string;
+  contributionAmount: string;
+}
+
+export interface ContributionPreview {
+  saleId: string;
+  saleLineId: string;
+  version: number;
+  contributionBaseAmount: string;
+  preview: ContributionPreviewAmount[];
+  facts: EmployeeContribution[];
 }
 
 export interface SaleLine {
@@ -73,21 +144,40 @@ export interface SaleLine {
   saleId: string;
   catalogItemId: string;
   catalogVariantId: string | null;
+  catalogPriceId: string;
   itemCodeSnapshot: string;
   itemNameSnapshot: string;
   itemTypeSnapshot: 'PRODUCT' | 'SERVICE';
   variantCodeSnapshot: string | null;
   variantNameSnapshot: string | null;
   fulfillmentBehaviorSnapshot: 'INSTANT' | 'TRACKED';
+  employeeAssignmentModeSnapshot: EmployeeAssignmentMode | null;
+  allowEmployeeContributionSnapshot: boolean;
+  defaultDurationMinutesSnapshot: number | null;
   quantity: string;
   currency: string;
   resolvedUnitPrice: string;
   effectiveUnitPrice: string;
+  overrideAmount: string | null;
+  overrideReason: string | null;
+  discountType: DiscountType | null;
+  discountValue: string | null;
+  discountReason: string | null;
   grossAmount: string;
+  lineDiscountAmount: string;
+  orderDiscountAllocationAmount: string;
+  discountedCustomerBaseAmount: string;
+  includedTaxAmount: string;
+  excludedTaxAmount: string;
   netPreTaxAmount: string;
   taxAmount: string;
   totalAmount: string;
   removedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+  fulfillment: SaleLineFulfillment | null;
+  participations: SaleParticipation[];
+  contributions: EmployeeContribution[];
 }
 
 export interface Sale {
@@ -101,10 +191,16 @@ export interface Sale {
   netPreTaxAmount: string;
   taxAmount: string;
   totalAmount: string;
+  orderDiscountType: DiscountType | null;
+  orderDiscountValue: string | null;
+  orderDiscountReason: string | null;
+  orderDiscountAmount: string;
+  finalizedAt: string | null;
+  voidedAt: string | null;
   createdAt: string;
   updatedAt: string;
   lines: SaleLine[];
-  payments: SalePaymentSummary[];
+  payments: Payment[];
 }
 
 export interface OpenSaleSummaryViewModel {

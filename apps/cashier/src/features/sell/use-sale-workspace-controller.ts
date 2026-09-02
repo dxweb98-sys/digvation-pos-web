@@ -1,21 +1,14 @@
 import type { ConnectivityState } from '@digvation/pos-runtime';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery } from '@tanstack/react-query';
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router';
 
 import type { SaleTransactionClient } from './cashier-transaction.adapter';
-import {
-  cashierTransactionErrorMessage,
-  isApiErrorCode,
-  isKnownApiFailure,
-  isSaleVersionConflict,
-} from './cashier-transaction-errors';
+import { isKnownApiFailure } from './cashier-transaction-errors';
 import { cashierTransactionKeys } from './cashier-transaction-keys';
-import type { Sale, SaleLine } from './cashier-transaction.types';
-import {
-  createSaleWorkspaceViewModel,
-  type SynchronizationState,
-} from './sale-workspace-view-model';
+import type { SaleLine } from './cashier-transaction.types';
+import { createSaleWorkspaceViewModel } from './sale-workspace-view-model';
+import type { SaleCommandCoordinator } from './use-sale-command-coordinator';
 
 const QUANTITY_PATTERN = /^(0|[1-9]\d{0,14})(\.\d{1,4})?$/;
 
@@ -33,6 +26,7 @@ interface AddItemIntent {
 
 interface UseSaleWorkspaceControllerOptions {
   client: SaleTransactionClient;
+  command: SaleCommandCoordinator;
   routeSaleId?: string;
   selectedLocationId: string | null;
   currency: string;
@@ -53,6 +47,7 @@ function isPositiveQuantity(value: string): boolean {
 
 export function useSaleWorkspaceController({
   client,
+  command,
   routeSaleId,
   selectedLocationId,
   currency,
@@ -61,10 +56,7 @@ export function useSaleWorkspaceController({
   rememberSale,
 }: UseSaleWorkspaceControllerOptions) {
   const navigate = useNavigate();
-  const queryClient = useQueryClient();
   const createdSaleIdRef = useRef<string | null>(null);
-  const [notice, setNotice] = useState<string | null>(null);
-  const [synchronization, setSynchronization] = useState<SynchronizationState>('CLEAN');
   const [retryIntent, setRetryIntent] = useState<AddItemIntent | null>(null);
 
   const saleQuery = useQuery({
@@ -80,96 +72,49 @@ export function useSaleWorkspaceController({
     if (selectedLocationId !== sale.sellingLocationId) selectLocation(sale.sellingLocationId);
   }, [rememberSale, saleQuery.data, selectLocation, selectedLocationId]);
 
-  const refetchSale = async (saleId: string): Promise<Sale | null> => {
-    try {
-      const latest = await client.getSale(saleId);
-      queryClient.setQueryData(cashierTransactionKeys.sale(saleId), latest);
-      return latest;
-    } catch (error) {
-      setNotice(cashierTransactionErrorMessage(error));
-      return null;
-    }
-  };
-
-  const recoverFailure = async (error: unknown, saleId?: string) => {
-    if (isSaleVersionConflict(error)) {
-      if (saleId) await refetchSale(saleId);
-      setSynchronization('CONFLICT_REVIEW');
-      setNotice(
-        'This Sale changed on another terminal. Review the latest server state before continuing.',
-      );
-      return;
-    }
-
-    if (isApiErrorCode(error, 'SALE_PAYMENT_PENDING')) {
-      if (saleId) await refetchSale(saleId);
-      setSynchronization('CLEAN');
-      setNotice(cashierTransactionErrorMessage(error));
-      return;
-    }
-
-    if (!isKnownApiFailure(error)) {
-      if (saleId) await refetchSale(saleId);
-      setSynchronization('UNCERTAIN_COMMAND');
-      setNotice(
-        saleId
-          ? 'The command result is uncertain. The latest Sale was reloaded; review it before continuing.'
-          : 'Sale creation is uncertain. Retry the same command so the backend can resolve the idempotency key safely.',
-      );
-      return;
-    }
-
-    setSynchronization('CLEAN');
-    setNotice(cashierTransactionErrorMessage(error));
-  };
-
   const addItemMutation = useMutation({
-    mutationFn: async (intent: AddItemIntent) => {
-      if (connectivity === 'OFFLINE') throw new Error('Reconnect before changing this Sale.');
+    mutationFn: (intent: AddItemIntent) =>
+      command.runMutation(async () => {
+        if (connectivity === 'OFFLINE') throw new Error('Reconnect before changing this Sale.');
 
-      let saleId = intent.saleId;
-      let expectedVersion = intent.expectedVersion;
-      createdSaleIdRef.current = saleId ?? null;
+        let saleId = intent.saleId;
+        let expectedVersion = intent.expectedVersion;
+        createdSaleIdRef.current = saleId ?? null;
 
-      if (!saleId || expectedVersion === undefined) {
-        const createdSale = await client.createSale(
-          { sellingLocationId: intent.sellingLocationId, currency: intent.currency },
-          intent.createIdempotencyKey,
+        if (!saleId || expectedVersion === undefined) {
+          const createdSale = await client.createSale(
+            { sellingLocationId: intent.sellingLocationId, currency: intent.currency },
+            intent.createIdempotencyKey,
+          );
+          saleId = createdSale.id;
+          expectedVersion = createdSale.version;
+          createdSaleIdRef.current = createdSale.id;
+          command.commitSale(createdSale);
+          selectLocation(createdSale.sellingLocationId);
+          navigate(`/sell/${createdSale.id}`, { replace: true });
+          setRetryIntent({ ...intent, saleId, expectedVersion });
+        }
+
+        return client.addSaleLine(
+          saleId,
+          {
+            expectedVersion,
+            catalogItemId: intent.catalogItemId,
+            ...(intent.catalogVariantId ? { catalogVariantId: intent.catalogVariantId } : {}),
+            quantity: intent.quantity,
+          },
+          intent.addIdempotencyKey,
         );
-        saleId = createdSale.id;
-        expectedVersion = createdSale.version;
-        createdSaleIdRef.current = createdSale.id;
-        queryClient.setQueryData(cashierTransactionKeys.sale(createdSale.id), createdSale);
-        rememberSale(createdSale.id);
-        selectLocation(createdSale.sellingLocationId);
-        navigate(`/sell/${createdSale.id}`, { replace: true });
-        setRetryIntent({ ...intent, saleId, expectedVersion });
-      }
-
-      return client.addSaleLine(
-        saleId,
-        {
-          expectedVersion,
-          catalogItemId: intent.catalogItemId,
-          ...(intent.catalogVariantId ? { catalogVariantId: intent.catalogVariantId } : {}),
-          quantity: intent.quantity,
-        },
-        intent.addIdempotencyKey,
-      );
-    },
+      }),
     onSuccess: (sale) => {
-      queryClient.setQueryData(cashierTransactionKeys.sale(sale.id), sale);
-      queryClient.invalidateQueries({ queryKey: cashierTransactionKeys.sales() });
-      rememberSale(sale.id);
+      command.commitSale(sale);
       createdSaleIdRef.current = null;
       setRetryIntent(null);
-      setSynchronization('CLEAN');
-      setNotice(null);
     },
     onError: async (error, intent) => {
       const saleId = intent.saleId ?? createdSaleIdRef.current ?? undefined;
       if (isKnownApiFailure(error)) setRetryIntent(null);
-      await recoverFailure(error, saleId);
+      await command.recoverFailure(error, saleId);
     },
   });
 
@@ -179,48 +124,37 @@ export function useSaleWorkspaceController({
       saleLineId: string;
       expectedVersion: number;
       quantity: string;
-    }) => {
-      if (connectivity === 'OFFLINE') throw new Error('Reconnect before changing this Sale.');
-      return client.setSaleLineQuantity(intent.saleId, intent.saleLineId, {
-        expectedVersion: intent.expectedVersion,
-        quantity: intent.quantity,
-      });
-    },
-    onSuccess: (sale) => {
-      queryClient.setQueryData(cashierTransactionKeys.sale(sale.id), sale);
-      queryClient.invalidateQueries({ queryKey: cashierTransactionKeys.sales() });
-      setSynchronization('CLEAN');
-      setNotice(null);
-    },
-    onError: async (error, intent) => recoverFailure(error, intent.saleId),
+    }) =>
+      command.runMutation(async () => {
+        if (connectivity === 'OFFLINE') throw new Error('Reconnect before changing this Sale.');
+        return client.setSaleLineQuantity(intent.saleId, intent.saleLineId, {
+          expectedVersion: intent.expectedVersion,
+          quantity: intent.quantity,
+        });
+      }),
+    onSuccess: command.commitSale,
+    onError: async (error, intent) => command.recoverFailure(error, intent.saleId),
   });
 
   const removeMutation = useMutation({
-    mutationFn: (intent: { saleId: string; saleLineId: string; expectedVersion: number }) => {
-      if (connectivity === 'OFFLINE') throw new Error('Reconnect before changing this Sale.');
-      return client.removeSaleLine(intent.saleId, intent.saleLineId, intent.expectedVersion);
-    },
-    onSuccess: (sale) => {
-      queryClient.setQueryData(cashierTransactionKeys.sale(sale.id), sale);
-      queryClient.invalidateQueries({ queryKey: cashierTransactionKeys.sales() });
-      setSynchronization('CLEAN');
-      setNotice(null);
-    },
-    onError: async (error, intent) => recoverFailure(error, intent.saleId),
+    mutationFn: (intent: { saleId: string; saleLineId: string; expectedVersion: number }) =>
+      command.runMutation(async () => {
+        if (connectivity === 'OFFLINE') throw new Error('Reconnect before changing this Sale.');
+        return client.removeSaleLine(intent.saleId, intent.saleLineId, intent.expectedVersion);
+      }),
+    onSuccess: command.commitSale,
+    onError: async (error, intent) => command.recoverFailure(error, intent.saleId),
   });
 
-  const isMutating =
-    addItemMutation.isPending || quantityMutation.isPending || removeMutation.isPending;
-  const effectiveSynchronization: SynchronizationState = isMutating ? 'MUTATING' : synchronization;
   const viewModel = createSaleWorkspaceViewModel(
     saleQuery.data ?? null,
     connectivity,
-    effectiveSynchronization,
+    command.effectiveSynchronization,
   );
 
   const addItem = (catalogItemId: string, catalogVariantId?: string) => {
     if (!selectedLocationId) {
-      setNotice('Select a Branch before starting a Sale.');
+      command.reportError(new Error('Select a Branch before starting a Sale.'));
       return;
     }
     if (viewModel.monetaryMutation.state !== 'AVAILABLE') return;
@@ -245,7 +179,9 @@ export function useSaleWorkspaceController({
     const sale = saleQuery.data;
     if (!sale || viewModel.monetaryMutation.state !== 'AVAILABLE') return;
     if (!isPositiveQuantity(quantity)) {
-      setNotice('Quantity must be greater than zero with at most four decimal places.');
+      command.reportError(
+        new Error('Quantity must be greater than zero with at most four decimal places.'),
+      );
       return;
     }
     quantityMutation.mutate({
@@ -265,7 +201,6 @@ export function useSaleWorkspaceController({
   return {
     sale: saleQuery.data ?? null,
     viewModel,
-    notice: notice ?? (saleQuery.error ? cashierTransactionErrorMessage(saleQuery.error) : null),
     isLoading: Boolean(routeSaleId) && saleQuery.isLoading,
     canRetryLastAdd: Boolean(retryIntent) && !addItemMutation.isPending,
     addItem,
@@ -273,18 +208,9 @@ export function useSaleWorkspaceController({
     removeLine,
     retryLastAdd: () => {
       if (!retryIntent || addItemMutation.isPending) return;
-      setNotice(null);
+      command.clearNotice();
       addItemMutation.mutate(retryIntent);
     },
-    acknowledgeLatestState: () => {
-      setSynchronization('CLEAN');
-      setNotice(null);
-    },
-    reportError: (error: unknown) => setNotice(cashierTransactionErrorMessage(error)),
-    clearNotice: () => setNotice(null),
-    clearAttention: () => {
-      setNotice(null);
-      setSynchronization('CLEAN');
-    },
+    saleQueryError: saleQuery.error,
   };
 }
