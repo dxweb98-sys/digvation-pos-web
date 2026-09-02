@@ -1,0 +1,155 @@
+import type { ApiClient } from '@digvation/pos-api';
+
+import type {
+  ApiPage,
+  CatalogCategory,
+  CatalogItem,
+  CatalogVariant,
+  ResolvedPrice,
+  Sale,
+  SellingLocation,
+} from './cashier-transaction.types';
+
+const API_PREFIX = '/api/v1';
+const PAGE_SIZE = 100;
+
+export interface CreateSaleInput {
+  sellingLocationId: string;
+  currency: string;
+}
+
+export interface AddSaleLineInput {
+  expectedVersion: number;
+  catalogItemId: string;
+  catalogVariantId?: string;
+  quantity: string;
+}
+
+export interface SetSaleLineQuantityInput {
+  expectedVersion: number;
+  quantity: string;
+}
+
+export interface CashierTransactionPort {
+  listSellingLocations(signal?: AbortSignal): Promise<ApiPage<SellingLocation>>;
+  listCatalogCategories(signal?: AbortSignal): Promise<ApiPage<CatalogCategory>>;
+  listCatalogItems(signal?: AbortSignal): Promise<ApiPage<CatalogItem>>;
+  listCatalogVariants(catalogItemId: string, signal?: AbortSignal): Promise<ApiPage<CatalogVariant>>;
+  resolvePrice(input: {
+    catalogItemId: string;
+    catalogVariantId?: string;
+    sellingLocationId: string;
+    currency: string;
+    effectiveAt: string;
+  }, signal?: AbortSignal): Promise<ResolvedPrice>;
+  listSales(signal?: AbortSignal): Promise<ApiPage<Sale>>;
+  getSale(saleId: string, signal?: AbortSignal): Promise<Sale>;
+  createSale(input: CreateSaleInput, idempotencyKey: string): Promise<Sale>;
+  addSaleLine(saleId: string, input: AddSaleLineInput, idempotencyKey: string): Promise<Sale>;
+  setSaleLineQuantity(
+    saleId: string,
+    saleLineId: string,
+    input: SetSaleLineQuantityInput,
+  ): Promise<Sale>;
+  removeSaleLine(saleId: string, saleLineId: string, expectedVersion: number): Promise<Sale>;
+}
+
+function pagePath(path: string): string {
+  return `${path}?limit=${PAGE_SIZE}&offset=0`;
+}
+
+export class HttpCashierTransactionAdapter implements CashierTransactionPort {
+  public constructor(private readonly client: ApiClient) {}
+
+  public listSellingLocations(signal?: AbortSignal): Promise<ApiPage<SellingLocation>> {
+    return this.client.get<ApiPage<SellingLocation>>(pagePath(`${API_PREFIX}/locations`), { signal });
+  }
+
+  public listCatalogCategories(signal?: AbortSignal): Promise<ApiPage<CatalogCategory>> {
+    return this.client.get<ApiPage<CatalogCategory>>(pagePath(`${API_PREFIX}/catalog/categories`), {
+      signal,
+    });
+  }
+
+  public listCatalogItems(signal?: AbortSignal): Promise<ApiPage<CatalogItem>> {
+    return this.client.get<ApiPage<CatalogItem>>(pagePath(`${API_PREFIX}/catalog/items`), { signal });
+  }
+
+  public listCatalogVariants(
+    catalogItemId: string,
+    signal?: AbortSignal,
+  ): Promise<ApiPage<CatalogVariant>> {
+    return this.client.get<ApiPage<CatalogVariant>>(
+      pagePath(`${API_PREFIX}/catalog/items/${catalogItemId}/variants`),
+      { signal },
+    );
+  }
+
+  public resolvePrice(
+    input: {
+      catalogItemId: string;
+      catalogVariantId?: string;
+      sellingLocationId: string;
+      currency: string;
+      effectiveAt: string;
+    },
+    signal?: AbortSignal,
+  ): Promise<ResolvedPrice> {
+    const query = new URLSearchParams({
+      catalogItemId: input.catalogItemId,
+      locationId: input.sellingLocationId,
+      currency: input.currency,
+      effectiveAt: input.effectiveAt,
+    });
+
+    if (input.catalogVariantId) {
+      query.set('catalogVariantId', input.catalogVariantId);
+    }
+
+    return this.client.get<ResolvedPrice>(`${API_PREFIX}/pricing/resolve?${query.toString()}`, {
+      signal,
+    });
+  }
+
+  public listSales(signal?: AbortSignal): Promise<ApiPage<Sale>> {
+    return this.client.get<ApiPage<Sale>>(pagePath(`${API_PREFIX}/sales`), { signal });
+  }
+
+  public getSale(saleId: string, signal?: AbortSignal): Promise<Sale> {
+    return this.client.get<Sale>(`${API_PREFIX}/sales/${saleId}`, { signal });
+  }
+
+  public createSale(input: CreateSaleInput, idempotencyKey: string): Promise<Sale> {
+    return this.client.post<Sale>(`${API_PREFIX}/sales`, input, {
+      headers: { 'Idempotency-Key': idempotencyKey },
+    });
+  }
+
+  public addSaleLine(
+    saleId: string,
+    input: AddSaleLineInput,
+    idempotencyKey: string,
+  ): Promise<Sale> {
+    return this.client.post<Sale>(`${API_PREFIX}/sales/${saleId}/lines`, input, {
+      headers: { 'Idempotency-Key': idempotencyKey },
+    });
+  }
+
+  public setSaleLineQuantity(
+    saleId: string,
+    saleLineId: string,
+    input: SetSaleLineQuantityInput,
+  ): Promise<Sale> {
+    return this.client.post<Sale>(`${API_PREFIX}/sales/${saleId}/lines/${saleLineId}/quantity`, input);
+  }
+
+  public removeSaleLine(
+    saleId: string,
+    saleLineId: string,
+    expectedVersion: number,
+  ): Promise<Sale> {
+    return this.client.post<Sale>(`${API_PREFIX}/sales/${saleId}/lines/${saleLineId}/remove`, {
+      expectedVersion,
+    });
+  }
+}
