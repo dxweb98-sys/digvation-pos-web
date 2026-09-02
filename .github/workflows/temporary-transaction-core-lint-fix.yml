@@ -1,0 +1,82 @@
+name: Temporary Transaction Core Lint Remediation
+
+on:
+  push:
+    branches:
+      - feat/cashier-transaction-core
+    paths:
+      - .github/workflows/temporary-transaction-core-lint-fix.yml
+
+permissions:
+  contents: write
+
+jobs:
+  remediate:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout branch
+        uses: actions/checkout@v7
+        with:
+          ref: feat/cashier-transaction-core
+      - name: Setup Node
+        uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+      - name: Enable Corepack
+        run: corepack enable
+      - name: Prepare pnpm
+        run: corepack prepare pnpm@11.22.0 --activate
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Apply snapshot form remediation
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+
+          task = Path('apps/cashier/src/features/sell/components/sale-line-task-dialog.tsx')
+          text = task.read_text()
+          text = text.replace("import { useEffect, useMemo, useState } from 'react';", "import { useMemo, useState } from 'react';")
+          pattern = re.compile(r"  const \[assignedIds, setAssignedIds\] = useState<string\[\]>\(\[\]\);.*?  \}, \[line\]\);\n", re.S)
+          replacement = """  const [assignedIds, setAssignedIds] = useState<string[]>(() =>\n    line.participations\n      .filter((participation) => participation.assigned)\n      .map((participation) => participation.employeeId),\n  );\n  const [contributionShares, setContributionShares] = useState<Record<string, string>>(() =>\n    Object.fromEntries(\n      line.participations\n        .filter((participation) => participation.shareRate !== null)\n        .map((participation) => [participation.employeeId, rateToPercent(participation.shareRate)]),\n    ),\n  );\n  const [overrideAmount, setOverrideAmount] = useState(line.overrideAmount ?? line.effectiveUnitPrice);\n  const [overrideReason, setOverrideReason] = useState(line.overrideReason ?? '');\n  const initialDiscountType = line.discountType ?? 'PERCENTAGE';\n  const [discountType, setDiscountType] = useState<DiscountType>(initialDiscountType);\n  const [discountValue, setDiscountValue] = useState(\n    discountValueForForm(initialDiscountType, line.discountValue),\n  );\n  const [discountReason, setDiscountReason] = useState(line.discountReason ?? '');\n  const [formError, setFormError] = useState<string | null>(null);\n"""
+          text, count = pattern.subn(replacement, text, count=1)
+          if count != 1:
+            raise SystemExit('line task state block not found exactly once')
+          task.write_text(text)
+
+          completion = Path('apps/cashier/src/features/sell/components/sale-completion-dialog.tsx')
+          text = completion.read_text()
+          text = text.replace("import { useEffect, useState } from 'react';", "import { useState } from 'react';")
+          text, count = re.subn(
+            r"\n  useEffect\(\(\) => \{\n    setAppliedAmount\(viewModel\.availableToPay\);\n    setTenderedAmount\(viewModel\.availableToPay\);\n  \}, \[viewModel\.availableToPay\]\);\n",
+            "\n",
+            text,
+            count=1,
+          )
+          if count != 1:
+            raise SystemExit('completion effect not found exactly once')
+          completion.write_text(text)
+
+          page = Path('apps/cashier/src/routes/sell/sell-page.tsx')
+          text = page.read_text()
+          old = """        <SaleLineTaskDialog\n          line={workspace.lineTask}"""
+          new = """        <SaleLineTaskDialog\n          key={`${workspace.lineTask.id}:${workspace.lineTask.updatedAt}`}\n          line={workspace.lineTask}"""
+          if old not in text:
+            raise SystemExit('line task dialog mount not found')
+          text = text.replace(old, new, 1)
+          old = """        <SaleCompletionDialog\n          viewModel={workspace.viewModel}"""
+          new = """        <SaleCompletionDialog\n          key={`${workspace.viewModel.sale.id}:${workspace.viewModel.sale.version}`}\n          viewModel={workspace.viewModel}"""
+          if old not in text:
+            raise SystemExit('completion dialog mount not found')
+          text = text.replace(old, new, 1)
+          page.write_text(text)
+          PY
+      - name: Apply Prettier
+        run: pnpm format
+      - name: Commit remediation
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "fix(cashier): initialize task forms from snapshots"
+          git push origin HEAD:feat/cashier-transaction-core
