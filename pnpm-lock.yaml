@@ -104,9 +104,15 @@ importers:
 
   apps/cashier:
     dependencies:
+      '@digvation/pos-api':
+        specifier: workspace:*
+        version: link:../../packages/api
       '@digvation/pos-auth':
         specifier: workspace:*
         version: link:../../packages/auth
+      '@digvation/pos-money':
+        specifier: workspace:*
+        version: link:../../packages/money
       '@digvation/pos-runtime':
         specifier: workspace:*
         version: link:../../packages/runtime

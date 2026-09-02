@@ -1,6 +1,6 @@
 {
   "name": "@digvation/pos-cashier",
-  "version": "0.1.0-alpha.1",
+  "version": "0.1.0-alpha.2",
   "private": true,
   "type": "module",
   "scripts": {
@@ -10,7 +10,9 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@digvation/pos-api": "workspace:*",
     "@digvation/pos-auth": "workspace:*",
+    "@digvation/pos-money": "workspace:*",
     "@digvation/pos-runtime": "workspace:*",
     "@digvation/pos-ui": "workspace:*",
     "@tanstack/react-query": "5.102.8",
