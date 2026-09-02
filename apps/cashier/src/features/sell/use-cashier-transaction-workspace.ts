@@ -95,7 +95,8 @@ export function useCashierTransactionWorkspace(routeSaleId?: string) {
     search: catalog.search,
     categoryId: catalog.categoryId,
     notice:
-      saleWorkspace.notice ?? (catalog.error ? cashierTransactionErrorMessage(catalog.error) : null),
+      saleWorkspace.notice ??
+      (catalog.error ? cashierTransactionErrorMessage(catalog.error) : null),
     variantPicker,
     viewModel: saleWorkspace.viewModel,
     isLoadingCatalog: catalog.isLoading,

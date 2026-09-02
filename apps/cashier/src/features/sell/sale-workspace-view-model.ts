@@ -10,23 +10,13 @@ export type SaleWorkspacePrimaryMode =
   | 'FINALIZED'
   | 'VOIDED';
 
-export type SynchronizationState =
-  | 'CLEAN'
-  | 'MUTATING'
-  | 'CONFLICT_REVIEW'
-  | 'UNCERTAIN_COMMAND';
+export type SynchronizationState = 'CLEAN' | 'MUTATING' | 'CONFLICT_REVIEW' | 'UNCERTAIN_COMMAND';
 
 export type ActionBlockReason =
-  | 'SALE_TERMINAL'
-  | 'PAYMENT_PENDING'
-  | 'OFFLINE'
-  | 'CONFLICT_REVIEW'
-  | 'MUTATION_IN_PROGRESS';
+  'SALE_TERMINAL' | 'PAYMENT_PENDING' | 'OFFLINE' | 'CONFLICT_REVIEW' | 'MUTATION_IN_PROGRESS';
 
 export type ActionAvailability =
-  | { state: 'AVAILABLE' }
-  | { state: 'HIDDEN' }
-  | { state: 'DISABLED'; reason: ActionBlockReason };
+  { state: 'AVAILABLE' } | { state: 'HIDDEN' } | { state: 'DISABLED'; reason: ActionBlockReason };
 
 export interface SaleWorkspaceViewModel {
   primaryMode: SaleWorkspacePrimaryMode;

@@ -178,10 +178,7 @@ async function installRoutes(page: Page, options: Partial<RouteState> = {}) {
       });
       return;
     }
-    if (
-      method === 'GET' &&
-      url.pathname === `/api/v1/catalog/items/${catalogItem.id}/variants`
-    ) {
+    if (method === 'GET' && url.pathname === `/api/v1/catalog/items/${catalogItem.id}/variants`) {
       await route.fulfill({ json: envelope({ items: [], limit: 100, offset: 0 }) });
       return;
     }
@@ -222,10 +219,7 @@ async function installRoutes(page: Page, options: Partial<RouteState> = {}) {
       await route.fulfill({ status: 201, json: envelope(state.currentSale) });
       return;
     }
-    if (
-      method === 'POST' &&
-      url.pathname === `/api/v1/sales/${saleId}/lines/${lineId}/quantity`
-    ) {
+    if (method === 'POST' && url.pathname === `/api/v1/sales/${saleId}/lines/${lineId}/quantity`) {
       const body = request.postDataJSON() as { expectedVersion: number; quantity: string };
       state.quantityExpectedVersions.push(body.expectedVersion);
       if (state.conflictOnNextQuantity) {
@@ -241,10 +235,7 @@ async function installRoutes(page: Page, options: Partial<RouteState> = {}) {
       await route.fulfill({ json: envelope(state.currentSale) });
       return;
     }
-    if (
-      method === 'POST' &&
-      url.pathname === `/api/v1/sales/${saleId}/lines/${lineId}/remove`
-    ) {
+    if (method === 'POST' && url.pathname === `/api/v1/sales/${saleId}/lines/${lineId}/remove`) {
       const body = request.postDataJSON() as { expectedVersion: number };
       state.removeExpectedVersions.push(body.expectedVersion);
       const removedLine = {
@@ -316,7 +307,9 @@ test('quantity and remove use the latest authoritative Sale version', async ({ p
   expect(state.removeExpectedVersions).toEqual([3]);
 });
 
-test('version conflict reloads latest Sale and never auto-replays the command', async ({ page }) => {
+test('version conflict reloads latest Sale and never auto-replays the command', async ({
+  page,
+}) => {
   const state = await installRoutes(page, { conflictOnNextQuantity: true });
   await startSaleFromFirstItem(page);
 

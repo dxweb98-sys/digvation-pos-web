@@ -34,7 +34,12 @@ export function VariantPicker({ item, variants, onSelect, onClose }: VariantPick
               Choose the exact item variant. Pricing remains backend authoritative.
             </p>
           </div>
-          <Button variant="ghost" aria-label="Close variant picker" onClick={onClose} className="px-3">
+          <Button
+            variant="ghost"
+            aria-label="Close variant picker"
+            onClick={onClose}
+            className="px-3"
+          >
             <X className="size-4" />
           </Button>
         </div>

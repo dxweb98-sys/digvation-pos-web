@@ -19,10 +19,12 @@ export function CashierSessionProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const rememberSale = useCallback((saleId: string) => {
-    setRecentSaleIds((current) => [
-      saleId,
-      ...current.filter((currentSaleId) => currentSaleId !== saleId),
-    ].slice(0, MAX_RECENT_SALES));
+    setRecentSaleIds((current) =>
+      [saleId, ...current.filter((currentSaleId) => currentSaleId !== saleId)].slice(
+        0,
+        MAX_RECENT_SALES,
+      ),
+    );
   }, []);
 
   const value = useMemo(

@@ -211,9 +211,7 @@ export function useSaleWorkspaceController({
 
   const isMutating =
     addItemMutation.isPending || quantityMutation.isPending || removeMutation.isPending;
-  const effectiveSynchronization: SynchronizationState = isMutating
-    ? 'MUTATING'
-    : synchronization;
+  const effectiveSynchronization: SynchronizationState = isMutating ? 'MUTATING' : synchronization;
   const viewModel = createSaleWorkspaceViewModel(
     saleQuery.data ?? null,
     connectivity,

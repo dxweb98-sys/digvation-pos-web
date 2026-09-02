@@ -3,10 +3,7 @@ import { Button } from '@digvation/pos-ui';
 import { ArrowRightLeft, Plus, ShoppingBag } from 'lucide-react';
 
 import type { SaleLine } from '../cashier-transaction.types';
-import {
-  actionBlockMessage,
-  type SaleWorkspaceViewModel,
-} from '../sale-workspace-view-model';
+import { actionBlockMessage, type SaleWorkspaceViewModel } from '../sale-workspace-view-model';
 import { SaleLineRow } from './sale-line-row';
 
 interface CurrentSalePaneProps {

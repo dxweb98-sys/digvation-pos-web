@@ -76,7 +76,9 @@ export class HttpCashierTransactionAdapter
   public constructor(private readonly client: ApiClient) {}
 
   public listSellingLocations(signal?: AbortSignal): Promise<ApiPage<SellingLocation>> {
-    return this.client.get<ApiPage<SellingLocation>>(pagePath(`${API_PREFIX}/locations`), { signal });
+    return this.client.get<ApiPage<SellingLocation>>(pagePath(`${API_PREFIX}/locations`), {
+      signal,
+    });
   }
 
   public listCatalogCategories(signal?: AbortSignal): Promise<ApiPage<CatalogCategory>> {
@@ -86,7 +88,9 @@ export class HttpCashierTransactionAdapter
   }
 
   public listCatalogItems(signal?: AbortSignal): Promise<ApiPage<CatalogItem>> {
-    return this.client.get<ApiPage<CatalogItem>>(pagePath(`${API_PREFIX}/catalog/items`), { signal });
+    return this.client.get<ApiPage<CatalogItem>>(pagePath(`${API_PREFIX}/catalog/items`), {
+      signal,
+    });
   }
 
   public listCatalogVariants(
@@ -152,7 +156,10 @@ export class HttpCashierTransactionAdapter
     saleLineId: string,
     input: SetSaleLineQuantityInput,
   ): Promise<Sale> {
-    return this.client.post<Sale>(`${API_PREFIX}/sales/${saleId}/lines/${saleLineId}/quantity`, input);
+    return this.client.post<Sale>(
+      `${API_PREFIX}/sales/${saleId}/lines/${saleLineId}/quantity`,
+      input,
+    );
   }
 
   public removeSaleLine(

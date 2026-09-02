@@ -30,10 +30,7 @@ export function ConnectivityProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
-  const value = useMemo(
-    () => ({ state, isOnline: state !== 'OFFLINE' }),
-    [state],
-  );
+  const value = useMemo(() => ({ state, isOnline: state !== 'OFFLINE' }), [state]);
 
   return <ConnectivityContext.Provider value={value}>{children}</ConnectivityContext.Provider>;
 }

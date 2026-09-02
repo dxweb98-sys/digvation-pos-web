@@ -58,7 +58,9 @@ export function SaleLineRow({
           >
             <Minus className="size-4" />
           </button>
-          <span className="min-w-12 px-2 text-center text-sm font-bold tabular-nums">{line.quantity}</span>
+          <span className="min-w-12 px-2 text-center text-sm font-bold tabular-nums">
+            {line.quantity}
+          </span>
           <button
             type="button"
             aria-label={`Increase ${line.itemNameSnapshot} quantity`}
