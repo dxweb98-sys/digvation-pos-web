@@ -2,106 +2,197 @@
 
 ## Objective
 
-Establish the first real Cashier transaction boundary without expanding into payment, fulfillment, assignment, contribution, discount/override, finalize/void, customer, loyalty, refund, receipt, or reporting workflows.
+Establish the first production-shaped Cashier transaction workflow on the accepted Frontend Foundation without expanding into Payment, Assignment, Contribution, full Fulfillment, Discount/Override, Finalize/Void, Customer, Loyalty, Refund, Receipt, or Reporting.
 
-The POS backend remains authoritative for Sale state, captured pricing, tax, totals, and optimistic transaction versioning.
+The POS backend remains authoritative for Sale lifecycle, captured catalog/price/tax facts, monetary totals, fulfillment/payment facts already present in the Sale aggregate, and optimistic transaction versioning.
+
+## Accepted frontend baseline
+
+```text
+branch: dev
+SHA: 4b8c0e112285ab18a94fd117aa4ecfda00636f22
+version: 0.1.0-alpha.1
+```
 
 ## Backend baseline reconciled
 
-This checkpoint is reconciled against the locked POS backend baseline:
-
 ```text
+repository: https://github.com/dxweb98-sys/digvation-pos-service
 release: v0.3.0
 SHA: d58327fa17322d1a98049d842f43742635e744f7
 API prefix: /api/v1
 ```
 
-AUTH-01 remains separately in progress. Cashier therefore preserves the accepted `AuthPort` + development `MockAuthAdapter` boundary and does not invent token persistence or authentication transport.
+AUTH-01 remains separately in progress. Cashier preserves `AuthPort` + development `MockAuthAdapter`; it does not invent token storage or authentication transport.
 
 ## Scope
 
 In scope:
 
-- read server-visible Selling Locations and present them as Branch/Cabang in operator UI;
-- ignore inactive Selling Location history for new transaction selection;
-- read active Catalog items;
-- create an OPEN Sale for the selected Selling Location and runtime currency;
-- add a Catalog item to the OPEN Sale with explicit decimal-string quantity;
-- send backend-required `Idempotency-Key` values for create/add-line commands;
-- send the latest backend Sale `version` as `expectedVersion` for add-line commands;
-- keep Sale server state in TanStack Query rather than a second business-state store;
-- render Sale line snapshots and totals returned by the backend;
-- when Branch changes while a Sale is active, require confirmation and clear only frontend navigation context; never move, finalize, or void the existing Sale.
+- list current-tenant Selling Locations and present ACTIVE records as Branch/Cabang;
+- auto-select the only ACTIVE Branch when exactly one exists;
+- require confirmation before changing Branch while a Sale is active;
+- changing Branch clears only frontend navigation context and never moves/voids/finalizes the Sale;
+- list ACTIVE catalog categories and items;
+- local catalog search/category filtering over the currently returned backend page;
+- temporarily compose cashier pricing through `GET /pricing/resolve` behind the selling-catalog query seam;
+- read active variants on demand before Add;
+- lazy transaction start: selecting the first item creates an OPEN Sale and then adds the first SaleLine;
+- if Create Sale succeeds but Add first line fails, keep the created empty OPEN Sale active;
+- `Idempotency-Key` for Create Sale and Add SaleLine;
+- retain the same idempotency key/payload when a command result is transport-ambiguous;
+- route active Sale as `/sell/:saleId`;
+- authoritative Sale query through TanStack Query;
+- render backend SaleLine snapshots and backend monetary totals;
+- direct quantity +/- convenience using decimal-safe arithmetic;
+- quantity and remove send the latest backend `expectedVersion`;
+- mutation retry disabled;
+- `SALE_VERSION_CONFLICT` triggers latest-Sale reload and explicit conflict review, never automatic command replay;
+- ambiguous non-idempotent quantity/remove results require latest-state review, never blind retry;
+- pending Payment facts already present in an existing Sale disable monetary mutations without implementing Payment UI;
+- centralized connectivity state disables business commits while offline;
+- TanStack Query mutation `networkMode: always` prevents financial writes from silently pausing and auto-resuming later;
+- basic Open Sales operational queue and recent-Sale ordering;
+- switching an Open Sale is navigation only and does not mutate Sale status;
+- one active Sale in the Cashier workspace while many backend Sales may remain OPEN.
 
-Explicitly out of scope:
+## Explicitly out of scope
 
-- Payment;
-- employee Assignment or Contribution;
-- full Fulfillment workflow;
-- line/order Discount or price Override;
-- Sale Finalize or Void;
-- Customer or Loyalty;
-- Refund;
-- Receipt;
-- Reporting;
-- existing/open Sale recovery and transaction history;
-- catalog variant selection UX;
-- frontend-authored monetary calculation authority.
+- Payment creation, settlement, split payment, or gateway UI;
+- employee Assignment;
+- employee Contribution;
+- fulfillment transition controls;
+- line/order Discount;
+- price Override;
+- Finalize;
+- Void;
+- Customer / Guest context;
+- Loyalty;
+- Refund / Reversal;
+- Receipt / Sales Document;
+- Sales Reporting;
+- transaction analytics;
+- offline transactional writes;
+- WebSocket/SSE/presence/edit locks;
+- production AUTH-01 adapter;
+- per-user Branch grant invention;
+- fake human-readable Sale reference;
+- client/business-type source branching.
 
-## Contract classification
+## Existing backend contract used
 
-### FRONTEND_ONLY
+### Branch
 
-- Cashier transaction page composition and loading/error/empty states.
-- TanStack Query keys and mutation orchestration.
-- Branch-switch confirmation and clearing of only the active Sale navigation identifier.
-- Decimal-string quantity syntax validation before transport.
-- Presentation formatting of backend-returned decimal strings.
+```text
+GET /api/v1/locations
+permission: locations:read
+```
 
-### EXISTING_BACKEND_CONTRACT
+The endpoint returns current-tenant Selling Locations including inactive history. Cashier filters ACTIVE records for new transaction selection.
 
-Locked backend `v0.3.0` already provides:
+### Selling Catalog
 
-- `GET /api/v1/locations` — current-tenant Selling Location page, including inactive history;
-- `GET /api/v1/catalog/items` — current-tenant Catalog item page;
-- `POST /api/v1/sales` — create Sale, requiring `Idempotency-Key`;
-- `GET /api/v1/sales/:id` — authoritative Sale snapshot;
-- `POST /api/v1/sales/:id/lines` — add Sale line, requiring `Idempotency-Key` and `expectedVersion`.
+```text
+GET /api/v1/catalog/categories
+GET /api/v1/catalog/items
+GET /api/v1/catalog/items/:itemId/variants
+GET /api/v1/pricing/resolve
+```
 
-Sale amounts and quantities are serialized as decimal strings. Sale state and all monetary values displayed after mutation are sourced from backend responses.
+Current generic Catalog/Pricing APIs are sufficient for checkpoint integration but are not treated as the permanent optimized cashier read model.
 
-### POS_BACKEND_GAP
+### Sale
 
-The locked `GET /api/v1/locations` contract is tenant-scoped and requires `locations:read`, but it does **not** explicitly describe a per-cashier/per-user "permitted Branch" set.
+```text
+POST /api/v1/sales
+GET  /api/v1/sales
+GET  /api/v1/sales/:id
+POST /api/v1/sales/:id/lines
+POST /api/v1/sales/:id/lines/:lineId/quantity
+POST /api/v1/sales/:id/lines/:lineId/remove
+```
 
-The frontend therefore does not manufacture a user-to-Branch permission model. This checkpoint can only show ACTIVE Selling Locations that the POS backend returns to the caller. If Cashier must support a narrower per-user Branch grant, POS backend/AUTH-01 needs an authoritative contract for that scope and this adapter must consume it.
+Create and Add Line are idempotent commands. Quantity/remove are versioned but not idempotent commands and are never blindly retried.
 
-### CROSS_SERVICE_CONTRACT
+Backend conflict code:
 
-None identified for this checkpoint. Cashier does not call Digvation CORE directly.
+```text
+SALE_VERSION_CONFLICT
+```
 
-### DOMAIN_DECISION_REQUIRED
+Backend pending-payment monetary lock code:
 
-Before treating Branch access as fully closed, product/backend ownership must confirm whether current-tenant Selling Locations returned to an authorized Cashier are intentionally the complete selectable Branch set, or whether explicit per-user Branch grants are required.
-
-This decision does not justify a frontend-only permission invention.
+```text
+SALE_PAYMENT_PENDING
+```
 
 ## State ownership
 
 ```text
-runtime/config        RuntimeProvider
-identity boundary     AuthPort
-server Sale state     TanStack Query
-selected Branch       local Cashier interaction state
-active Sale identity  local navigation context only
-money authority       POS backend decimal-string snapshots
+runtime/config         RuntimeProvider
+identity boundary      AuthPort
+connectivity           ConnectivityProvider
+selected Branch        CashierSessionProvider (session-only)
+recent Sale IDs        CashierSessionProvider (session-only navigation)
+server Sale state      TanStack Query
+money authority        POS backend decimal-string snapshots
+presentation behavior  pure SaleWorkspaceViewModel
 ```
 
-No Zustand/Redux Sale mirror, offline write queue, or client subtotal engine is introduced.
+No Redux/Zustand Sale mirror, local subtotal engine, business cache persistence, or offline mutation queue is introduced.
+
+## Backend impact classification
+
+### FRONTEND_ONLY
+
+- responsive Cashier workspace composition;
+- search/category presentation filtering;
+- session-local selected Branch and recently visited Sale IDs;
+- lazy Create+Add orchestration;
+- first-line failure recovery behavior;
+- query-key factories and server cache updates;
+- conflict-review UI;
+- direct qty/remove controls;
+- Open Sales navigation experience;
+- connectivity UI/guards.
+
+### EXISTING_BACKEND_CONTRACT
+
+- locations list;
+- categories/items/variants;
+- price resolution;
+- create/list/get Sale;
+- Add SaleLine;
+- quantity change;
+- line remove;
+- optimistic version conflict;
+- backend authoritative decimal monetary response.
+
+### POS_BACKEND_GAP
+
+Tracked in `docs/integration/FRONTEND_BACKEND_GAPS.md`:
+
+- GAP-01 Cashier Selling Catalog Query;
+- GAP-02 Priced Catalog Projection;
+- GAP-03 Open Sale Operational Query;
+- GAP-05 Human-Friendly Sale Reference;
+- GAP-06 Atomic Transaction Start.
+
+These gaps do not authorize backend modification from this frontend checkpoint.
+
+### DOMAIN_DECISION_REQUIRED
+
+The stable tenant-scoped Selling Location endpoint does not define narrower per-user Branch grants. Product/backend ownership must decide whether every authorized Cashier may select every ACTIVE tenant Branch or whether AUTH/POS needs explicit Branch grants.
+
+Frontend does not invent that permission model.
+
+### CROSS_SERVICE_CONTRACT
+
+None. Browser applications do not call CORE directly.
 
 ## Validation expectations
 
-Checkpoint handoff requires the normal repository gates:
+Checkpoint handoff requires:
 
 ```bash
 pnpm install --frozen-lockfile
@@ -109,13 +200,21 @@ pnpm verify
 pnpm test:e2e
 ```
 
-`pnpm verify` must still build both Cashier and Backoffice. Browser smoke uses exact mocked POS envelopes for the currently locked contract because production AUTH-01 is not yet accepted.
+Acceptance must cover at minimum:
+
+- lazy Create Sale + first Add Line in one operator intent;
+- Create success + first Add failure keeps empty OPEN Sale active;
+- quantity mutation sends latest `expectedVersion`;
+- remove mutation sends latest `expectedVersion`;
+- version conflict reloads latest Sale and never auto-replays;
+- Open Sales switch performs no business mutation;
+- both Cashier and Backoffice production builds remain green.
 
 ## Version recommendation
 
-Do not change the accepted package version before checkpoint approval.
+Keep packages at accepted `0.1.0-alpha.1` during implementation/review.
 
-If this checkpoint is accepted as the next frontend prerelease, recommend:
+After checkpoint approval:
 
 ```text
 0.1.0-alpha.2
