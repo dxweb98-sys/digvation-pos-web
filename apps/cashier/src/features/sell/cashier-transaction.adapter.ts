@@ -30,19 +30,31 @@ export interface SetSaleLineQuantityInput {
   quantity: string;
 }
 
-export interface CashierTransactionPort {
+export interface SellingCatalogQuery {
   listSellingLocations(signal?: AbortSignal): Promise<ApiPage<SellingLocation>>;
   listCatalogCategories(signal?: AbortSignal): Promise<ApiPage<CatalogCategory>>;
   listCatalogItems(signal?: AbortSignal): Promise<ApiPage<CatalogItem>>;
-  listCatalogVariants(catalogItemId: string, signal?: AbortSignal): Promise<ApiPage<CatalogVariant>>;
-  resolvePrice(input: {
-    catalogItemId: string;
-    catalogVariantId?: string;
-    sellingLocationId: string;
-    currency: string;
-    effectiveAt: string;
-  }, signal?: AbortSignal): Promise<ResolvedPrice>;
+  listCatalogVariants(
+    catalogItemId: string,
+    signal?: AbortSignal,
+  ): Promise<ApiPage<CatalogVariant>>;
+  resolvePrice(
+    input: {
+      catalogItemId: string;
+      catalogVariantId?: string;
+      sellingLocationId: string;
+      currency: string;
+      effectiveAt: string;
+    },
+    signal?: AbortSignal,
+  ): Promise<ResolvedPrice>;
+}
+
+export interface OpenSalesQuery {
   listSales(signal?: AbortSignal): Promise<ApiPage<Sale>>;
+}
+
+export interface SaleTransactionClient {
   getSale(saleId: string, signal?: AbortSignal): Promise<Sale>;
   createSale(input: CreateSaleInput, idempotencyKey: string): Promise<Sale>;
   addSaleLine(saleId: string, input: AddSaleLineInput, idempotencyKey: string): Promise<Sale>;
@@ -58,7 +70,9 @@ function pagePath(path: string): string {
   return `${path}?limit=${PAGE_SIZE}&offset=0`;
 }
 
-export class HttpCashierTransactionAdapter implements CashierTransactionPort {
+export class HttpCashierTransactionAdapter
+  implements SellingCatalogQuery, OpenSalesQuery, SaleTransactionClient
+{
   public constructor(private readonly client: ApiClient) {}
 
   public listSellingLocations(signal?: AbortSignal): Promise<ApiPage<SellingLocation>> {
@@ -102,9 +116,7 @@ export class HttpCashierTransactionAdapter implements CashierTransactionPort {
       effectiveAt: input.effectiveAt,
     });
 
-    if (input.catalogVariantId) {
-      query.set('catalogVariantId', input.catalogVariantId);
-    }
+    if (input.catalogVariantId) query.set('catalogVariantId', input.catalogVariantId);
 
     return this.client.get<ResolvedPrice>(`${API_PREFIX}/pricing/resolve?${query.toString()}`, {
       signal,

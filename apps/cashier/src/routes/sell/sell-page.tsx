@@ -69,7 +69,7 @@ export function SellPage() {
               items={workspace.items}
               categories={workspace.categories}
               priceByItemId={workspace.priceByItemId}
-              locale={workspace.viewModel.sale?.currency ? 'id-ID' : 'id-ID'}
+              locale={workspace.locale}
               search={workspace.search}
               categoryId={workspace.categoryId}
               isLoading={workspace.isLoadingCatalog}
@@ -81,7 +81,7 @@ export function SellPage() {
             />
             <CurrentSalePane
               viewModel={workspace.viewModel}
-              locale="id-ID"
+              locale={workspace.locale}
               onQuantityChange={workspace.changeQuantity}
               onRemove={workspace.removeLine}
               onNewSale={workspace.newSale}

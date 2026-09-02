@@ -3,7 +3,7 @@ import { formatMoney } from '@digvation/pos-money';
 import { useRuntime } from '@digvation/pos-runtime';
 import { Button } from '@digvation/pos-ui';
 import { useQuery } from '@tanstack/react-query';
-import { ArrowLeft, Clock3, LoaderCircle, ReceiptText } from 'lucide-react';
+import { AlertCircle, ArrowLeft, Clock3, LoaderCircle, ReceiptText, RefreshCw } from 'lucide-react';
 import { useMemo } from 'react';
 import { useNavigate } from 'react-router';
 
@@ -16,19 +16,18 @@ export function OpenSalesPage() {
   const runtime = useRuntime();
   const navigate = useNavigate();
   const { selectedLocationId, recentSaleIds, selectLocation, rememberSale } = useCashierSession();
-  const transactionPort = useMemo(
+  const transactionAdapter = useMemo(
     () => new HttpCashierTransactionAdapter(new ApiClient({ baseUrl: runtime.apiBaseUrl })),
     [runtime.apiBaseUrl],
   );
 
   const locationsQuery = useQuery({
     queryKey: cashierTransactionKeys.locations(),
-    queryFn: ({ signal }) => transactionPort.listSellingLocations(signal),
+    queryFn: ({ signal }) => transactionAdapter.listSellingLocations(signal),
   });
   const salesQuery = useQuery({
     queryKey: cashierTransactionKeys.sales(),
-    queryFn: ({ signal }) => transactionPort.listSales(signal),
-    refetchInterval: 15_000,
+    queryFn: ({ signal }) => transactionAdapter.listSales(signal),
   });
 
   const locationNames = new Map(
@@ -66,21 +65,39 @@ export function OpenSalesPage() {
   return (
     <section className="px-5 py-6 lg:px-8">
       <div className="mx-auto max-w-5xl">
-        <div className="flex items-start justify-between gap-4">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div>
             <p className="text-xs font-bold uppercase tracking-[0.18em] text-[var(--color-brand)]">
               Cashier
             </p>
             <h1 className="mt-2 text-3xl font-bold tracking-[-0.04em]">Open Sales</h1>
             <p className="mt-2 max-w-2xl text-sm leading-6 text-[var(--color-text-muted)]">
-              Resume an OPEN Sale without changing its backend state. This is navigation, not a hold
-              or park command.
+              Resume an OPEN Sale without changing backend state. This is navigation, not a hold or
+              park command.
             </p>
           </div>
-          <Button variant="secondary" onClick={() => navigate('/sell')}>
-            <ArrowLeft className="mr-2 size-4" /> Sell
-          </Button>
+          <div className="flex gap-2">
+            <Button variant="secondary" onClick={() => salesQuery.refetch()} disabled={salesQuery.isFetching}>
+              <RefreshCw className={`mr-2 size-4 ${salesQuery.isFetching ? 'animate-spin' : ''}`} />
+              Refresh
+            </Button>
+            <Button variant="secondary" onClick={() => navigate('/sell')}>
+              <ArrowLeft className="mr-2 size-4" /> Sell
+            </Button>
+          </div>
         </div>
+
+        {salesQuery.error ? (
+          <div className="mt-6 flex gap-3 rounded-[var(--radius-card)] border border-[var(--color-border)] bg-[var(--color-surface)] p-4 text-sm">
+            <AlertCircle className="mt-0.5 size-4 shrink-0" />
+            <div>
+              <p className="font-bold">Unable to load Open Sales</p>
+              <p className="mt-1 text-[var(--color-text-muted)]">
+                {salesQuery.error instanceof Error ? salesQuery.error.message : 'Unexpected error.'}
+              </p>
+            </div>
+          </div>
+        ) : null}
 
         <div className="mt-6">
           {salesQuery.isLoading ? (
@@ -92,7 +109,7 @@ export function OpenSalesPage() {
               <ReceiptText className="mx-auto size-6 text-[var(--color-text-muted)]" />
               <p className="mt-4 text-sm font-bold">No OPEN Sales in this Branch view</p>
               <p className="mt-1 text-xs text-[var(--color-text-muted)]">
-                Starting a new transaction still happens from Sell by choosing the first item.
+                Starting a transaction still happens from Sell by choosing the first item.
               </p>
             </div>
           ) : (

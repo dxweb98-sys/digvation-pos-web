@@ -19,8 +19,8 @@ export interface NamedRecord {
   updatedAt: string;
 }
 
-export interface SellingLocation extends NamedRecord {}
-export interface CatalogCategory extends NamedRecord {}
+export type SellingLocation = NamedRecord;
+export type CatalogCategory = NamedRecord;
 
 export interface ServiceDefinition {
   defaultDurationMinutes: number | null;
