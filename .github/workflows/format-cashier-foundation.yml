@@ -1,0 +1,73 @@
+name: Temporary Cashier Formatter
+
+on:
+  push:
+    branches:
+      - feat/cashier-transaction-foundation
+
+permissions:
+  contents: write
+
+jobs:
+  format:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout branch
+        uses: actions/checkout@v7
+        with:
+          ref: feat/cashier-transaction-foundation
+
+      - name: Setup Node
+        uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+
+      - name: Enable Corepack
+        run: corepack enable
+
+      - name: Prepare pnpm
+        run: corepack prepare pnpm@11.22.0 --activate
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Apply repository formatter
+        run: |
+          pnpm exec prettier --write \
+            apps/cashier/src/app/providers/cashier-session-provider.tsx \
+            apps/cashier/src/features/sell/cashier-transaction.adapter.ts \
+            apps/cashier/src/features/sell/components/current-sale-pane.tsx \
+            apps/cashier/src/features/sell/components/sale-line-row.tsx \
+            apps/cashier/src/features/sell/components/variant-picker.tsx \
+            apps/cashier/src/features/sell/sale-workspace-view-model.ts \
+            apps/cashier/src/features/sell/use-cashier-transaction-workspace.ts \
+            apps/cashier/src/features/sell/use-sale-workspace-controller.ts \
+            packages/runtime/src/connectivity-context.tsx \
+            pnpm-lock.yaml \
+            tooling/e2e/cashier-transaction-foundation.spec.ts
+
+      - name: Commit formatting only
+        run: |
+          if git diff --quiet; then
+            echo "No formatting changes required."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add \
+            apps/cashier/src/app/providers/cashier-session-provider.tsx \
+            apps/cashier/src/features/sell/cashier-transaction.adapter.ts \
+            apps/cashier/src/features/sell/components/current-sale-pane.tsx \
+            apps/cashier/src/features/sell/components/sale-line-row.tsx \
+            apps/cashier/src/features/sell/components/variant-picker.tsx \
+            apps/cashier/src/features/sell/sale-workspace-view-model.ts \
+            apps/cashier/src/features/sell/use-cashier-transaction-workspace.ts \
+            apps/cashier/src/features/sell/use-sale-workspace-controller.ts \
+            packages/runtime/src/connectivity-context.tsx \
+            pnpm-lock.yaml \
+            tooling/e2e/cashier-transaction-foundation.spec.ts
+          git commit -m "chore(cashier): apply repository formatting"
+          git push origin HEAD:feat/cashier-transaction-foundation
