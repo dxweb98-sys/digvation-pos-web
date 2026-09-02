@@ -1,7 +1,7 @@
 import { createDecimal, formatMoney } from '@digvation/pos-money';
 import { Button } from '@digvation/pos-ui';
 import { CheckCircle2, CircleDot, Percent, Play, Square, UserRound, X } from 'lucide-react';
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 
 import type { DiscountInput } from '../cashier-transaction.adapter';
 import type {
@@ -87,39 +87,29 @@ export function SaleLineTaskDialog({
   onSetContributions,
   onTransitionFulfillment,
 }: SaleLineTaskDialogProps) {
-  const [assignedIds, setAssignedIds] = useState<string[]>([]);
-  const [contributionShares, setContributionShares] = useState<Record<string, string>>({});
-  const [overrideAmount, setOverrideAmount] = useState('');
-  const [overrideReason, setOverrideReason] = useState('');
-  const [discountType, setDiscountType] = useState<DiscountType>('PERCENTAGE');
-  const [discountValue, setDiscountValue] = useState('');
-  const [discountReason, setDiscountReason] = useState('');
-  const [formError, setFormError] = useState<string | null>(null);
-
-  useEffect(() => {
-    setAssignedIds(
+  const [assignedIds, setAssignedIds] = useState<string[]>(() =>
+    line.participations
+      .filter((participation) => participation.assigned)
+      .map((participation) => participation.employeeId),
+  );
+  const [contributionShares, setContributionShares] = useState<Record<string, string>>(() =>
+    Object.fromEntries(
       line.participations
-        .filter((participation) => participation.assigned)
-        .map((participation) => participation.employeeId),
-    );
-    setContributionShares(
-      Object.fromEntries(
-        line.participations
-          .filter((participation) => participation.shareRate !== null)
-          .map((participation) => [
-            participation.employeeId,
-            rateToPercent(participation.shareRate),
-          ]),
-      ),
-    );
-    setOverrideAmount(line.overrideAmount ?? line.effectiveUnitPrice);
-    setOverrideReason(line.overrideReason ?? '');
-    const nextDiscountType = line.discountType ?? 'PERCENTAGE';
-    setDiscountType(nextDiscountType);
-    setDiscountValue(discountValueForForm(nextDiscountType, line.discountValue));
-    setDiscountReason(line.discountReason ?? '');
-    setFormError(null);
-  }, [line]);
+        .filter((participation) => participation.shareRate !== null)
+        .map((participation) => [participation.employeeId, rateToPercent(participation.shareRate)]),
+    ),
+  );
+  const [overrideAmount, setOverrideAmount] = useState(
+    line.overrideAmount ?? line.effectiveUnitPrice,
+  );
+  const [overrideReason, setOverrideReason] = useState(line.overrideReason ?? '');
+  const initialDiscountType = line.discountType ?? 'PERCENTAGE';
+  const [discountType, setDiscountType] = useState<DiscountType>(initialDiscountType);
+  const [discountValue, setDiscountValue] = useState(
+    discountValueForForm(initialDiscountType, line.discountValue),
+  );
+  const [discountReason, setDiscountReason] = useState(line.discountReason ?? '');
+  const [formError, setFormError] = useState<string | null>(null);
 
   const employeeById = useMemo(
     () => new Map(employees.map((employee) => [employee.id, employee])),

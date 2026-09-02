@@ -105,6 +105,7 @@ export function SellPage() {
 
       {workspace.lineTask ? (
         <SaleLineTaskDialog
+          key={`${workspace.lineTask.id}:${workspace.lineTask.updatedAt}`}
           line={workspace.lineTask}
           employees={workspace.employees}
           contributionPreview={workspace.contributionPreview}
@@ -125,6 +126,7 @@ export function SellPage() {
 
       {workspace.isCompletionOpen && workspace.viewModel.sale ? (
         <SaleCompletionDialog
+          key={`${workspace.viewModel.sale.id}:${workspace.viewModel.sale.version}`}
           viewModel={workspace.viewModel}
           locale={workspace.locale}
           isBusy={workspace.isCoreMutating}

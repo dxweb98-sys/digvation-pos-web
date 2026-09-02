@@ -10,7 +10,7 @@ import {
   Trash2,
   X,
 } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 
 import type { DiscountInput } from '../cashier-transaction.adapter';
 import type {
@@ -81,11 +81,6 @@ export function SaleCompletionDialog({
   );
   const [discountReason, setDiscountReason] = useState(sale?.orderDiscountReason ?? '');
   const [formError, setFormError] = useState<string | null>(null);
-
-  useEffect(() => {
-    setAppliedAmount(viewModel.availableToPay);
-    setTenderedAmount(viewModel.availableToPay);
-  }, [viewModel.availableToPay]);
 
   if (!sale) return null;
 
