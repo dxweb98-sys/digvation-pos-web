@@ -1,10 +1,10 @@
-import { useAuth } from '@digvation/pos-auth';
+import { useAuthenticatedAuth } from '@digvation/pos-auth';
 import { useRuntime } from '@digvation/pos-runtime';
 
 import { getAppVersion } from '../../app/version/app-version';
 
 export function AccountPage() {
-  const { session } = useAuth();
+  const { session } = useAuthenticatedAuth();
   const runtime = useRuntime();
   const version = getAppVersion();
 
@@ -13,7 +13,7 @@ export function AccountPage() {
       <div className="mx-auto max-w-4xl">
         <h1 className="text-2xl font-bold tracking-[-0.03em]">Account & diagnostics</h1>
         <p className="mt-2 text-sm text-[var(--color-text-muted)]">
-          Development identity and runtime facts for the current frontend foundation.
+          Authenticated identity and runtime facts for the current frontend foundation.
         </p>
 
         <dl className="mt-6 grid gap-3 sm:grid-cols-2">

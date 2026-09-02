@@ -1,4 +1,4 @@
-import { useAuth } from '@digvation/pos-auth';
+import { useAuthenticatedAuth } from '@digvation/pos-auth';
 import { useRuntime } from '@digvation/pos-runtime';
 import { FoundationBadge } from '@digvation/pos-ui';
 import { CircleUserRound, LayoutDashboard, Settings2 } from 'lucide-react';
@@ -11,7 +11,7 @@ const NAVIGATION = [
 
 export function BackofficeShell() {
   const runtime = useRuntime();
-  const { session } = useAuth();
+  const { session, logout } = useAuthenticatedAuth();
   const brandSubtitle =
     runtime.branding.businessName ?? runtime.branding.companyName ?? 'Backoffice';
 
@@ -36,7 +36,16 @@ export function BackofficeShell() {
               <p className="truncate text-xs text-[var(--color-text-muted)]">{brandSubtitle}</p>
             </div>
           </div>
-          <FoundationBadge />
+          <div className="flex items-center gap-3">
+            <FoundationBadge />
+            <button
+              type="button"
+              onClick={() => void logout()}
+              className="min-h-9 rounded-[var(--radius-control)] border border-[var(--color-border)] px-3 text-xs font-semibold text-[var(--color-text-muted)] hover:text-[var(--color-text)]"
+            >
+              Sign out
+            </button>
+          </div>
         </div>
       </header>
 

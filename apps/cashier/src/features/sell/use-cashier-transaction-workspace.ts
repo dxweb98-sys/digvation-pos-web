@@ -1,4 +1,5 @@
 import { ApiClient } from '@digvation/pos-api';
+import { useAuthenticatedAuth } from '@digvation/pos-auth';
 import { useConnectivity, useRuntime } from '@digvation/pos-runtime';
 import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router';
@@ -13,13 +14,21 @@ import { useSellingCatalog } from './use-selling-catalog';
 
 export function useCashierTransactionWorkspace(routeSaleId?: string) {
   const runtime = useRuntime();
+  const { authPort } = useAuthenticatedAuth();
   const connectivity = useConnectivity();
   const navigate = useNavigate();
   const { selectedLocationId, selectLocation, rememberSale } = useCashierSession();
   const [variantPicker, setVariantPicker] = useState<VariantPickerState | null>(null);
   const transactionAdapter = useMemo(
-    () => new HttpCashierTransactionAdapter(new ApiClient({ baseUrl: runtime.apiBaseUrl })),
-    [runtime.apiBaseUrl],
+    () =>
+      new HttpCashierTransactionAdapter(
+        new ApiClient({
+          baseUrl: runtime.apiBaseUrl,
+          getAccessToken: authPort.requestAuthorizer.getAccessToken,
+          handleUnauthorized: authPort.requestAuthorizer.handleUnauthorized,
+        }),
+      ),
+    [authPort, runtime.apiBaseUrl],
   );
 
   const catalog = useSellingCatalog({

@@ -1,10 +1,10 @@
-import { useAuth } from '@digvation/pos-auth';
+import { useAuthenticatedAuth } from '@digvation/pos-auth';
 import { useRuntime } from '@digvation/pos-runtime';
 
 import { getAppVersion } from '../../app/version/app-version';
 
 export function AccountPage() {
-  const { session } = useAuth();
+  const { session } = useAuthenticatedAuth();
   const runtime = useRuntime();
   const version = getAppVersion();
 

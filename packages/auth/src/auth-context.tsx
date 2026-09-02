@@ -1,20 +1,43 @@
-import { createContext, useContext, type ReactNode } from 'react';
+import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 
-import type { AuthPort, AuthSession } from './auth.types';
+import type { AuthPort, AuthSession, LoginCredentials } from './auth.types';
 
 interface AuthContextValue {
-  session: AuthSession;
+  session: AuthSession | null;
   authPort: AuthPort;
+  login(credentials: LoginCredentials): Promise<void>;
+  logout(): Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
-interface AuthProviderProps extends AuthContextValue {
+interface AuthProviderProps {
+  session: AuthSession | null;
+  authPort: AuthPort;
   children: ReactNode;
 }
 
-export function AuthProvider({ session, authPort, children }: AuthProviderProps) {
-  return <AuthContext.Provider value={{ session, authPort }}>{children}</AuthContext.Provider>;
+export function AuthProvider({ session: initialSession, authPort, children }: AuthProviderProps) {
+  const [session, setSession] = useState(initialSession);
+
+  useEffect(() => authPort.subscribeSession(setSession), [authPort]);
+
+  const value = useMemo<AuthContextValue>(
+    () => ({
+      session,
+      authPort,
+      login: async (credentials) => {
+        setSession(await authPort.login(credentials));
+      },
+      logout: async () => {
+        await authPort.logout();
+        setSession(null);
+      },
+    }),
+    [authPort, session],
+  );
+
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
 
 export function useAuth(): AuthContextValue {
@@ -25,4 +48,11 @@ export function useAuth(): AuthContextValue {
   }
 
   return context;
+}
+
+export function useAuthenticatedAuth(): AuthContextValue & { session: AuthSession } {
+  const context = useAuth();
+  if (!context.session) throw new Error('An authenticated session is required.');
+
+  return { ...context, session: context.session };
 }

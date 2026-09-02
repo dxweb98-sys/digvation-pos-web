@@ -1,4 +1,4 @@
-import { AuthProvider, type AuthPort, type AuthSession } from '@digvation/pos-auth';
+import { AuthGate, AuthProvider, type AuthPort, type AuthSession } from '@digvation/pos-auth';
 import { ConnectivityProvider, RuntimeProvider, type RuntimeConfig } from '@digvation/pos-runtime';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { RouterProviderProps } from 'react-router';
@@ -21,7 +21,7 @@ const queryClient = new QueryClient({
 
 interface CashierProvidersProps {
   runtime: RuntimeConfig;
-  session: AuthSession;
+  session: AuthSession | null;
   authPort: AuthPort;
   router: RouterProviderProps['router'];
 }
@@ -31,11 +31,13 @@ export function CashierProviders({ runtime, session, authPort, router }: Cashier
     <RuntimeProvider config={runtime}>
       <ConnectivityProvider>
         <AuthProvider session={session} authPort={authPort}>
-          <QueryClientProvider client={queryClient}>
-            <CashierSessionProvider>
-              <RouterProvider router={router} />
-            </CashierSessionProvider>
-          </QueryClientProvider>
+          <AuthGate applicationName="Cashier" workspace={runtime.workspace}>
+            <QueryClientProvider client={queryClient}>
+              <CashierSessionProvider>
+                <RouterProvider router={router} />
+              </CashierSessionProvider>
+            </QueryClientProvider>
+          </AuthGate>
         </AuthProvider>
       </ConnectivityProvider>
     </RuntimeProvider>

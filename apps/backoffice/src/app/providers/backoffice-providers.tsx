@@ -1,4 +1,4 @@
-import { AuthProvider, type AuthPort, type AuthSession } from '@digvation/pos-auth';
+import { AuthGate, AuthProvider, type AuthPort, type AuthSession } from '@digvation/pos-auth';
 import { RuntimeProvider, type RuntimeConfig } from '@digvation/pos-runtime';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { RouterProviderProps } from 'react-router';
@@ -13,7 +13,7 @@ const queryClient = new QueryClient({
 
 interface BackofficeProvidersProps {
   runtime: RuntimeConfig;
-  session: AuthSession;
+  session: AuthSession | null;
   authPort: AuthPort;
   router: RouterProviderProps['router'];
 }
@@ -27,9 +27,11 @@ export function BackofficeProviders({
   return (
     <RuntimeProvider config={runtime}>
       <AuthProvider session={session} authPort={authPort}>
-        <QueryClientProvider client={queryClient}>
-          <RouterProvider router={router} />
-        </QueryClientProvider>
+        <AuthGate applicationName="Backoffice" workspace={runtime.workspace}>
+          <QueryClientProvider client={queryClient}>
+            <RouterProvider router={router} />
+          </QueryClientProvider>
+        </AuthGate>
       </AuthProvider>
     </RuntimeProvider>
   );

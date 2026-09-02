@@ -4,6 +4,7 @@ import type { ApiEnvelope, ApiFailureEnvelope } from './api.types';
 export interface ApiClientOptions {
   baseUrl: string;
   getAccessToken?: () => Promise<string | null>;
+  handleUnauthorized?: (retryExhausted: boolean) => Promise<boolean>;
 }
 
 export interface ApiRequestOptions {
@@ -34,7 +35,11 @@ export class ApiClient {
     });
   }
 
-  private async request<T>(path: string, init: RequestInit): Promise<T> {
+  private async request<T>(
+    path: string,
+    init: RequestInit,
+    retryAfterUnauthorized = true,
+  ): Promise<T> {
     const token = await this.options.getAccessToken?.();
     const headers = new Headers(init.headers);
 
@@ -47,6 +52,13 @@ export class ApiClient {
     });
 
     const payload = (await response.json()) as ApiEnvelope<T> | ApiFailureEnvelope;
+
+    if (response.status === 401 && this.options.handleUnauthorized) {
+      const retryExhausted = !retryAfterUnauthorized;
+      if ((await this.options.handleUnauthorized(retryExhausted)) && !retryExhausted) {
+        return this.request<T>(path, init, false);
+      }
+    }
 
     if (!response.ok || !payload.success) {
       if (!payload.success) {

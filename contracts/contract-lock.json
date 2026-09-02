@@ -2,13 +2,13 @@
   "schemaVersion": 1,
   "backend": {
     "repository": "https://github.com/dxweb98-sys/digvation-pos-service",
-    "release": "v0.3.0",
-    "sha": "d58327fa17322d1a98049d842f43742635e744f7"
+    "release": "digvation-pos-dev",
+    "sha": "484a652402e9d2e888ae60993b946bf3c21f4972"
   },
   "auth": {
-    "status": "implementation-in-progress",
+    "status": "development-integrated-accepted-for-frontend-integration",
     "specificationSha": "9008e605b96660b5183e937b1b15088d5f6faa27",
-    "targetRelease": "v0.4.0"
+    "targetRelease": "digvation-pos-dev"
   },
   "transport": {
     "apiPrefix": "/api/v1",

@@ -1,4 +1,5 @@
 import { ApiClient } from '@digvation/pos-api';
+import { useAuthenticatedAuth } from '@digvation/pos-auth';
 import { formatMoney } from '@digvation/pos-money';
 import { useRuntime } from '@digvation/pos-runtime';
 import { Button } from '@digvation/pos-ui';
@@ -14,11 +15,19 @@ import type { OpenSaleSummaryViewModel } from '../../features/sell/cashier-trans
 
 export function OpenSalesPage() {
   const runtime = useRuntime();
+  const { authPort } = useAuthenticatedAuth();
   const navigate = useNavigate();
   const { selectedLocationId, recentSaleIds, selectLocation, rememberSale } = useCashierSession();
   const transactionAdapter = useMemo(
-    () => new HttpCashierTransactionAdapter(new ApiClient({ baseUrl: runtime.apiBaseUrl })),
-    [runtime.apiBaseUrl],
+    () =>
+      new HttpCashierTransactionAdapter(
+        new ApiClient({
+          baseUrl: runtime.apiBaseUrl,
+          getAccessToken: authPort.requestAuthorizer.getAccessToken,
+          handleUnauthorized: authPort.requestAuthorizer.handleUnauthorized,
+        }),
+      ),
+    [authPort, runtime.apiBaseUrl],
   );
 
   const locationsQuery = useQuery({

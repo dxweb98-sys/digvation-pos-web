@@ -1,4 +1,4 @@
-import { useAuth } from '@digvation/pos-auth';
+import { useAuthenticatedAuth } from '@digvation/pos-auth';
 import { useConnectivity, useRuntime } from '@digvation/pos-runtime';
 import { Building2, CircleUserRound, LayoutGrid, ReceiptText, Rows3 } from 'lucide-react';
 import { NavLink, Outlet } from 'react-router';
@@ -23,7 +23,7 @@ function formatCurrentDate(locale: string): string {
 export function CashierShell() {
   const runtime = useRuntime();
   const connectivity = useConnectivity();
-  const { session } = useAuth();
+  const { session, logout } = useAuthenticatedAuth();
   const version = getAppVersion();
   const brandSubtitle =
     runtime.branding.businessName ?? runtime.branding.companyName ?? runtime.workspace;
@@ -103,9 +103,18 @@ export function CashierShell() {
               {formatCurrentDate(runtime.locale)}
             </span>
           </div>
-          <div className="min-w-0 text-right">
-            <p className="truncate text-sm font-semibold">{session.identity.displayName}</p>
-            <p className="text-xs text-[var(--color-text-muted)]">{runtime.deploymentProfile}</p>
+          <div className="flex min-w-0 items-center gap-3 text-right">
+            <div>
+              <p className="truncate text-sm font-semibold">{session.identity.displayName}</p>
+              <p className="text-xs text-[var(--color-text-muted)]">{runtime.deploymentProfile}</p>
+            </div>
+            <button
+              type="button"
+              onClick={() => void logout()}
+              className="min-h-9 rounded-[var(--radius-control)] border border-[var(--color-border)] px-3 text-xs font-semibold text-[var(--color-text-muted)] hover:text-[var(--color-text)]"
+            >
+              Sign out
+            </button>
           </div>
         </header>
 
