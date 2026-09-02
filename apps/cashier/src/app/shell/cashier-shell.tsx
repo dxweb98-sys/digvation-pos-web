@@ -1,13 +1,19 @@
 import { useAuth } from '@digvation/pos-auth';
-import { useRuntime } from '@digvation/pos-runtime';
-import { FoundationBadge } from '@digvation/pos-ui';
-import { Building2, CircleUserRound, LayoutGrid, ReceiptText } from 'lucide-react';
+import { useConnectivity, useRuntime } from '@digvation/pos-runtime';
+import {
+  Building2,
+  CircleUserRound,
+  LayoutGrid,
+  ReceiptText,
+  Rows3,
+} from 'lucide-react';
 import { NavLink, Outlet } from 'react-router';
 
 import { getAppVersion } from '../version/app-version';
 
 const NAVIGATION = [
   { to: '/sell', label: 'Sell', icon: LayoutGrid },
+  { to: '/open-sales', label: 'Open Sales', icon: Rows3 },
   { to: '/account', label: 'Account', icon: CircleUserRound },
 ] as const;
 
@@ -22,6 +28,7 @@ function formatCurrentDate(locale: string): string {
 
 export function CashierShell() {
   const runtime = useRuntime();
+  const connectivity = useConnectivity();
   const { session } = useAuth();
   const version = getAppVersion();
   const brandSubtitle =
@@ -57,7 +64,7 @@ export function CashierShell() {
           </div>
           <p className="mt-2 text-sm font-semibold text-[var(--color-text)]">Transaction context</p>
           <p className="mt-1 text-xs leading-5 text-[var(--color-text-muted)]">
-            Select the current Branch in Sell. An active Sale is never moved when Branch changes.
+            Branch is selected in Sell. Existing Sales never move between Branches.
           </p>
         </div>
 
@@ -89,7 +96,15 @@ export function CashierShell() {
       <main className="grid min-h-0 min-w-0 flex-1 grid-rows-[72px_minmax(0,1fr)] overflow-hidden">
         <header className="flex min-h-18 items-center justify-between gap-4 border-b border-[var(--color-border)] bg-[var(--color-surface)] px-5 lg:px-8">
           <div className="flex min-w-0 items-center gap-3">
-            <FoundationBadge />
+            <span
+              className={`inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-bold ${
+                connectivity.state === 'OFFLINE'
+                  ? 'bg-[var(--color-accent-coral)]/45'
+                  : 'bg-[var(--color-accent-mint)]/55'
+              }`}
+            >
+              <span className="size-1.5 rounded-full bg-current" /> {connectivity.state}
+            </span>
             <span className="hidden text-xs text-[var(--color-text-muted)] sm:inline">
               {formatCurrentDate(runtime.locale)}
             </span>
