@@ -24,8 +24,12 @@ export function SaleLineRow({
 }: SaleLineRowProps) {
   const isDisabled = availability.state !== 'AVAILABLE';
   const canDecrease = !isDisabled && compareDecimalStrings(line.quantity, '1') > 0;
-  const assignedCount = line.participations.filter((participation) => participation.assigned).length;
-  const contributorCount = line.participations.filter((participation) => participation.shareRate !== null).length;
+  const assignedCount = line.participations.filter(
+    (participation) => participation.assigned,
+  ).length;
+  const contributorCount = line.participations.filter(
+    (participation) => participation.shareRate !== null,
+  ).length;
 
   const increase = () => onQuantityChange(line, createDecimal(line.quantity).plus('1').toFixed());
   const decrease = () => {
@@ -49,16 +53,28 @@ export function SaleLineRow({
 
       <div className="mt-3 flex flex-wrap gap-1.5 text-[11px] font-semibold text-[var(--color-text-muted)]">
         {line.fulfillment ? (
-          <span className="rounded-full bg-[var(--color-accent-sky)]/45 px-2 py-1">{line.fulfillment.status}</span>
+          <span className="rounded-full bg-[var(--color-accent-sky)]/45 px-2 py-1">
+            {line.fulfillment.status}
+          </span>
         ) : null}
         {assignedCount > 0 ? (
-          <span className="rounded-full bg-[var(--color-accent-mint)]/55 px-2 py-1">{assignedCount} assigned</span>
+          <span className="rounded-full bg-[var(--color-accent-mint)]/55 px-2 py-1">
+            {assignedCount} assigned
+          </span>
         ) : null}
         {contributorCount > 0 ? (
-          <span className="rounded-full bg-[var(--color-accent-lavender)]/55 px-2 py-1">{contributorCount} contributors</span>
+          <span className="rounded-full bg-[var(--color-accent-lavender)]/55 px-2 py-1">
+            {contributorCount} contributors
+          </span>
         ) : null}
-        {line.overrideAmount ? <span className="rounded-full bg-[var(--color-accent-yellow)]/50 px-2 py-1">Override</span> : null}
-        {line.discountType ? <span className="rounded-full bg-[var(--color-accent-coral)]/30 px-2 py-1">Discount</span> : null}
+        {line.overrideAmount ? (
+          <span className="rounded-full bg-[var(--color-accent-yellow)]/50 px-2 py-1">
+            Override
+          </span>
+        ) : null}
+        {line.discountType ? (
+          <span className="rounded-full bg-[var(--color-accent-coral)]/30 px-2 py-1">Discount</span>
+        ) : null}
       </div>
 
       <div className="mt-3 flex items-center justify-between gap-3">
@@ -72,7 +88,9 @@ export function SaleLineRow({
           >
             <Minus className="size-4" />
           </button>
-          <span className="min-w-12 px-2 text-center text-sm font-bold tabular-nums">{line.quantity}</span>
+          <span className="min-w-12 px-2 text-center text-sm font-bold tabular-nums">
+            {line.quantity}
+          </span>
           <button
             type="button"
             aria-label={`Increase ${line.itemNameSnapshot} quantity`}
@@ -85,7 +103,12 @@ export function SaleLineRow({
         </div>
 
         <div className="flex gap-1">
-          <Button variant="ghost" aria-label={`Manage ${line.itemNameSnapshot}`} onClick={() => onManage(line)} className="px-3">
+          <Button
+            variant="ghost"
+            aria-label={`Manage ${line.itemNameSnapshot}`}
+            onClick={() => onManage(line)}
+            className="px-3"
+          >
             <SlidersHorizontal className="size-4" />
           </Button>
           <Button

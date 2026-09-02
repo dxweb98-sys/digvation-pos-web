@@ -117,7 +117,11 @@ async function executeIntent(
         reason: intent.reason,
       });
     case 'clearPriceOverride':
-      return client.clearSaleLinePriceOverride(intent.saleId, intent.lineId, intent.expectedVersion);
+      return client.clearSaleLinePriceOverride(
+        intent.saleId,
+        intent.lineId,
+        intent.expectedVersion,
+      );
     case 'lineDiscount':
       return client.setSaleLineDiscount(intent.saleId, intent.lineId, {
         expectedVersion: intent.expectedVersion,
@@ -209,7 +213,7 @@ export function useSaleCoreController({
     mutation.mutate(intent);
   };
 
-  const withSale = <T,>(createIntent: (currentSale: Sale) => T): T | null => {
+  const withSale = <T>(createIntent: (currentSale: Sale) => T): T | null => {
     if (!sale || sale.status !== 'OPEN') return null;
     return createIntent(sale);
   };
@@ -305,10 +309,7 @@ export function useSaleCoreController({
       }));
       if (intent) mutate(intent);
     },
-    transitionFulfillment: (
-      line: SaleLine,
-      status: Exclude<FulfillmentStatus, 'WAITING'>,
-    ) => {
+    transitionFulfillment: (line: SaleLine, status: Exclude<FulfillmentStatus, 'WAITING'>) => {
       const intent = withSale((currentSale) => ({
         kind: 'fulfillment' as const,
         saleId: currentSale.id,

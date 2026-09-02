@@ -31,10 +31,7 @@ interface SaleLineTaskDialogProps {
     line: SaleLine,
     contributors: Array<{ employeeId: string; shareRate?: string }>,
   ) => void;
-  onTransitionFulfillment: (
-    line: SaleLine,
-    status: Exclude<FulfillmentStatus, 'WAITING'>,
-  ) => void;
+  onTransitionFulfillment: (line: SaleLine, status: Exclude<FulfillmentStatus, 'WAITING'>) => void;
 }
 
 function rateToPercent(rate: string | null): string {
@@ -101,13 +98,18 @@ export function SaleLineTaskDialog({
 
   useEffect(() => {
     setAssignedIds(
-      line.participations.filter((participation) => participation.assigned).map((participation) => participation.employeeId),
+      line.participations
+        .filter((participation) => participation.assigned)
+        .map((participation) => participation.employeeId),
     );
     setContributionShares(
       Object.fromEntries(
         line.participations
           .filter((participation) => participation.shareRate !== null)
-          .map((participation) => [participation.employeeId, rateToPercent(participation.shareRate)]),
+          .map((participation) => [
+            participation.employeeId,
+            rateToPercent(participation.shareRate),
+          ]),
       ),
     );
     setOverrideAmount(line.overrideAmount ?? line.effectiveUnitPrice);
@@ -127,9 +129,13 @@ export function SaleLineTaskDialog({
   const monetaryDisabled = monetaryAvailability.state !== 'AVAILABLE' || isBusy;
   const operationalDisabled = operationalAvailability.state !== 'AVAILABLE' || isBusy;
   const monetaryMessage =
-    monetaryAvailability.state === 'DISABLED' ? actionBlockMessage(monetaryAvailability.reason) : null;
+    monetaryAvailability.state === 'DISABLED'
+      ? actionBlockMessage(monetaryAvailability.reason)
+      : null;
   const operationalMessage =
-    operationalAvailability.state === 'DISABLED' ? actionBlockMessage(operationalAvailability.reason) : null;
+    operationalAvailability.state === 'DISABLED'
+      ? actionBlockMessage(operationalAvailability.reason)
+      : null;
 
   const toggleAssignment = (employeeId: string) => {
     setAssignedIds((current) =>
@@ -200,10 +206,13 @@ export function SaleLineTaskDialog({
       >
         <header className="flex items-start justify-between gap-4 border-b border-[var(--color-border)] p-5 sm:p-6">
           <div>
-            <p className="text-xs font-bold uppercase tracking-[0.16em] text-[var(--color-brand)]">Line task</p>
+            <p className="text-xs font-bold uppercase tracking-[0.16em] text-[var(--color-brand)]">
+              Line task
+            </p>
             <h2 className="mt-2 text-xl font-bold">{line.itemNameSnapshot}</h2>
             <p className="mt-1 text-sm text-[var(--color-text-muted)]">
-              Assignment, contribution, fulfillment and monetary adjustments remain separate commands.
+              Assignment, contribution, fulfillment and monetary adjustments remain separate
+              commands.
             </p>
           </div>
           <Button variant="ghost" aria-label="Close line task" onClick={onClose} className="px-3">
@@ -219,14 +228,16 @@ export function SaleLineTaskDialog({
           ) : null}
 
           <div className="grid gap-5 lg:grid-cols-2">
-            {line.itemTypeSnapshot === 'SERVICE' && line.employeeAssignmentModeSnapshot !== 'NONE' ? (
+            {line.itemTypeSnapshot === 'SERVICE' &&
+            line.employeeAssignmentModeSnapshot !== 'NONE' ? (
               <article className="rounded-[var(--radius-card)] border border-[var(--color-border)] p-5">
                 <div className="flex items-center gap-2">
                   <UserRound className="size-4" />
                   <h3 className="font-bold">Employee assignment</h3>
                 </div>
                 <p className="mt-2 text-xs leading-5 text-[var(--color-text-muted)]">
-                  Mode: {line.employeeAssignmentModeSnapshot}. Assignment is operational and does not define contribution share.
+                  Mode: {line.employeeAssignmentModeSnapshot}. Assignment is operational and does
+                  not define contribution share.
                 </p>
                 <div className="mt-4 space-y-2">
                   {employees.map((employee) => (
@@ -241,14 +252,22 @@ export function SaleLineTaskDialog({
                         onChange={() => toggleAssignment(employee.id)}
                       />
                       <span className="font-semibold">{employee.displayName}</span>
-                      <span className="ml-auto text-xs text-[var(--color-text-muted)]">{employee.code}</span>
+                      <span className="ml-auto text-xs text-[var(--color-text-muted)]">
+                        {employee.code}
+                      </span>
                     </label>
                   ))}
                   {employees.length === 0 ? (
-                    <p className="text-sm text-[var(--color-text-muted)]">No ACTIVE employees available.</p>
+                    <p className="text-sm text-[var(--color-text-muted)]">
+                      No ACTIVE employees available.
+                    </p>
                   ) : null}
                 </div>
-                {operationalMessage ? <p className="mt-3 text-xs text-[var(--color-text-muted)]">{operationalMessage}</p> : null}
+                {operationalMessage ? (
+                  <p className="mt-3 text-xs text-[var(--color-text-muted)]">
+                    {operationalMessage}
+                  </p>
+                ) : null}
                 <Button
                   variant="secondary"
                   className="mt-4 w-full"
@@ -267,7 +286,8 @@ export function SaleLineTaskDialog({
                   <h3 className="font-bold">Employee contribution</h3>
                 </div>
                 <p className="mt-2 text-xs leading-5 text-[var(--color-text-muted)]">
-                  Leave all shares blank for equal split. Partial shares are allowed; the backend distributes the remaining share deterministically.
+                  Leave all shares blank for equal split. Partial shares are allowed; the backend
+                  distributes the remaining share deterministically.
                 </p>
                 <div className="mt-4 space-y-2">
                   {employees.map((employee) => {
@@ -320,15 +340,23 @@ export function SaleLineTaskDialog({
 
                 {contributionPreview ? (
                   <div className="mt-4 rounded-[var(--radius-control)] border border-[var(--color-border)] p-3">
-                    <p className="text-xs font-bold uppercase tracking-[0.12em] text-[var(--color-text-muted)]">Backend preview</p>
+                    <p className="text-xs font-bold uppercase tracking-[0.12em] text-[var(--color-text-muted)]">
+                      Backend preview
+                    </p>
                     <p className="mt-2 text-sm font-semibold">
-                      Base {formatMoney(contributionPreview.contributionBaseAmount, line.currency, locale)}
+                      Base{' '}
+                      {formatMoney(
+                        contributionPreview.contributionBaseAmount,
+                        line.currency,
+                        locale,
+                      )}
                     </p>
                     <div className="mt-2 space-y-1 text-xs">
                       {contributionPreview.preview.map((entry) => (
                         <div key={entry.employeeId} className="flex justify-between gap-3">
                           <span className="text-[var(--color-text-muted)]">
-                            {employeeById.get(entry.employeeId)?.displayName ?? entry.employeeId.slice(0, 8)}
+                            {employeeById.get(entry.employeeId)?.displayName ??
+                              entry.employeeId.slice(0, 8)}
                           </span>
                           <span className="font-semibold tabular-nums">
                             {formatMoney(entry.contributionAmount, line.currency, locale)}
@@ -365,7 +393,9 @@ export function SaleLineTaskDialog({
                     </Button>
                   ))}
                   {actions.length === 0 ? (
-                    <p className="text-xs text-[var(--color-text-muted)]">No further CP2 transition is available.</p>
+                    <p className="text-xs text-[var(--color-text-muted)]">
+                      No further CP2 transition is available.
+                    </p>
                   ) : null}
                 </div>
               </article>
@@ -374,7 +404,8 @@ export function SaleLineTaskDialog({
             <article className="rounded-[var(--radius-card)] border border-[var(--color-border)] p-5">
               <h3 className="font-bold">Price override</h3>
               <p className="mt-2 text-xs leading-5 text-[var(--color-text-muted)]">
-                Resolved price stays captured. Override stores a separate final unit price and reason.
+                Resolved price stays captured. Override stores a separate final unit price and
+                reason.
               </p>
               <label className="mt-4 block text-xs font-semibold text-[var(--color-text-muted)]">
                 Unit amount
@@ -402,12 +433,18 @@ export function SaleLineTaskDialog({
                   Apply override
                 </Button>
                 {line.overrideAmount ? (
-                  <Button variant="ghost" disabled={monetaryDisabled} onClick={() => onClearPriceOverride(line)}>
+                  <Button
+                    variant="ghost"
+                    disabled={monetaryDisabled}
+                    onClick={() => onClearPriceOverride(line)}
+                  >
                     Remove
                   </Button>
                 ) : null}
               </div>
-              {monetaryMessage ? <p className="mt-3 text-xs text-[var(--color-text-muted)]">{monetaryMessage}</p> : null}
+              {monetaryMessage ? (
+                <p className="mt-3 text-xs text-[var(--color-text-muted)]">{monetaryMessage}</p>
+              ) : null}
             </article>
 
             <article className="rounded-[var(--radius-card)] border border-[var(--color-border)] p-5">
@@ -450,7 +487,11 @@ export function SaleLineTaskDialog({
                   Apply discount
                 </Button>
                 {line.discountType ? (
-                  <Button variant="ghost" disabled={monetaryDisabled} onClick={() => onClearLineDiscount(line)}>
+                  <Button
+                    variant="ghost"
+                    disabled={monetaryDisabled}
+                    onClick={() => onClearLineDiscount(line)}
+                  >
                     Remove
                   </Button>
                 ) : null}

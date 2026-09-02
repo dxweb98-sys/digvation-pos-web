@@ -120,7 +120,11 @@ export interface SaleTransactionClient {
     saleLineId: string,
     input: PriceOverrideInput,
   ): Promise<Sale>;
-  clearSaleLinePriceOverride(saleId: string, saleLineId: string, expectedVersion: number): Promise<Sale>;
+  clearSaleLinePriceOverride(
+    saleId: string,
+    saleLineId: string,
+    expectedVersion: number,
+  ): Promise<Sale>;
   setSaleLineDiscount(saleId: string, saleLineId: string, input: DiscountInput): Promise<Sale>;
   clearSaleLineDiscount(saleId: string, saleLineId: string, expectedVersion: number): Promise<Sale>;
   setSaleDiscount(saleId: string, input: DiscountInput): Promise<Sale>;
@@ -165,7 +169,9 @@ export class HttpCashierTransactionAdapter
   public constructor(private readonly client: ApiClient) {}
 
   public listSellingLocations(signal?: AbortSignal): Promise<ApiPage<SellingLocation>> {
-    return this.client.get<ApiPage<SellingLocation>>(pagePath(`${API_PREFIX}/locations`), { signal });
+    return this.client.get<ApiPage<SellingLocation>>(pagePath(`${API_PREFIX}/locations`), {
+      signal,
+    });
   }
 
   public listCatalogCategories(signal?: AbortSignal): Promise<ApiPage<CatalogCategory>> {
@@ -175,7 +181,9 @@ export class HttpCashierTransactionAdapter
   }
 
   public listCatalogItems(signal?: AbortSignal): Promise<ApiPage<CatalogItem>> {
-    return this.client.get<ApiPage<CatalogItem>>(pagePath(`${API_PREFIX}/catalog/items`), { signal });
+    return this.client.get<ApiPage<CatalogItem>>(pagePath(`${API_PREFIX}/catalog/items`), {
+      signal,
+    });
   }
 
   public listCatalogVariants(
@@ -243,7 +251,10 @@ export class HttpCashierTransactionAdapter
     saleLineId: string,
     input: SetSaleLineQuantityInput,
   ): Promise<Sale> {
-    return this.client.post<Sale>(`${API_PREFIX}/sales/${saleId}/lines/${saleLineId}/quantity`, input);
+    return this.client.post<Sale>(
+      `${API_PREFIX}/sales/${saleId}/lines/${saleLineId}/quantity`,
+      input,
+    );
   }
 
   public removeSaleLine(
@@ -261,7 +272,10 @@ export class HttpCashierTransactionAdapter
     saleLineId: string,
     input: PriceOverrideInput,
   ): Promise<Sale> {
-    return this.client.post<Sale>(`${API_PREFIX}/sales/${saleId}/lines/${saleLineId}/price-override`, input);
+    return this.client.post<Sale>(
+      `${API_PREFIX}/sales/${saleId}/lines/${saleLineId}/price-override`,
+      input,
+    );
   }
 
   public clearSaleLinePriceOverride(
@@ -275,8 +289,15 @@ export class HttpCashierTransactionAdapter
     );
   }
 
-  public setSaleLineDiscount(saleId: string, saleLineId: string, input: DiscountInput): Promise<Sale> {
-    return this.client.post<Sale>(`${API_PREFIX}/sales/${saleId}/lines/${saleLineId}/discount`, input);
+  public setSaleLineDiscount(
+    saleId: string,
+    saleLineId: string,
+    input: DiscountInput,
+  ): Promise<Sale> {
+    return this.client.post<Sale>(
+      `${API_PREFIX}/sales/${saleId}/lines/${saleLineId}/discount`,
+      input,
+    );
   }
 
   public clearSaleLineDiscount(
@@ -295,7 +316,9 @@ export class HttpCashierTransactionAdapter
   }
 
   public clearSaleDiscount(saleId: string, expectedVersion: number): Promise<Sale> {
-    return this.client.post<Sale>(`${API_PREFIX}/sales/${saleId}/discount/remove`, { expectedVersion });
+    return this.client.post<Sale>(`${API_PREFIX}/sales/${saleId}/discount/remove`, {
+      expectedVersion,
+    });
   }
 
   public setSaleLineAssignments(
@@ -303,7 +326,10 @@ export class HttpCashierTransactionAdapter
     saleLineId: string,
     input: AssignmentInput,
   ): Promise<Sale> {
-    return this.client.post<Sale>(`${API_PREFIX}/sales/${saleId}/lines/${saleLineId}/assignments`, input);
+    return this.client.post<Sale>(
+      `${API_PREFIX}/sales/${saleId}/lines/${saleLineId}/assignments`,
+      input,
+    );
   }
 
   public setSaleLineContributions(
@@ -311,7 +337,10 @@ export class HttpCashierTransactionAdapter
     saleLineId: string,
     input: ContributionInput,
   ): Promise<Sale> {
-    return this.client.post<Sale>(`${API_PREFIX}/sales/${saleId}/lines/${saleLineId}/contributions`, input);
+    return this.client.post<Sale>(
+      `${API_PREFIX}/sales/${saleId}/lines/${saleLineId}/contributions`,
+      input,
+    );
   }
 
   public getSaleLineContributionPreview(
@@ -330,7 +359,10 @@ export class HttpCashierTransactionAdapter
     saleLineId: string,
     input: FulfillmentInput,
   ): Promise<Sale> {
-    return this.client.post<Sale>(`${API_PREFIX}/sales/${saleId}/lines/${saleLineId}/fulfillment`, input);
+    return this.client.post<Sale>(
+      `${API_PREFIX}/sales/${saleId}/lines/${saleLineId}/fulfillment`,
+      input,
+    );
   }
 
   public createSalePayment(
@@ -348,10 +380,17 @@ export class HttpCashierTransactionAdapter
     paymentId: string,
     input: PaymentTransitionInput,
   ): Promise<Sale> {
-    return this.client.post<Sale>(`${API_PREFIX}/sales/${saleId}/payments/${paymentId}/status`, input);
+    return this.client.post<Sale>(
+      `${API_PREFIX}/sales/${saleId}/payments/${paymentId}/status`,
+      input,
+    );
   }
 
-  public finalizeSale(saleId: string, expectedVersion: number, idempotencyKey: string): Promise<Sale> {
+  public finalizeSale(
+    saleId: string,
+    expectedVersion: number,
+    idempotencyKey: string,
+  ): Promise<Sale> {
     return this.client.post<Sale>(
       `${API_PREFIX}/sales/${saleId}/finalize`,
       { expectedVersion },

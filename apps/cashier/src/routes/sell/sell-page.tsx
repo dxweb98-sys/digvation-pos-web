@@ -24,7 +24,8 @@ export function SellPage() {
             </p>
             <h1 className="mt-2 text-3xl font-bold tracking-[-0.04em]">Sell</h1>
             <p className="mt-2 max-w-2xl text-sm leading-6 text-[var(--color-text-muted)]">
-              Sale, fulfillment and payment progress independently. The POS backend remains authoritative for every committed transaction fact.
+              Sale, fulfillment and payment progress independently. The POS backend remains
+              authoritative for every committed transaction fact.
             </p>
           </div>
 

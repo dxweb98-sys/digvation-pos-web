@@ -1,6 +1,13 @@
 import { formatMoney } from '@digvation/pos-money';
 import { Button } from '@digvation/pos-ui';
-import { ArrowRight, ArrowRightLeft, BadgeCheck, CircleAlert, Plus, ShoppingBag } from 'lucide-react';
+import {
+  ArrowRight,
+  ArrowRightLeft,
+  BadgeCheck,
+  CircleAlert,
+  Plus,
+  ShoppingBag,
+} from 'lucide-react';
 
 import type { SaleLine } from '../cashier-transaction.types';
 import { actionBlockMessage, type SaleWorkspaceViewModel } from '../sale-workspace-view-model';
@@ -161,7 +168,9 @@ export function CurrentSalePane({
           {sale.discountAmount !== '0.0000' ? (
             <div className="flex justify-between gap-4 text-[var(--color-text-muted)]">
               <dt>Discount</dt>
-              <dd className="tabular-nums">−{formatMoney(sale.discountAmount, sale.currency, locale)}</dd>
+              <dd className="tabular-nums">
+                −{formatMoney(sale.discountAmount, sale.currency, locale)}
+              </dd>
             </div>
           ) : null}
           <div className="flex justify-between gap-4 text-[var(--color-text-muted)]">
@@ -176,19 +185,25 @@ export function CurrentSalePane({
 
         <div className="mt-4 grid grid-cols-3 gap-2 rounded-[var(--radius-control)] border border-[var(--color-border)] bg-[var(--color-surface)] p-3 text-center">
           <div>
-            <p className="text-[10px] font-bold uppercase tracking-[0.1em] text-[var(--color-text-muted)]">Paid</p>
+            <p className="text-[10px] font-bold uppercase tracking-[0.1em] text-[var(--color-text-muted)]">
+              Paid
+            </p>
             <p className="mt-1 text-xs font-bold tabular-nums">
               {formatMoney(viewModel.paidAmount, sale.currency, locale)}
             </p>
           </div>
           <div className="border-x border-[var(--color-border)] px-2">
-            <p className="text-[10px] font-bold uppercase tracking-[0.1em] text-[var(--color-text-muted)]">Pending</p>
+            <p className="text-[10px] font-bold uppercase tracking-[0.1em] text-[var(--color-text-muted)]">
+              Pending
+            </p>
             <p className="mt-1 text-xs font-bold tabular-nums">
               {formatMoney(viewModel.pendingAmount, sale.currency, locale)}
             </p>
           </div>
           <div>
-            <p className="text-[10px] font-bold uppercase tracking-[0.1em] text-[var(--color-text-muted)]">Available to pay</p>
+            <p className="text-[10px] font-bold uppercase tracking-[0.1em] text-[var(--color-text-muted)]">
+              Available to pay
+            </p>
             <p className="mt-1 text-xs font-bold tabular-nums">
               {formatMoney(viewModel.availableToPay, sale.currency, locale)}
             </p>

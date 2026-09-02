@@ -13,7 +13,12 @@ import {
 import { useEffect, useState } from 'react';
 
 import type { DiscountInput } from '../cashier-transaction.adapter';
-import type { DiscountType, Payment, PaymentMethod, PaymentStatus } from '../cashier-transaction.types';
+import type {
+  DiscountType,
+  Payment,
+  PaymentMethod,
+  PaymentStatus,
+} from '../cashier-transaction.types';
 import { actionBlockMessage, type SaleWorkspaceViewModel } from '../sale-workspace-view-model';
 
 interface SaleCompletionDialogProps {
@@ -68,7 +73,9 @@ export function SaleCompletionDialog({
   const [appliedAmount, setAppliedAmount] = useState(viewModel.availableToPay);
   const [tenderedAmount, setTenderedAmount] = useState(viewModel.availableToPay);
   const [providerReference, setProviderReference] = useState('');
-  const [discountType, setDiscountType] = useState<DiscountType>(sale?.orderDiscountType ?? 'PERCENTAGE');
+  const [discountType, setDiscountType] = useState<DiscountType>(
+    sale?.orderDiscountType ?? 'PERCENTAGE',
+  );
   const [discountValue, setDiscountValue] = useState(
     discountToFormValue(sale?.orderDiscountType ?? 'PERCENTAGE', sale?.orderDiscountValue ?? null),
   );
@@ -89,7 +96,10 @@ export function SaleCompletionDialog({
 
   const createPayment = () => {
     setFormError(null);
-    if (!/^\d+(?:\.\d{1,4})?$/.test(appliedAmount.trim()) || createDecimal(appliedAmount).lessThanOrEqualTo(0)) {
+    if (
+      !/^\d+(?:\.\d{1,4})?$/.test(appliedAmount.trim()) ||
+      createDecimal(appliedAmount).lessThanOrEqualTo(0)
+    ) {
       setFormError('Payment amount must be greater than zero with at most four decimals.');
       return;
     }
@@ -142,11 +152,18 @@ export function SaleCompletionDialog({
       >
         <header className="flex items-start justify-between gap-4 border-b border-[var(--color-border)] p-5 sm:p-6">
           <div>
-            <p className="text-xs font-bold uppercase tracking-[0.16em] text-[var(--color-brand)]">Sale Completion</p>
+            <p className="text-xs font-bold uppercase tracking-[0.16em] text-[var(--color-brand)]">
+              Sale Completion
+            </p>
             <h2 className="mt-2 text-xl font-bold">Sale {sale.id.slice(0, 8)}</h2>
             <p className="mt-1 text-sm text-[var(--color-text-muted)]">{completionMessage}</p>
           </div>
-          <Button variant="ghost" aria-label="Close Sale Completion" onClick={onClose} className="px-3">
+          <Button
+            variant="ghost"
+            aria-label="Close Sale Completion"
+            onClick={onClose}
+            className="px-3"
+          >
             <X className="size-5" />
           </Button>
         </header>
@@ -239,7 +256,9 @@ export function SaleCompletionDialog({
                         <div className="flex items-center justify-between gap-3">
                           <div>
                             <p className="text-sm font-bold">{payment.method.replace('_', ' ')}</p>
-                            <p className="mt-1 text-xs text-[var(--color-text-muted)]">{payment.status}</p>
+                            <p className="mt-1 text-xs text-[var(--color-text-muted)]">
+                              {payment.status}
+                            </p>
                           </div>
                           <p className="text-sm font-bold tabular-nums">
                             {formatMoney(payment.appliedAmount, sale.currency, locale)}
@@ -321,11 +340,19 @@ export function SaleCompletionDialog({
                   className="mt-2 w-full rounded-[var(--radius-control)] border border-[var(--color-border)] px-3 py-2.5 text-sm outline-none focus:border-[var(--color-focus)]"
                 />
                 <div className="mt-4 flex gap-2">
-                  <Button variant="secondary" disabled={monetaryDisabled} onClick={applyOrderDiscount}>
+                  <Button
+                    variant="secondary"
+                    disabled={monetaryDisabled}
+                    onClick={applyOrderDiscount}
+                  >
                     Apply order discount
                   </Button>
                   {sale.orderDiscountType ? (
-                    <Button variant="ghost" disabled={monetaryDisabled} onClick={onClearOrderDiscount}>
+                    <Button
+                      variant="ghost"
+                      disabled={monetaryDisabled}
+                      onClick={onClearOrderDiscount}
+                    >
                       Remove
                     </Button>
                   ) : null}
@@ -339,19 +366,27 @@ export function SaleCompletionDialog({
                 <dl className="mt-4 space-y-3 text-sm">
                   <div className="flex justify-between gap-4">
                     <dt className="text-[var(--color-text-muted)]">Sale total</dt>
-                    <dd className="font-bold tabular-nums">{formatMoney(sale.totalAmount, sale.currency, locale)}</dd>
+                    <dd className="font-bold tabular-nums">
+                      {formatMoney(sale.totalAmount, sale.currency, locale)}
+                    </dd>
                   </div>
                   <div className="flex justify-between gap-4">
                     <dt className="text-[var(--color-text-muted)]">Paid</dt>
-                    <dd className="font-semibold tabular-nums">{formatMoney(viewModel.paidAmount, sale.currency, locale)}</dd>
+                    <dd className="font-semibold tabular-nums">
+                      {formatMoney(viewModel.paidAmount, sale.currency, locale)}
+                    </dd>
                   </div>
                   <div className="flex justify-between gap-4">
                     <dt className="text-[var(--color-text-muted)]">Pending</dt>
-                    <dd className="font-semibold tabular-nums">{formatMoney(viewModel.pendingAmount, sale.currency, locale)}</dd>
+                    <dd className="font-semibold tabular-nums">
+                      {formatMoney(viewModel.pendingAmount, sale.currency, locale)}
+                    </dd>
                   </div>
                   <div className="flex justify-between gap-4 border-t border-[var(--color-border)] pt-3 text-base">
                     <dt className="font-bold">Available to pay</dt>
-                    <dd className="font-bold tabular-nums">{formatMoney(viewModel.availableToPay, sale.currency, locale)}</dd>
+                    <dd className="font-bold tabular-nums">
+                      {formatMoney(viewModel.availableToPay, sale.currency, locale)}
+                    </dd>
                   </div>
                 </dl>
               </article>
@@ -367,7 +402,8 @@ export function SaleCompletionDialog({
                 </div>
                 {viewModel.domainReadiness.ready ? (
                   <p className="mt-3 text-sm text-[var(--color-text-muted)]">
-                    Exact settlement and operational requirements are ready for backend finalization.
+                    Exact settlement and operational requirements are ready for backend
+                    finalization.
                   </p>
                 ) : (
                   <ul className="mt-3 space-y-2 text-sm">

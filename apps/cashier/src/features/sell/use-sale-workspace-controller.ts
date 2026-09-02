@@ -179,7 +179,9 @@ export function useSaleWorkspaceController({
     const sale = saleQuery.data;
     if (!sale || viewModel.monetaryMutation.state !== 'AVAILABLE') return;
     if (!isPositiveQuantity(quantity)) {
-      command.reportError(new Error('Quantity must be greater than zero with at most four decimal places.'));
+      command.reportError(
+        new Error('Quantity must be greater than zero with at most four decimal places.'),
+      );
       return;
     }
     quantityMutation.mutate({

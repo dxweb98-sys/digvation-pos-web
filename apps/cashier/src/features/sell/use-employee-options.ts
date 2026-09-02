@@ -11,7 +11,9 @@ export function useEmployeeOptions(query: EmployeeQuery) {
   });
 
   return {
-    employees: (employeesQuery.data?.items ?? []).filter((employee) => employee.status === 'ACTIVE'),
+    employees: (employeesQuery.data?.items ?? []).filter(
+      (employee) => employee.status === 'ACTIVE',
+    ),
     isLoading: employeesQuery.isLoading,
     error: employeesQuery.error,
   };

@@ -87,7 +87,7 @@ export function useSaleCommandCoordinator({
     [refetchSale],
   );
 
-  const runMutation = useCallback(async <T,>(operation: () => Promise<T>): Promise<T> => {
+  const runMutation = useCallback(async <T>(operation: () => Promise<T>): Promise<T> => {
     setActiveMutationCount((count) => count + 1);
     try {
       return await operation();

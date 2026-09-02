@@ -60,7 +60,8 @@ export function useCashierTransactionWorkspace(routeSaleId?: string) {
   });
 
   const lineTask =
-    saleWorkspace.sale?.lines.find((line) => line.id === lineTaskId && line.removedAt === null) ?? null;
+    saleWorkspace.sale?.lines.find((line) => line.id === lineTaskId && line.removedAt === null) ??
+    null;
 
   const contributionPreviewQuery = useQuery({
     queryKey: cashierTransactionKeys.contributionPreview(
@@ -68,7 +69,11 @@ export function useCashierTransactionWorkspace(routeSaleId?: string) {
       lineTask?.id ?? 'idle',
     ),
     queryFn: ({ signal }) =>
-      transactionAdapter.getSaleLineContributionPreview(saleWorkspace.sale!.id, lineTask!.id, signal),
+      transactionAdapter.getSaleLineContributionPreview(
+        saleWorkspace.sale!.id,
+        lineTask!.id,
+        signal,
+      ),
     enabled: Boolean(saleWorkspace.sale && lineTask?.allowEmployeeContributionSnapshot),
   });
 

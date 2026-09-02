@@ -26,9 +26,7 @@ export type ActionBlockReason =
   | 'NOT_VOIDABLE';
 
 export type ActionAvailability =
-  | { state: 'AVAILABLE' }
-  | { state: 'HIDDEN' }
-  | { state: 'DISABLED'; reason: ActionBlockReason };
+  { state: 'AVAILABLE' } | { state: 'HIDDEN' } | { state: 'DISABLED'; reason: ActionBlockReason };
 
 export type DomainReadinessBlockerCode =
   | 'NO_LINES'
@@ -110,11 +108,17 @@ function domainReadiness(sale: Sale | null, activeLines: SaleLine[]) {
 
   const succeeded = createDecimal(sumPayments(sale, 'SUCCEEDED'));
   if (!succeeded.equals(createDecimal(sale.totalAmount))) {
-    blockers.push({ code: 'NOT_SETTLED', message: 'Successful payments must exactly match the Sale total.' });
+    blockers.push({
+      code: 'NOT_SETTLED',
+      message: 'Successful payments must exactly match the Sale total.',
+    });
   }
 
   for (const line of activeLines) {
-    if (line.fulfillmentBehaviorSnapshot === 'TRACKED' && line.fulfillment?.status !== 'COMPLETED') {
+    if (
+      line.fulfillmentBehaviorSnapshot === 'TRACKED' &&
+      line.fulfillment?.status !== 'COMPLETED'
+    ) {
       blockers.push({
         code: 'FULFILLMENT_INCOMPLETE',
         saleLineId: line.id,
@@ -167,30 +171,30 @@ export function createSaleWorkspaceViewModel(
     sale && sale.status !== 'OPEN' ? { state: 'DISABLED', reason: 'SALE_TERMINAL' } : null;
 
   const operationalMutation = execution ?? terminalBlock ?? { state: 'AVAILABLE' as const };
-  const monetaryMutation =
-    execution ??
+  const monetaryMutation = execution ??
     terminalBlock ??
-    (hasPendingPayment ? { state: 'DISABLED' as const, reason: 'PAYMENT_PENDING' as const } : null) ??
-    { state: 'AVAILABLE' as const };
-  const paymentMutation =
-    execution ??
+    (hasPendingPayment
+      ? { state: 'DISABLED' as const, reason: 'PAYMENT_PENDING' as const }
+      : null) ?? { state: 'AVAILABLE' as const };
+  const paymentMutation = execution ??
     terminalBlock ??
     (createDecimal(availableToPay).lessThanOrEqualTo(0)
       ? { state: 'DISABLED' as const, reason: 'NOTHING_TO_PAY' as const }
-      : null) ??
-    { state: 'AVAILABLE' as const };
-  const finalizeMutation =
-    execution ??
+      : null) ?? { state: 'AVAILABLE' as const };
+  const finalizeMutation = execution ??
     terminalBlock ??
-    (!readiness.ready ? { state: 'DISABLED' as const, reason: 'DOMAIN_NOT_READY' as const } : null) ??
-    { state: 'AVAILABLE' as const };
+    (!readiness.ready
+      ? { state: 'DISABLED' as const, reason: 'DOMAIN_NOT_READY' as const }
+      : null) ?? { state: 'AVAILABLE' as const };
   const hasBlockingPayment =
-    sale?.payments.some((payment) => payment.status === 'PENDING' || payment.status === 'SUCCEEDED') ?? false;
-  const voidMutation =
-    execution ??
+    sale?.payments.some(
+      (payment) => payment.status === 'PENDING' || payment.status === 'SUCCEEDED',
+    ) ?? false;
+  const voidMutation = execution ??
     terminalBlock ??
-    (hasBlockingPayment ? { state: 'DISABLED' as const, reason: 'NOT_VOIDABLE' as const } : null) ??
-    { state: 'AVAILABLE' as const };
+    (hasBlockingPayment
+      ? { state: 'DISABLED' as const, reason: 'NOT_VOIDABLE' as const }
+      : null) ?? { state: 'AVAILABLE' as const };
 
   let primaryMode: SaleWorkspacePrimaryMode = 'EMPTY';
   if (sale?.status === 'FINALIZED') primaryMode = 'FINALIZED';
@@ -203,7 +207,9 @@ export function createSaleWorkspaceViewModel(
     sale &&
     createDecimal(paidAmount).equals(createDecimal(sale.totalAmount)) &&
     readiness.blockers.some((blocker) =>
-      ['FULFILLMENT_INCOMPLETE', 'ASSIGNMENT_REQUIRED', 'CONTRIBUTION_REQUIRED'].includes(blocker.code),
+      ['FULFILLMENT_INCOMPLETE', 'ASSIGNMENT_REQUIRED', 'CONTRIBUTION_REQUIRED'].includes(
+        blocker.code,
+      ),
     )
   ) {
     primaryMode = 'PAID_WORK_REMAINING';
