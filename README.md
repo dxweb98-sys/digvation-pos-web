@@ -9,8 +9,8 @@ Product implementation is performed from `dev` through capability-scoped working
 Accepted frontend baseline:
 
 ```text
-Frontend Foundation
-0.1.0-alpha.1
+Cashier Transaction Foundation
+0.1.0-alpha.2
 ```
 
 ## Branch model
