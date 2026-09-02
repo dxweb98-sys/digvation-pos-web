@@ -54,6 +54,15 @@ export interface SettlePaymentInput {
   status: 'SUCCEEDED' | 'FAILED' | 'CANCELLED' | 'EXPIRED';
 }
 
+export interface TransitionSaleLineFulfillmentInput {
+  expectedVersion: number;
+  status: 'IN_PROGRESS' | 'COMPLETED' | 'CANCELED';
+}
+
+export interface FinalizeSaleInput {
+  expectedVersion: number;
+}
+
 export interface SellingCatalogQuery {
   listSellingLocations(signal?: AbortSignal): Promise<ApiPage<SellingLocation>>;
   listCatalogCategories(signal?: AbortSignal): Promise<ApiPage<CatalogCategory>>;
@@ -101,6 +110,12 @@ export interface SaleTransactionClient {
   ): Promise<Sale>;
   createPayment(saleId: string, input: CreatePaymentInput, idempotencyKey: string): Promise<Sale>;
   settlePayment(saleId: string, paymentId: string, input: SettlePaymentInput): Promise<Sale>;
+  transitionSaleLineFulfillment(
+    saleId: string,
+    saleLineId: string,
+    input: TransitionSaleLineFulfillmentInput,
+  ): Promise<Sale>;
+  finalizeSale(saleId: string, input: FinalizeSaleInput, idempotencyKey: string): Promise<Sale>;
 }
 
 function pagePath(path: string): string {
@@ -254,5 +269,26 @@ export class HttpCashierTransactionAdapter
       `${API_PREFIX}/sales/${saleId}/payments/${paymentId}/status`,
       input,
     );
+  }
+
+  public transitionSaleLineFulfillment(
+    saleId: string,
+    saleLineId: string,
+    input: TransitionSaleLineFulfillmentInput,
+  ): Promise<Sale> {
+    return this.client.post<Sale>(
+      `${API_PREFIX}/sales/${saleId}/lines/${saleLineId}/fulfillment`,
+      input,
+    );
+  }
+
+  public finalizeSale(
+    saleId: string,
+    input: FinalizeSaleInput,
+    idempotencyKey: string,
+  ): Promise<Sale> {
+    return this.client.post<Sale>(`${API_PREFIX}/sales/${saleId}/finalize`, input, {
+      headers: { 'Idempotency-Key': idempotencyKey },
+    });
   }
 }

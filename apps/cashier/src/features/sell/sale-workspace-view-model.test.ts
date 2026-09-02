@@ -56,6 +56,18 @@ describe('createSaleWorkspaceViewModel', () => {
       state: 'DISABLED',
       reason: 'PAYMENT_PENDING',
     });
+    expect(viewModel.lifecycleMutation).toEqual({ state: 'AVAILABLE' });
+  });
+
+  it('reflects a finalized backend Sale as terminal after replacement', () => {
+    const viewModel = createSaleWorkspaceViewModel(
+      { ...baseSale, status: 'FINALIZED', version: 2 },
+      'ONLINE',
+      'CLEAN',
+    );
+
+    expect(viewModel.sale).toMatchObject({ status: 'FINALIZED', version: 2 });
+    expect(viewModel.lifecycleMutation).toEqual({ state: 'DISABLED', reason: 'SALE_TERMINAL' });
   });
 
   it('treats conflict review as a synchronization overlay', () => {

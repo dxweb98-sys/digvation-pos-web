@@ -6,7 +6,9 @@ import type { Employee, SaleLine } from '../cashier-transaction.types';
 import { actionBlockMessage, type SaleWorkspaceViewModel } from '../sale-workspace-view-model';
 import { SaleLineRow } from './sale-line-row';
 import { SaleLineTeamPanel } from './sale-line-team-panel';
+import { SaleLineFulfillmentPanel } from './sale-line-fulfillment-panel';
 import { PaymentPanel } from './payment-panel';
+import { SaleFinalizePanel } from './sale-finalize-panel';
 
 interface CurrentSalePaneProps {
   viewModel: SaleWorkspaceViewModel;
@@ -29,6 +31,11 @@ interface CurrentSalePaneProps {
     paymentId: string,
     status: 'SUCCEEDED' | 'FAILED' | 'CANCELLED' | 'EXPIRED',
   ) => void;
+  onTransitionFulfillment: (
+    line: SaleLine,
+    status: 'IN_PROGRESS' | 'COMPLETED' | 'CANCELED',
+  ) => void;
+  onFinalizeSale: () => void;
   onNewSale: () => void;
   onOpenSales: () => void;
 }
@@ -42,6 +49,8 @@ export function CurrentSalePane({
   onSaveLineTeam,
   onCreatePayment,
   onSettlePayment,
+  onTransitionFulfillment,
+  onFinalizeSale,
   onNewSale,
   onOpenSales,
 }: CurrentSalePaneProps) {
@@ -137,6 +146,11 @@ export function CurrentSalePane({
                 availability={viewModel.monetaryMutation}
                 onSave={onSaveLineTeam}
               />
+              <SaleLineFulfillmentPanel
+                line={line}
+                availability={viewModel.lifecycleMutation}
+                onTransition={onTransitionFulfillment}
+              />
             </div>
           ))
         )}
@@ -169,6 +183,7 @@ export function CurrentSalePane({
         onCreate={onCreatePayment}
         onSettle={onSettlePayment}
       />
+      <SaleFinalizePanel availability={viewModel.lifecycleMutation} onFinalize={onFinalizeSale} />
     </section>
   );
 }

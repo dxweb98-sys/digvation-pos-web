@@ -88,6 +88,8 @@ export function SellPage() {
               onSaveLineTeam={workspace.saveLineTeam}
               onCreatePayment={workspace.createPayment}
               onSettlePayment={workspace.settlePayment}
+              onTransitionFulfillment={workspace.transitionLineFulfillment}
+              onFinalizeSale={workspace.finalizeSale}
               onNewSale={workspace.newSale}
               onOpenSales={workspace.openSales}
             />

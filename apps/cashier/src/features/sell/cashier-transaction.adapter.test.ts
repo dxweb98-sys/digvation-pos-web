@@ -133,6 +133,7 @@ const sale: Sale = {
       taxAmount: '0.0000',
       totalAmount: '125000.0000',
       removedAt: null,
+      fulfillment: null,
       participations: [],
     },
   ],
@@ -363,6 +364,60 @@ describe('HttpCashierTransactionAdapter', () => {
     expect(requestJsonBody(fetchMock, 4)).toEqual({ expectedVersion: 6, status: 'SUCCEEDED' });
   });
 
+  it('maps tracked fulfillment and finalization to versioned backend commands', async () => {
+    const trackedSale: Sale = {
+      ...sale,
+      version: 7,
+      lines: [
+        {
+          ...sale.lines[0]!,
+          fulfillmentBehaviorSnapshot: 'TRACKED',
+          fulfillment: {
+            saleId,
+            saleLineId,
+            status: 'IN_PROGRESS',
+            startedAt: effectiveAt,
+            completedAt: null,
+            canceledAt: null,
+          },
+        },
+      ],
+    };
+    const finalizedSale: Sale = { ...trackedSale, status: 'FINALIZED', version: 8 };
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(successResponse(trackedSale))
+      .mockResolvedValueOnce(successResponse(finalizedSale));
+    vi.stubGlobal('fetch', fetchMock);
+    const adapter = createAdapter();
+
+    await expect(
+      adapter.transitionSaleLineFulfillment(saleId, saleLineId, {
+        expectedVersion: 6,
+        status: 'COMPLETED',
+      }),
+    ).resolves.toEqual(trackedSale);
+    await expect(
+      adapter.finalizeSale(saleId, { expectedVersion: 7 }, 'finalize-sale-1'),
+    ).resolves.toEqual(finalizedSale);
+
+    expect(fetchMock.mock.calls.map(([path]) => path)).toEqual([
+      `${baseUrl}/api/v1/sales/${saleId}/lines/${saleLineId}/fulfillment`,
+      `${baseUrl}/api/v1/sales/${saleId}/finalize`,
+    ]);
+    expect(requestJsonBody(fetchMock, 0)).toEqual({ expectedVersion: 6, status: 'COMPLETED' });
+    expect(requestJsonBody(fetchMock, 1)).toEqual({ expectedVersion: 7 });
+    expect(new Headers(requestInit(fetchMock, 0).headers).get('authorization')).toBe(
+      `Bearer ${accessToken}`,
+    );
+    expect(new Headers(requestInit(fetchMock, 1).headers).get('authorization')).toBe(
+      `Bearer ${accessToken}`,
+    );
+    expect(new Headers(requestInit(fetchMock, 1).headers).get('idempotency-key')).toBe(
+      'finalize-sale-1',
+    );
+  });
+
   it('preserves normalized backend failures for Cashier error handling', async () => {
     vi.stubGlobal(
       'fetch',
@@ -377,6 +432,12 @@ describe('HttpCashierTransactionAdapter', () => {
             'PAYMENT_AMOUNT_EXCEEDS_OUTSTANDING',
             'Payment exceeds unreserved amount',
           ),
+        )
+        .mockResolvedValueOnce(
+          failureResponse(409, 'SALE_FULFILLMENT_INVALID', 'Transition is not allowed'),
+        )
+        .mockResolvedValueOnce(
+          failureResponse(409, 'SALE_FULFILLMENT_INCOMPLETE', 'Tracked fulfillment is incomplete'),
         ),
     );
 
@@ -406,5 +467,14 @@ describe('HttpCashierTransactionAdapter', () => {
         'payment-over',
       ),
     ).rejects.toMatchObject({ code: 'PAYMENT_AMOUNT_EXCEEDS_OUTSTANDING' });
+    await expect(
+      adapter.transitionSaleLineFulfillment(saleId, saleLineId, {
+        expectedVersion: 3,
+        status: 'COMPLETED',
+      }),
+    ).rejects.toMatchObject({ code: 'SALE_FULFILLMENT_INVALID' });
+    await expect(
+      adapter.finalizeSale(saleId, { expectedVersion: 3 }, 'finalize-failure'),
+    ).rejects.toMatchObject({ code: 'SALE_FULFILLMENT_INCOMPLETE' });
   });
 });

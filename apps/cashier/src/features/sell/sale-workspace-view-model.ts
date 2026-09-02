@@ -26,6 +26,7 @@ export interface SaleWorkspaceViewModel {
   connectivity: ConnectivityState;
   synchronization: SynchronizationState;
   monetaryMutation: ActionAvailability;
+  lifecycleMutation: ActionAvailability;
 }
 
 function monetaryMutationAvailability(
@@ -58,6 +59,24 @@ function monetaryMutationAvailability(
   return { state: 'AVAILABLE' };
 }
 
+function lifecycleMutationAvailability(
+  sale: Sale | null,
+  connectivity: ConnectivityState,
+  synchronization: SynchronizationState,
+): ActionAvailability {
+  if (connectivity === 'OFFLINE') return { state: 'DISABLED', reason: 'OFFLINE' };
+  if (synchronization === 'CONFLICT_REVIEW' || synchronization === 'UNCERTAIN_COMMAND') {
+    return { state: 'DISABLED', reason: 'CONFLICT_REVIEW' };
+  }
+  if (synchronization === 'MUTATING') {
+    return { state: 'DISABLED', reason: 'MUTATION_IN_PROGRESS' };
+  }
+  if (sale?.status !== undefined && sale.status !== 'OPEN') {
+    return { state: 'DISABLED', reason: 'SALE_TERMINAL' };
+  }
+  return { state: 'AVAILABLE' };
+}
+
 export function createSaleWorkspaceViewModel(
   sale: Sale | null,
   connectivity: ConnectivityState,
@@ -83,6 +102,7 @@ export function createSaleWorkspaceViewModel(
     connectivity,
     synchronization,
     monetaryMutation: monetaryMutationAvailability(sale, connectivity, synchronization),
+    lifecycleMutation: lifecycleMutationAvailability(sale, connectivity, synchronization),
   };
 }
 

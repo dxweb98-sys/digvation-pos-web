@@ -123,6 +123,8 @@ export function useCashierTransactionWorkspace(routeSaleId?: string) {
     saveLineTeam: saleWorkspace.saveLineTeam,
     createPayment: saleWorkspace.createPayment,
     settlePayment: saleWorkspace.settlePayment,
+    transitionLineFulfillment: saleWorkspace.transitionLineFulfillment,
+    finalizeSale: saleWorkspace.finalizeSale,
     newSale,
     openSales: () => navigate('/open-sales'),
     acknowledgeLatestState: saleWorkspace.acknowledgeLatestState,

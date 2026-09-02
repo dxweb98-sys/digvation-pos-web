@@ -295,13 +295,54 @@ export function useSaleWorkspaceController({
     onError: async (error, intent) => recoverFailure(error, intent.sale.id),
   });
 
+  const fulfillmentMutation = useMutation({
+    mutationFn: (intent: {
+      sale: Sale;
+      line: SaleLine;
+      status: 'IN_PROGRESS' | 'COMPLETED' | 'CANCELED';
+    }) => {
+      if (connectivity === 'OFFLINE') throw new Error('Reconnect before changing this Sale.');
+      return client.transitionSaleLineFulfillment(intent.sale.id, intent.line.id, {
+        expectedVersion: intent.sale.version,
+        status: intent.status,
+      });
+    },
+    onSuccess: (sale) => {
+      queryClient.setQueryData(cashierTransactionKeys.sale(sale.id), sale);
+      queryClient.invalidateQueries({ queryKey: cashierTransactionKeys.sales() });
+      setSynchronization('CLEAN');
+      setNotice(null);
+    },
+    onError: async (error, intent) => recoverFailure(error, intent.sale.id),
+  });
+
+  const finalizeMutation = useMutation({
+    mutationFn: (sale: Sale) => {
+      if (connectivity === 'OFFLINE') throw new Error('Reconnect before changing this Sale.');
+      return client.finalizeSale(
+        sale.id,
+        { expectedVersion: sale.version },
+        createIdempotencyKey('finalize-sale'),
+      );
+    },
+    onSuccess: (sale) => {
+      queryClient.setQueryData(cashierTransactionKeys.sale(sale.id), sale);
+      queryClient.invalidateQueries({ queryKey: cashierTransactionKeys.sales() });
+      setSynchronization('CLEAN');
+      setNotice(null);
+    },
+    onError: async (error, sale) => recoverFailure(error, sale.id),
+  });
+
   const isMutating =
     addItemMutation.isPending ||
     quantityMutation.isPending ||
     removeMutation.isPending ||
     contributionMutation.isPending ||
     paymentMutation.isPending ||
-    settlementMutation.isPending;
+    settlementMutation.isPending ||
+    fulfillmentMutation.isPending ||
+    finalizeMutation.isPending;
   const effectiveSynchronization: SynchronizationState = isMutating ? 'MUTATING' : synchronization;
   const viewModel = createSaleWorkspaceViewModel(
     saleQuery.data ?? null,
@@ -397,6 +438,19 @@ export function useSaleWorkspaceController({
       const sale = saleQuery.data;
       if (!sale || sale.status !== 'OPEN') return;
       settlementMutation.mutate({ sale, paymentId, status });
+    },
+    transitionLineFulfillment: (
+      line: SaleLine,
+      status: 'IN_PROGRESS' | 'COMPLETED' | 'CANCELED',
+    ) => {
+      const sale = saleQuery.data;
+      if (!sale || !line.fulfillment || viewModel.lifecycleMutation.state !== 'AVAILABLE') return;
+      fulfillmentMutation.mutate({ sale, line, status });
+    },
+    finalizeSale: () => {
+      const sale = saleQuery.data;
+      if (!sale || viewModel.lifecycleMutation.state !== 'AVAILABLE') return;
+      finalizeMutation.mutate(sale);
     },
     retryLastAdd: () => {
       if (!retryIntent || addItemMutation.isPending) return;

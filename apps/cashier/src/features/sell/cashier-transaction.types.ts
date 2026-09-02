@@ -2,6 +2,7 @@ export type RecordStatus = 'ACTIVE' | 'INACTIVE';
 export type CatalogLifecycle = 'DRAFT' | 'ACTIVE' | 'INACTIVE' | 'ARCHIVED';
 export type SaleStatus = 'OPEN' | 'FINALIZED' | 'VOIDED';
 export type PaymentStatus = 'PENDING' | 'SUCCEEDED' | 'FAILED' | 'CANCELLED' | 'EXPIRED';
+export type FulfillmentStatus = 'WAITING' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELED';
 
 export interface ApiPage<T> {
   items: T[];
@@ -91,6 +92,15 @@ export interface SaleParticipation {
   shareRate: string | null;
 }
 
+export interface SaleLineFulfillment {
+  saleId: string;
+  saleLineId: string;
+  status: FulfillmentStatus;
+  startedAt: string | null;
+  completedAt: string | null;
+  canceledAt: string | null;
+}
+
 export interface SaleLine {
   id: string;
   saleId: string;
@@ -113,6 +123,7 @@ export interface SaleLine {
   taxAmount: string;
   totalAmount: string;
   removedAt: string | null;
+  fulfillment: SaleLineFulfillment | null;
   participations: SaleParticipation[];
 }
 
