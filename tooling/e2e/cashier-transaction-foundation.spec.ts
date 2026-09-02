@@ -276,7 +276,9 @@ test('lazy start creates the Sale only when the first item is added', async ({ p
   await page.getByRole('button', { name: 'Add', exact: true }).click();
 
   await expect(page).toHaveURL(new RegExp(`/sell/${saleId}$`));
-  await expect(page.getByText('Hair Cut', { exact: true })).toBeVisible();
+  await expect(
+    page.getByRole('region', { name: 'Current Sale' }).getByText('Hair Cut', { exact: true }),
+  ).toBeVisible();
   await expect(page.getByText(/Rp\s?125\.000/).last()).toBeVisible();
   expect(state.createRequests).toBe(1);
   expect(state.addRequests).toBe(1);
@@ -334,7 +336,9 @@ test('Open Sales switches active Sale by navigation only', async ({ page }) => {
 
   await page.getByText(`Sale ${saleId.slice(0, 8)}`).click();
   await expect(page).toHaveURL(new RegExp(`/sell/${saleId}$`));
-  await expect(page.getByText('Hair Cut', { exact: true })).toBeVisible();
+  await expect(
+    page.getByRole('region', { name: 'Current Sale' }).getByText('Hair Cut', { exact: true }),
+  ).toBeVisible();
 
   expect(state.createRequests).toBe(0);
   expect(state.addRequests).toBe(0);

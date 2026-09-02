@@ -27,7 +27,10 @@ export function CurrentSalePane({
 
   if (!sale) {
     return (
-      <section className="flex min-h-[440px] flex-col rounded-[var(--radius-panel)] border border-[var(--color-border)] bg-[var(--color-surface)] p-6 shadow-[var(--shadow-panel)]">
+      <section
+        aria-label="Current Sale"
+        className="flex min-h-[440px] flex-col rounded-[var(--radius-panel)] border border-[var(--color-border)] bg-[var(--color-surface)] p-6 shadow-[var(--shadow-panel)]"
+      >
         <p className="text-xs font-bold uppercase tracking-[0.16em] text-[var(--color-text-muted)]">
           Current Sale
         </p>
@@ -53,7 +56,10 @@ export function CurrentSalePane({
       : null;
 
   return (
-    <section className="flex min-h-[520px] flex-col rounded-[var(--radius-panel)] border border-[var(--color-border)] bg-[var(--color-surface)] shadow-[var(--shadow-panel)]">
+    <section
+      aria-label="Current Sale"
+      className="flex min-h-[520px] flex-col rounded-[var(--radius-panel)] border border-[var(--color-border)] bg-[var(--color-surface)] shadow-[var(--shadow-panel)]"
+    >
       <div className="border-b border-[var(--color-border)] p-5">
         <div className="flex items-start justify-between gap-4">
           <div className="min-w-0">
