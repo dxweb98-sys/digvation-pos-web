@@ -1,5 +1,7 @@
 import { MapPin } from 'lucide-react';
 
+import { Select } from '@digvation/pos-ui';
+
 import type { SellingLocation } from '../cashier-transaction.types';
 
 interface BranchSelectorProps {
@@ -20,12 +22,12 @@ export function BranchSelector({ locations, value, isLoading, onChange }: Branch
       </label>
       <div className="relative mt-2">
         <MapPin className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-[var(--color-text-muted)]" />
-        <select
+        <Select
           id="branch"
           value={value}
           onChange={(event) => onChange(event.target.value)}
           disabled={isLoading || locations.length === 0}
-          className="min-h-11 w-full appearance-none rounded-[var(--radius-control)] border border-[var(--color-border)] bg-[var(--color-surface)] pl-10 pr-4 text-sm font-semibold outline-none transition-shadow focus:ring-2 focus:ring-[var(--color-focus)]"
+          className="w-full appearance-none pl-10 pr-4 font-medium"
         >
           <option value="">Select Branch</option>
           {locations.map((location) => (
@@ -33,7 +35,7 @@ export function BranchSelector({ locations, value, isLoading, onChange }: Branch
               {location.name}
             </option>
           ))}
-        </select>
+        </Select>
       </div>
     </div>
   );

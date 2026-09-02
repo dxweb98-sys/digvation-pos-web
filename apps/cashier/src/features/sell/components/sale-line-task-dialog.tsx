@@ -1,5 +1,5 @@
 import { createDecimal, formatMoney } from '@digvation/pos-money';
-import { Button } from '@digvation/pos-ui';
+import { Button, Checkbox, Dialog, Input, Select } from '@digvation/pos-ui';
 import { CheckCircle2, CircleDot, Percent, Play, Square, UserRound, X } from 'lucide-react';
 import { useMemo, useState } from 'react';
 
@@ -187,309 +187,294 @@ export function SaleLineTaskDialog({
   const actions = fulfillmentActions(line.fulfillment?.status ?? null);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-slate-950/30 p-0 backdrop-blur-[2px] sm:items-center sm:p-5">
-      <section
-        role="dialog"
-        aria-modal="true"
-        aria-label={`Manage ${line.itemNameSnapshot}`}
-        className="flex max-h-[94vh] w-full max-w-5xl flex-col overflow-hidden rounded-t-[var(--radius-panel)] border border-[var(--color-border)] bg-[var(--color-surface)] shadow-2xl sm:rounded-[var(--radius-panel)]"
-      >
-        <header className="flex items-start justify-between gap-4 border-b border-[var(--color-border)] p-5 sm:p-6">
-          <div>
-            <p className="text-xs font-bold uppercase tracking-[0.16em] text-[var(--color-brand)]">
-              Line task
-            </p>
-            <h2 className="mt-2 text-xl font-bold">{line.itemNameSnapshot}</h2>
-            <p className="mt-1 text-sm text-[var(--color-text-muted)]">
-              Assignment, contribution, fulfillment and monetary adjustments remain separate
-              commands.
-            </p>
+    <Dialog
+      open
+      onClose={onClose}
+      ariaLabel={`Manage ${line.itemNameSnapshot}`}
+      className="flex max-h-[94vh] w-full max-w-5xl flex-col overflow-hidden rounded-t-xl border border-[var(--color-border)] bg-[var(--color-surface)] shadow-xl sm:rounded-xl"
+    >
+      <header className="flex items-start justify-between gap-4 border-b border-[var(--color-border)] p-5 sm:p-6">
+        <div>
+          <p className="text-xs font-bold uppercase tracking-[0.16em] text-[var(--color-brand)]">
+            Line task
+          </p>
+          <h2 className="mt-2 text-xl font-bold">{line.itemNameSnapshot}</h2>
+          <p className="mt-1 text-sm text-[var(--color-text-muted)]">
+            Assignment, contribution, fulfillment and monetary adjustments remain separate commands.
+          </p>
+        </div>
+        <Button variant="ghost" aria-label="Close line task" onClick={onClose} className="px-3">
+          <X className="size-5" />
+        </Button>
+      </header>
+
+      <div className="min-h-0 flex-1 overflow-y-auto p-5 sm:p-6">
+        {formError ? (
+          <div className="mb-5 rounded-[var(--radius-control)] bg-[var(--color-accent-coral)]/25 px-4 py-3 text-sm font-semibold">
+            {formError}
           </div>
-          <Button variant="ghost" aria-label="Close line task" onClick={onClose} className="px-3">
-            <X className="size-5" />
-          </Button>
-        </header>
+        ) : null}
 
-        <div className="min-h-0 flex-1 overflow-y-auto p-5 sm:p-6">
-          {formError ? (
-            <div className="mb-5 rounded-[var(--radius-control)] bg-[var(--color-accent-coral)]/25 px-4 py-3 text-sm font-semibold">
-              {formError}
-            </div>
-          ) : null}
-
-          <div className="grid gap-5 lg:grid-cols-2">
-            {line.itemTypeSnapshot === 'SERVICE' &&
-            line.employeeAssignmentModeSnapshot !== 'NONE' ? (
-              <article className="rounded-[var(--radius-card)] border border-[var(--color-border)] p-5">
-                <div className="flex items-center gap-2">
-                  <UserRound className="size-4" />
-                  <h3 className="font-bold">Employee assignment</h3>
-                </div>
-                <p className="mt-2 text-xs leading-5 text-[var(--color-text-muted)]">
-                  Mode: {line.employeeAssignmentModeSnapshot}. Assignment is operational and does
-                  not define contribution share.
-                </p>
-                <div className="mt-4 space-y-2">
-                  {employees.map((employee) => (
-                    <label
-                      key={employee.id}
-                      className="flex cursor-pointer items-center gap-3 rounded-[var(--radius-control)] bg-[var(--color-surface-muted)] px-3 py-2.5 text-sm"
-                    >
-                      <input
-                        type="checkbox"
-                        checked={assignedIds.includes(employee.id)}
-                        disabled={operationalDisabled}
-                        onChange={() => toggleAssignment(employee.id)}
-                      />
-                      <span className="font-semibold">{employee.displayName}</span>
-                      <span className="ml-auto text-xs text-[var(--color-text-muted)]">
-                        {employee.code}
-                      </span>
-                    </label>
-                  ))}
-                  {employees.length === 0 ? (
-                    <p className="text-sm text-[var(--color-text-muted)]">
-                      No ACTIVE employees available.
-                    </p>
-                  ) : null}
-                </div>
-                {operationalMessage ? (
-                  <p className="mt-3 text-xs text-[var(--color-text-muted)]">
-                    {operationalMessage}
+        <div className="grid gap-5 lg:grid-cols-2">
+          {line.itemTypeSnapshot === 'SERVICE' && line.employeeAssignmentModeSnapshot !== 'NONE' ? (
+            <article className="rounded-[var(--radius-card)] border border-[var(--color-border)] p-5">
+              <div className="flex items-center gap-2">
+                <UserRound className="size-4" />
+                <h3 className="font-bold">Employee assignment</h3>
+              </div>
+              <p className="mt-2 text-xs leading-5 text-[var(--color-text-muted)]">
+                Mode: {line.employeeAssignmentModeSnapshot}. Assignment is operational and does not
+                define contribution share.
+              </p>
+              <div className="mt-4 space-y-2">
+                {employees.map((employee) => (
+                  <label
+                    key={employee.id}
+                    className="flex cursor-pointer items-center gap-3 rounded-[var(--radius-control)] bg-[var(--color-surface-muted)] px-3 py-2.5 text-sm"
+                  >
+                    <Checkbox
+                      checked={assignedIds.includes(employee.id)}
+                      disabled={operationalDisabled}
+                      onChange={() => toggleAssignment(employee.id)}
+                    />
+                    <span className="font-semibold">{employee.displayName}</span>
+                    <span className="ml-auto text-xs text-[var(--color-text-muted)]">
+                      {employee.code}
+                    </span>
+                  </label>
+                ))}
+                {employees.length === 0 ? (
+                  <p className="text-sm text-[var(--color-text-muted)]">
+                    No ACTIVE employees available.
                   </p>
                 ) : null}
-                <Button
-                  variant="secondary"
-                  className="mt-4 w-full"
-                  disabled={operationalDisabled}
-                  onClick={() => onSetAssignments(line, assignedIds)}
-                >
-                  Save assignment
-                </Button>
-              </article>
-            ) : null}
-
-            {line.allowEmployeeContributionSnapshot ? (
-              <article className="rounded-[var(--radius-card)] border border-[var(--color-border)] p-5">
-                <div className="flex items-center gap-2">
-                  <Percent className="size-4" />
-                  <h3 className="font-bold">Employee contribution</h3>
-                </div>
-                <p className="mt-2 text-xs leading-5 text-[var(--color-text-muted)]">
-                  Leave all shares blank for equal split. Partial shares are allowed; the backend
-                  distributes the remaining share deterministically.
-                </p>
-                <div className="mt-4 space-y-2">
-                  {employees.map((employee) => {
-                    const selected = employee.id in contributionShares;
-                    return (
-                      <div
-                        key={employee.id}
-                        className="rounded-[var(--radius-control)] bg-[var(--color-surface-muted)] p-3"
-                      >
-                        <label className="flex cursor-pointer items-center gap-3 text-sm">
-                          <input
-                            type="checkbox"
-                            checked={selected}
-                            disabled={operationalDisabled}
-                            onChange={() => toggleContributor(employee.id)}
-                          />
-                          <span className="font-semibold">{employee.displayName}</span>
-                        </label>
-                        {selected ? (
-                          <label className="mt-2 flex items-center gap-2 text-xs text-[var(--color-text-muted)]">
-                            Share %
-                            <input
-                              aria-label={`${employee.displayName} contribution share`}
-                              value={contributionShares[employee.id] ?? ''}
-                              disabled={operationalDisabled}
-                              onChange={(event) =>
-                                setContributionShares((current) => ({
-                                  ...current,
-                                  [employee.id]: event.target.value,
-                                }))
-                              }
-                              placeholder="auto"
-                              inputMode="decimal"
-                              className="ml-auto w-28 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2 text-right text-sm text-[var(--color-text)] outline-none focus:border-[var(--color-focus)]"
-                            />
-                          </label>
-                        ) : null}
-                      </div>
-                    );
-                  })}
-                </div>
-                <Button
-                  variant="secondary"
-                  className="mt-4 w-full"
-                  disabled={operationalDisabled}
-                  onClick={saveContributions}
-                >
-                  Save contribution
-                </Button>
-
-                {contributionPreview ? (
-                  <div className="mt-4 rounded-[var(--radius-control)] border border-[var(--color-border)] p-3">
-                    <p className="text-xs font-bold uppercase tracking-[0.12em] text-[var(--color-text-muted)]">
-                      Backend preview
-                    </p>
-                    <p className="mt-2 text-sm font-semibold">
-                      Base{' '}
-                      {formatMoney(
-                        contributionPreview.contributionBaseAmount,
-                        line.currency,
-                        locale,
-                      )}
-                    </p>
-                    <div className="mt-2 space-y-1 text-xs">
-                      {contributionPreview.preview.map((entry) => (
-                        <div key={entry.employeeId} className="flex justify-between gap-3">
-                          <span className="text-[var(--color-text-muted)]">
-                            {employeeById.get(entry.employeeId)?.displayName ??
-                              entry.employeeId.slice(0, 8)}
-                          </span>
-                          <span className="font-semibold tabular-nums">
-                            {formatMoney(entry.contributionAmount, line.currency, locale)}
-                          </span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                ) : null}
-              </article>
-            ) : null}
-
-            {line.fulfillmentBehaviorSnapshot === 'TRACKED' && line.fulfillment ? (
-              <article className="rounded-[var(--radius-card)] border border-[var(--color-border)] p-5">
-                <div className="flex items-center gap-2">
-                  <CircleDot className="size-4" />
-                  <h3 className="font-bold">Tracked fulfillment</h3>
-                </div>
-                <p className="mt-2 text-sm">
-                  Current status: <strong>{line.fulfillment.status}</strong>
-                </p>
-                <div className="mt-4 flex flex-wrap gap-2">
-                  {actions.map((status) => (
-                    <Button
-                      key={status}
-                      variant="secondary"
-                      disabled={operationalDisabled}
-                      onClick={() => onTransitionFulfillment(line, status)}
-                    >
-                      {status === 'IN_PROGRESS' ? <Play className="mr-2 size-4" /> : null}
-                      {status === 'COMPLETED' ? <CheckCircle2 className="mr-2 size-4" /> : null}
-                      {status === 'CANCELED' ? <Square className="mr-2 size-4" /> : null}
-                      {status.replace('_', ' ')}
-                    </Button>
-                  ))}
-                  {actions.length === 0 ? (
-                    <p className="text-xs text-[var(--color-text-muted)]">
-                      No further CP2 transition is available.
-                    </p>
-                  ) : null}
-                </div>
-              </article>
-            ) : null}
-
-            <article className="rounded-[var(--radius-card)] border border-[var(--color-border)] p-5">
-              <h3 className="font-bold">Price override</h3>
-              <p className="mt-2 text-xs leading-5 text-[var(--color-text-muted)]">
-                Resolved price stays captured. Override stores a separate final unit price and
-                reason.
-              </p>
-              <label className="mt-4 block text-xs font-semibold text-[var(--color-text-muted)]">
-                Unit amount
-                <input
-                  aria-label="Price override amount"
-                  value={overrideAmount}
-                  disabled={monetaryDisabled}
-                  onChange={(event) => setOverrideAmount(event.target.value)}
-                  inputMode="decimal"
-                  className="mt-1.5 w-full rounded-[var(--radius-control)] border border-[var(--color-border)] px-3 py-2.5 text-sm text-[var(--color-text)] outline-none focus:border-[var(--color-focus)]"
-                />
-              </label>
-              <label className="mt-3 block text-xs font-semibold text-[var(--color-text-muted)]">
-                Reason
-                <input
-                  aria-label="Price override reason"
-                  value={overrideReason}
-                  disabled={monetaryDisabled}
-                  onChange={(event) => setOverrideReason(event.target.value)}
-                  className="mt-1.5 w-full rounded-[var(--radius-control)] border border-[var(--color-border)] px-3 py-2.5 text-sm text-[var(--color-text)] outline-none focus:border-[var(--color-focus)]"
-                />
-              </label>
-              <div className="mt-4 flex gap-2">
-                <Button variant="secondary" disabled={monetaryDisabled} onClick={saveOverride}>
-                  Apply override
-                </Button>
-                {line.overrideAmount ? (
-                  <Button
-                    variant="ghost"
-                    disabled={monetaryDisabled}
-                    onClick={() => onClearPriceOverride(line)}
-                  >
-                    Remove
-                  </Button>
-                ) : null}
               </div>
-              {monetaryMessage ? (
-                <p className="mt-3 text-xs text-[var(--color-text-muted)]">{monetaryMessage}</p>
+              {operationalMessage ? (
+                <p className="mt-3 text-xs text-[var(--color-text-muted)]">{operationalMessage}</p>
+              ) : null}
+              <Button
+                variant="secondary"
+                className="mt-4 w-full"
+                disabled={operationalDisabled}
+                onClick={() => onSetAssignments(line, assignedIds)}
+              >
+                Save assignment
+              </Button>
+            </article>
+          ) : null}
+
+          {line.allowEmployeeContributionSnapshot ? (
+            <article className="rounded-[var(--radius-card)] border border-[var(--color-border)] p-5">
+              <div className="flex items-center gap-2">
+                <Percent className="size-4" />
+                <h3 className="font-bold">Employee contribution</h3>
+              </div>
+              <p className="mt-2 text-xs leading-5 text-[var(--color-text-muted)]">
+                Leave all shares blank for equal split. Partial shares are allowed; the backend
+                distributes the remaining share deterministically.
+              </p>
+              <div className="mt-4 space-y-2">
+                {employees.map((employee) => {
+                  const selected = employee.id in contributionShares;
+                  return (
+                    <div
+                      key={employee.id}
+                      className="rounded-[var(--radius-control)] bg-[var(--color-surface-muted)] p-3"
+                    >
+                      <label className="flex cursor-pointer items-center gap-3 text-sm">
+                        <Checkbox
+                          checked={selected}
+                          disabled={operationalDisabled}
+                          onChange={() => toggleContributor(employee.id)}
+                        />
+                        <span className="font-semibold">{employee.displayName}</span>
+                      </label>
+                      {selected ? (
+                        <label className="mt-2 flex items-center gap-2 text-xs text-[var(--color-text-muted)]">
+                          Share %
+                          <Input
+                            aria-label={`${employee.displayName} contribution share`}
+                            value={contributionShares[employee.id] ?? ''}
+                            disabled={operationalDisabled}
+                            onChange={(event) =>
+                              setContributionShares((current) => ({
+                                ...current,
+                                [employee.id]: event.target.value,
+                              }))
+                            }
+                            placeholder="auto"
+                            inputMode="decimal"
+                            className="ml-auto w-28 text-right"
+                          />
+                        </label>
+                      ) : null}
+                    </div>
+                  );
+                })}
+              </div>
+              <Button
+                variant="secondary"
+                className="mt-4 w-full"
+                disabled={operationalDisabled}
+                onClick={saveContributions}
+              >
+                Save contribution
+              </Button>
+
+              {contributionPreview ? (
+                <div className="mt-4 rounded-[var(--radius-control)] border border-[var(--color-border)] p-3">
+                  <p className="text-xs font-bold uppercase tracking-[0.12em] text-[var(--color-text-muted)]">
+                    Backend preview
+                  </p>
+                  <p className="mt-2 text-sm font-semibold">
+                    Base{' '}
+                    {formatMoney(contributionPreview.contributionBaseAmount, line.currency, locale)}
+                  </p>
+                  <div className="mt-2 space-y-1 text-xs">
+                    {contributionPreview.preview.map((entry) => (
+                      <div key={entry.employeeId} className="flex justify-between gap-3">
+                        <span className="text-[var(--color-text-muted)]">
+                          {employeeById.get(entry.employeeId)?.displayName ??
+                            entry.employeeId.slice(0, 8)}
+                        </span>
+                        <span className="font-semibold tabular-nums">
+                          {formatMoney(entry.contributionAmount, line.currency, locale)}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
               ) : null}
             </article>
+          ) : null}
 
+          {line.fulfillmentBehaviorSnapshot === 'TRACKED' && line.fulfillment ? (
             <article className="rounded-[var(--radius-card)] border border-[var(--color-border)] p-5">
-              <h3 className="font-bold">Line discount</h3>
-              <div className="mt-4 grid grid-cols-[140px_minmax(0,1fr)] gap-2">
-                <select
-                  aria-label="Line discount type"
-                  value={discountType}
-                  disabled={monetaryDisabled}
-                  onChange={(event) => {
-                    const next = event.target.value as DiscountType;
-                    setDiscountType(next);
-                    setDiscountValue('');
-                  }}
-                  className="rounded-[var(--radius-control)] border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2.5 text-sm"
-                >
-                  <option value="PERCENTAGE">Percentage</option>
-                  <option value="FIXED_AMOUNT">Fixed amount</option>
-                </select>
-                <input
-                  aria-label="Line discount value"
-                  value={discountValue}
-                  disabled={monetaryDisabled}
-                  onChange={(event) => setDiscountValue(event.target.value)}
-                  placeholder={discountType === 'PERCENTAGE' ? '10 (%)' : '50000'}
-                  inputMode="decimal"
-                  className="rounded-[var(--radius-control)] border border-[var(--color-border)] px-3 py-2.5 text-sm outline-none focus:border-[var(--color-focus)]"
-                />
+              <div className="flex items-center gap-2">
+                <CircleDot className="size-4" />
+                <h3 className="font-bold">Tracked fulfillment</h3>
               </div>
-              <input
-                aria-label="Line discount reason"
-                value={discountReason}
-                disabled={monetaryDisabled}
-                onChange={(event) => setDiscountReason(event.target.value)}
-                placeholder="Reason"
-                className="mt-2 w-full rounded-[var(--radius-control)] border border-[var(--color-border)] px-3 py-2.5 text-sm outline-none focus:border-[var(--color-focus)]"
-              />
-              <div className="mt-4 flex gap-2">
-                <Button variant="secondary" disabled={monetaryDisabled} onClick={saveDiscount}>
-                  Apply discount
-                </Button>
-                {line.discountType ? (
+              <p className="mt-2 text-sm">
+                Current status: <strong>{line.fulfillment.status}</strong>
+              </p>
+              <div className="mt-4 flex flex-wrap gap-2">
+                {actions.map((status) => (
                   <Button
-                    variant="ghost"
-                    disabled={monetaryDisabled}
-                    onClick={() => onClearLineDiscount(line)}
+                    key={status}
+                    variant="secondary"
+                    disabled={operationalDisabled}
+                    onClick={() => onTransitionFulfillment(line, status)}
                   >
-                    Remove
+                    {status === 'IN_PROGRESS' ? <Play className="mr-2 size-4" /> : null}
+                    {status === 'COMPLETED' ? <CheckCircle2 className="mr-2 size-4" /> : null}
+                    {status === 'CANCELED' ? <Square className="mr-2 size-4" /> : null}
+                    {status.replace('_', ' ')}
                   </Button>
+                ))}
+                {actions.length === 0 ? (
+                  <p className="text-xs text-[var(--color-text-muted)]">
+                    No further CP2 transition is available.
+                  </p>
                 ) : null}
               </div>
             </article>
-          </div>
+          ) : null}
+
+          <article className="rounded-[var(--radius-card)] border border-[var(--color-border)] p-5">
+            <h3 className="font-bold">Price override</h3>
+            <p className="mt-2 text-xs leading-5 text-[var(--color-text-muted)]">
+              Resolved price stays captured. Override stores a separate final unit price and reason.
+            </p>
+            <label className="mt-4 block text-xs font-semibold text-[var(--color-text-muted)]">
+              Unit amount
+              <Input
+                aria-label="Price override amount"
+                value={overrideAmount}
+                disabled={monetaryDisabled}
+                onChange={(event) => setOverrideAmount(event.target.value)}
+                inputMode="decimal"
+                className="mt-1.5"
+              />
+            </label>
+            <label className="mt-3 block text-xs font-semibold text-[var(--color-text-muted)]">
+              Reason
+              <Input
+                aria-label="Price override reason"
+                value={overrideReason}
+                disabled={monetaryDisabled}
+                onChange={(event) => setOverrideReason(event.target.value)}
+                className="mt-1.5"
+              />
+            </label>
+            <div className="mt-4 flex gap-2">
+              <Button variant="secondary" disabled={monetaryDisabled} onClick={saveOverride}>
+                Apply override
+              </Button>
+              {line.overrideAmount ? (
+                <Button
+                  variant="ghost"
+                  disabled={monetaryDisabled}
+                  onClick={() => onClearPriceOverride(line)}
+                >
+                  Remove
+                </Button>
+              ) : null}
+            </div>
+            {monetaryMessage ? (
+              <p className="mt-3 text-xs text-[var(--color-text-muted)]">{monetaryMessage}</p>
+            ) : null}
+          </article>
+
+          <article className="rounded-[var(--radius-card)] border border-[var(--color-border)] p-5">
+            <h3 className="font-bold">Line discount</h3>
+            <div className="mt-4 grid grid-cols-[140px_minmax(0,1fr)] gap-2">
+              <Select
+                aria-label="Line discount type"
+                value={discountType}
+                disabled={monetaryDisabled}
+                onChange={(event) => {
+                  const next = event.target.value as DiscountType;
+                  setDiscountType(next);
+                  setDiscountValue('');
+                }}
+              >
+                <option value="PERCENTAGE">Percentage</option>
+                <option value="FIXED_AMOUNT">Fixed amount</option>
+              </Select>
+              <Input
+                aria-label="Line discount value"
+                value={discountValue}
+                disabled={monetaryDisabled}
+                onChange={(event) => setDiscountValue(event.target.value)}
+                placeholder={discountType === 'PERCENTAGE' ? '10 (%)' : '50000'}
+                inputMode="decimal"
+              />
+            </div>
+            <Input
+              aria-label="Line discount reason"
+              value={discountReason}
+              disabled={monetaryDisabled}
+              onChange={(event) => setDiscountReason(event.target.value)}
+              placeholder="Reason"
+              className="mt-2"
+            />
+            <div className="mt-4 flex gap-2">
+              <Button variant="secondary" disabled={monetaryDisabled} onClick={saveDiscount}>
+                Apply discount
+              </Button>
+              {line.discountType ? (
+                <Button
+                  variant="ghost"
+                  disabled={monetaryDisabled}
+                  onClick={() => onClearLineDiscount(line)}
+                >
+                  Remove
+                </Button>
+              ) : null}
+            </div>
+          </article>
         </div>
-      </section>
-    </div>
+      </div>
+    </Dialog>
   );
 }

@@ -1,5 +1,5 @@
 import { compareDecimalStrings, createDecimal, formatMoney } from '@digvation/pos-money';
-import { Button } from '@digvation/pos-ui';
+import { Badge, Button } from '@digvation/pos-ui';
 import { Minus, Plus, SlidersHorizontal, Trash2 } from 'lucide-react';
 
 import type { SaleLine } from '../cashier-transaction.types';
@@ -53,27 +53,25 @@ export function SaleLineRow({
 
       <div className="mt-3 flex flex-wrap gap-1.5 text-[11px] font-semibold text-[var(--color-text-muted)]">
         {line.fulfillment ? (
-          <span className="rounded-full bg-[var(--color-accent-sky)]/45 px-2 py-1">
+          <Badge className="bg-[var(--color-accent-sky)]/45 px-2 py-1">
             {line.fulfillment.status}
-          </span>
+          </Badge>
         ) : null}
         {assignedCount > 0 ? (
-          <span className="rounded-full bg-[var(--color-accent-mint)]/55 px-2 py-1">
+          <Badge className="bg-[var(--color-accent-mint)]/55 px-2 py-1">
             {assignedCount} assigned
-          </span>
+          </Badge>
         ) : null}
         {contributorCount > 0 ? (
-          <span className="rounded-full bg-[var(--color-accent-lavender)]/55 px-2 py-1">
+          <Badge className="bg-[var(--color-accent-lavender)]/55 px-2 py-1">
             {contributorCount} contributors
-          </span>
+          </Badge>
         ) : null}
         {line.overrideAmount ? (
-          <span className="rounded-full bg-[var(--color-accent-yellow)]/50 px-2 py-1">
-            Override
-          </span>
+          <Badge className="bg-[var(--color-accent-yellow)]/50 px-2 py-1">Override</Badge>
         ) : null}
         {line.discountType ? (
-          <span className="rounded-full bg-[var(--color-accent-coral)]/30 px-2 py-1">Discount</span>
+          <Badge className="bg-[var(--color-accent-coral)]/30 px-2 py-1">Discount</Badge>
         ) : null}
       </div>
 

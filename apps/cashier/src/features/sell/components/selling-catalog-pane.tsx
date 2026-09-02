@@ -1,6 +1,6 @@
 import { formatMoney } from '@digvation/pos-money';
-import { Button } from '@digvation/pos-ui';
-import { LoaderCircle, PackageSearch, Plus, Search } from 'lucide-react';
+import { Badge, Button, Input, Select, Skeleton } from '@digvation/pos-ui';
+import { PackageSearch, Plus, Search } from 'lucide-react';
 
 import type { CatalogCategory, CatalogItem, ResolvedPrice } from '../cashier-transaction.types';
 import type { ActionAvailability } from '../sale-workspace-view-model';
@@ -50,18 +50,18 @@ export function SellingCatalogPane({
           <label className="relative block min-w-56">
             <span className="sr-only">Search catalog</span>
             <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-[var(--color-text-muted)]" />
-            <input
+            <Input
               value={search}
               onChange={(event) => onSearchChange(event.target.value)}
               placeholder="Search item or code"
-              className="min-h-11 w-full rounded-[var(--radius-control)] border border-[var(--color-border)] bg-[var(--color-surface)] pl-10 pr-3 text-sm outline-none focus:ring-2 focus:ring-[var(--color-focus)]"
+              className="w-full pl-10 pr-3"
             />
           </label>
-          <select
+          <Select
             aria-label="Catalog category"
             value={categoryId}
             onChange={(event) => onCategoryChange(event.target.value)}
-            className="min-h-11 rounded-[var(--radius-control)] border border-[var(--color-border)] bg-[var(--color-surface)] px-3 text-sm font-semibold outline-none focus:ring-2 focus:ring-[var(--color-focus)]"
+            className="font-medium"
           >
             <option value="">All categories</option>
             {categories.map((category) => (
@@ -69,7 +69,7 @@ export function SellingCatalogPane({
                 {category.name}
               </option>
             ))}
-          </select>
+          </Select>
         </div>
       </div>
 
@@ -81,9 +81,17 @@ export function SellingCatalogPane({
 
       <div className="mt-5 grid gap-3 sm:grid-cols-2 2xl:grid-cols-3">
         {isLoading ? (
-          <div className="col-span-full flex min-h-52 items-center justify-center text-sm text-[var(--color-text-muted)]">
-            <LoaderCircle className="mr-2 size-4 animate-spin" /> Loading catalog…
-          </div>
+          Array.from({ length: 6 }, (item, index) => (
+            <div
+              key={index}
+              className="min-h-44 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] p-4"
+            >
+              <Skeleton className="h-5 w-20" />
+              <Skeleton className="mt-6 h-4 w-3/4" />
+              <Skeleton className="mt-3 h-4 w-1/2" />
+              <Skeleton className="mt-6 h-10 w-full" />
+            </div>
+          ))
         ) : items.length === 0 ? (
           <div className="col-span-full rounded-[var(--radius-card)] border border-dashed border-[var(--color-border)] bg-[var(--color-surface-muted)] p-8 text-center">
             <PackageSearch className="mx-auto size-6 text-[var(--color-text-muted)]" />
@@ -102,15 +110,15 @@ export function SellingCatalogPane({
                 className="flex min-h-44 flex-col rounded-[var(--radius-card)] border border-[var(--color-border)] bg-[var(--color-surface)] p-4 transition-[transform,box-shadow,border-color] duration-200 hover:-translate-y-0.5 hover:shadow-md"
               >
                 <div className="flex items-center justify-between gap-3">
-                  <span
-                    className={`rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.1em] ${
+                  <Badge
+                    className={`text-[10px] font-bold uppercase tracking-[0.1em] ${
                       item.type === 'SERVICE'
                         ? 'bg-[var(--color-accent-lavender)]'
                         : 'bg-[var(--color-accent-sky)]'
                     }`}
                   >
                     {item.type}
-                  </span>
+                  </Badge>
                   <span className="text-xs text-[var(--color-text-muted)]">{item.code}</span>
                 </div>
 
