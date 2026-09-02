@@ -32,7 +32,7 @@ export function useCashierTransactionWorkspace(routeSaleId?: string) {
 
   const saleWorkspace = useSaleWorkspaceController({
     client: transactionAdapter,
-    routeSaleId,
+    ...(routeSaleId === undefined ? {} : { routeSaleId }),
     selectedLocationId,
     currency: runtime.currency,
     connectivity: connectivity.state,
