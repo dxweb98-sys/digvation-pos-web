@@ -1,20 +1,21 @@
+import type { ConnectivityState } from '@digvation/pos-runtime';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router';
 
-import type { ConnectivityState } from '@digvation/pos-runtime';
-import { cashierTransactionKeys } from './cashier-transaction.keys';
+import type { SaleTransactionClient } from './cashier-transaction.adapter';
 import {
   cashierTransactionErrorMessage,
+  isApiErrorCode,
   isKnownApiFailure,
   isSaleVersionConflict,
-} from './cashier-transaction.errors';
-import type { SaleTransactionClient } from './cashier-transaction.adapter';
+} from './cashier-transaction-errors';
+import { cashierTransactionKeys } from './cashier-transaction-keys';
 import type { Sale, SaleLine } from './cashier-transaction.types';
 import {
   createSaleWorkspaceViewModel,
   type SynchronizationState,
-} from './sale-workspace.view-model';
+} from './sale-workspace-view-model';
 
 const QUANTITY_PATTERN = /^(0|[1-9]\d{0,14})(\.\d{1,4})?$/;
 
@@ -94,7 +95,16 @@ export function useSaleWorkspaceController({
     if (isSaleVersionConflict(error)) {
       if (saleId) await refetchSale(saleId);
       setSynchronization('CONFLICT_REVIEW');
-      setNotice('This Sale changed on another terminal. Review the latest server state before continuing.');
+      setNotice(
+        'This Sale changed on another terminal. Review the latest server state before continuing.',
+      );
+      return;
+    }
+
+    if (isApiErrorCode(error, 'SALE_PAYMENT_PENDING')) {
+      if (saleId) await refetchSale(saleId);
+      setSynchronization('CLEAN');
+      setNotice(cashierTransactionErrorMessage(error));
       return;
     }
 
@@ -273,6 +283,7 @@ export function useSaleWorkspaceController({
       setNotice(null);
     },
     reportError: (error: unknown) => setNotice(cashierTransactionErrorMessage(error)),
+    clearNotice: () => setNotice(null),
     clearAttention: () => {
       setNotice(null);
       setSynchronization('CLEAN');

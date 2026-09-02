@@ -9,7 +9,7 @@ import { useNavigate } from 'react-router';
 
 import { useCashierSession } from '../../app/providers/cashier-session-provider';
 import { HttpCashierTransactionAdapter } from '../../features/sell/cashier-transaction.adapter';
-import { cashierTransactionKeys } from '../../features/sell/cashier-transaction.keys';
+import { cashierTransactionKeys } from '../../features/sell/cashier-transaction-keys';
 import type { OpenSaleSummaryViewModel } from '../../features/sell/cashier-transaction.types';
 
 export function OpenSalesPage() {
@@ -77,7 +77,11 @@ export function OpenSalesPage() {
             </p>
           </div>
           <div className="flex gap-2">
-            <Button variant="secondary" onClick={() => salesQuery.refetch()} disabled={salesQuery.isFetching}>
+            <Button
+              variant="secondary"
+              onClick={() => salesQuery.refetch()}
+              disabled={salesQuery.isFetching}
+            >
               <RefreshCw className={`mr-2 size-4 ${salesQuery.isFetching ? 'animate-spin' : ''}`} />
               Refresh
             </Button>

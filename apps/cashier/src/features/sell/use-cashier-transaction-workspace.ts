@@ -5,10 +5,11 @@ import { useNavigate } from 'react-router';
 
 import { useCashierSession } from '../../app/providers/cashier-session-provider';
 import { HttpCashierTransactionAdapter } from './cashier-transaction.adapter';
+import { cashierTransactionErrorMessage } from './cashier-transaction-errors';
 import type { CatalogItem } from './cashier-transaction.types';
+import type { VariantPickerState } from './components/variant-picker';
 import { useSaleWorkspaceController } from './use-sale-workspace-controller';
 import { useSellingCatalog } from './use-selling-catalog';
-import type { VariantPickerState } from './components/variant-picker';
 
 export function useCashierTransactionWorkspace(routeSaleId?: string) {
   const runtime = useRuntime();
@@ -40,7 +41,7 @@ export function useCashierTransactionWorkspace(routeSaleId?: string) {
   });
 
   const selectItem = async (item: CatalogItem) => {
-    saleWorkspace.clearAttention();
+    saleWorkspace.clearNotice();
     try {
       const variants = await catalog.loadActiveVariants(item);
       if (variants.length > 0) {
@@ -93,7 +94,8 @@ export function useCashierTransactionWorkspace(routeSaleId?: string) {
     selectedLocationId: selectedLocationId ?? '',
     search: catalog.search,
     categoryId: catalog.categoryId,
-    notice: saleWorkspace.notice ?? (catalog.error ? String(catalog.error) : null),
+    notice:
+      saleWorkspace.notice ?? (catalog.error ? cashierTransactionErrorMessage(catalog.error) : null),
     variantPicker,
     viewModel: saleWorkspace.viewModel,
     isLoadingCatalog: catalog.isLoading,

@@ -3,7 +3,7 @@ import { Button } from '@digvation/pos-ui';
 import { Minus, Plus, Trash2 } from 'lucide-react';
 
 import type { SaleLine } from '../cashier-transaction.types';
-import type { ActionAvailability } from '../sale-workspace.view-model';
+import type { ActionAvailability } from '../sale-workspace-view-model';
 
 interface SaleLineRowProps {
   line: SaleLine;

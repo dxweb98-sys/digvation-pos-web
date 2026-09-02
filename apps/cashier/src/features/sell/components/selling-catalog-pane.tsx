@@ -3,7 +3,7 @@ import { Button } from '@digvation/pos-ui';
 import { LoaderCircle, PackageSearch, Plus, Search } from 'lucide-react';
 
 import type { CatalogCategory, CatalogItem, ResolvedPrice } from '../cashier-transaction.types';
-import type { ActionAvailability } from '../sale-workspace.view-model';
+import type { ActionAvailability } from '../sale-workspace-view-model';
 
 interface SellingCatalogPaneProps {
   items: readonly CatalogItem[];

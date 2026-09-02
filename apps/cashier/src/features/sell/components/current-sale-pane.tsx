@@ -6,7 +6,7 @@ import type { SaleLine } from '../cashier-transaction.types';
 import {
   actionBlockMessage,
   type SaleWorkspaceViewModel,
-} from '../sale-workspace.view-model';
+} from '../sale-workspace-view-model';
 import { SaleLineRow } from './sale-line-row';
 
 interface CurrentSalePaneProps {

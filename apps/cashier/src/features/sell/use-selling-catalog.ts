@@ -1,8 +1,8 @@
 import { useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useMemo, useState } from 'react';
 
-import { cashierTransactionKeys } from './cashier-transaction.keys';
 import type { SellingCatalogQuery } from './cashier-transaction.adapter';
+import { cashierTransactionKeys } from './cashier-transaction-keys';
 import type { CatalogItem, CatalogVariant, ResolvedPrice } from './cashier-transaction.types';
 
 interface UseSellingCatalogOptions {
