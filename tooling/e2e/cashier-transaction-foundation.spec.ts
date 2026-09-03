@@ -287,7 +287,7 @@ async function startSaleFromFirstItem(page: Page) {
   await page.goto('/sell');
   await expect(page.getByRole('combobox', { name: 'Branch' })).toHaveValue(branch.id);
   await expect(page.getByText(/Rp\s?125\.000/)).toBeVisible();
-  await page.getByRole('button', { name: 'Add', exact: true }).click();
+  await page.getByRole('button', { name: 'Add Hair Cut', exact: true }).click();
 }
 
 test('lazy start creates the Sale only when the first item is added', async ({ page }) => {
@@ -298,7 +298,7 @@ test('lazy start creates the Sale only when the first item is added', async ({ p
   await expect(page.getByRole('button', { name: 'New Sale' })).toHaveCount(0);
   await expect(page.getByRole('combobox', { name: 'Branch' })).toHaveValue(branch.id);
 
-  await page.getByRole('button', { name: 'Add', exact: true }).click();
+  await page.getByRole('button', { name: 'Add Hair Cut', exact: true }).click();
 
   await expect(page).toHaveURL(new RegExp(`/sell/${saleId}$`));
   await expect(

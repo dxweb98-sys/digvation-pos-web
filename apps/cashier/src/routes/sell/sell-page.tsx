@@ -15,18 +15,14 @@ export function SellPage() {
   const workspace = useCashierTransactionWorkspace(saleId);
 
   return (
-    <section className="px-5 py-5 lg:px-8 lg:py-6">
-      <div className="mx-auto max-w-[1600px]">
-        <div className="mb-5 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-          <div>
-            <p className="text-xs font-bold uppercase tracking-[0.18em] text-[var(--color-brand)]">
+    <section className="px-4 py-4 lg:px-6 lg:py-5">
+      <div className="mx-auto max-w-[1800px]">
+        <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+          <div className="flex items-baseline gap-3">
+            <p className="text-xs font-bold uppercase tracking-[0.16em] text-[var(--color-brand)]">
               Cashier
             </p>
-            <h1 className="mt-2 text-3xl font-bold tracking-[-0.04em]">Sell</h1>
-            <p className="mt-2 max-w-2xl text-sm leading-6 text-[var(--color-text-muted)]">
-              Sale, fulfillment and payment progress independently. The POS backend remains
-              authoritative for every committed transaction fact.
-            </p>
+            <h1 className="text-xl font-bold tracking-[-0.03em]">Sell</h1>
           </div>
 
           <BranchSelector
@@ -66,7 +62,7 @@ export function SellPage() {
             <LoaderCircle className="mr-2 size-4 animate-spin" /> Loading Sale…
           </div>
         ) : (
-          <div className="grid gap-5 xl:grid-cols-[minmax(0,68fr)_minmax(360px,32fr)]">
+          <div className="grid gap-4 xl:grid-cols-[minmax(0,68fr)_minmax(360px,32fr)]">
             <SellingCatalogPane
               items={workspace.items}
               categories={workspace.categories}

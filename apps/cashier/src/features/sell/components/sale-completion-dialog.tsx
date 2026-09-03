@@ -143,9 +143,9 @@ export function SaleCompletionDialog({
       onClose={onClose}
       ariaLabel="Sale Completion"
       overlayClassName="bg-slate-950/35"
-      className="flex max-h-[96vh] w-full max-w-6xl flex-col overflow-hidden rounded-t-xl border border-[var(--color-border)] bg-[var(--color-surface)] shadow-xl sm:rounded-xl"
+      className="flex max-h-[96vh] w-full max-w-6xl flex-col overflow-hidden rounded-t-[var(--radius-card)] border border-[var(--color-border)] bg-[var(--color-surface)] shadow-2xl sm:rounded-[var(--radius-card)]"
     >
-      <header className="flex items-start justify-between gap-4 border-b border-[var(--color-border)] p-5 sm:p-6">
+      <header className="flex items-start justify-between gap-4 border-b border-[var(--color-border)] p-4 sm:p-5">
         <div>
           <p className="text-xs font-bold uppercase tracking-[0.16em] text-[var(--color-brand)]">
             Sale Completion
@@ -163,16 +163,40 @@ export function SaleCompletionDialog({
         </Button>
       </header>
 
-      <div className="min-h-0 flex-1 overflow-y-auto p-5 sm:p-6">
+      <div className="min-h-0 flex-1 overflow-y-auto bg-[var(--color-background)] p-4 sm:p-5">
         {formError ? (
           <div className="mb-5 rounded-[var(--radius-control)] bg-[var(--color-accent-coral)]/25 px-4 py-3 text-sm font-semibold">
             {formError}
           </div>
         ) : null}
 
-        <div className="grid gap-5 lg:grid-cols-[minmax(0,1.15fr)_minmax(340px,0.85fr)]">
-          <div className="space-y-5">
-            <article className="rounded-[var(--radius-card)] border border-[var(--color-border)] p-5">
+        {sale.status === 'FINALIZED' || sale.status === 'VOIDED' ? (
+          <div
+            className={`mb-4 flex items-start gap-3 rounded-[var(--radius-card)] border p-4 ${
+              sale.status === 'FINALIZED'
+                ? 'border-[var(--color-success)]/25 bg-[var(--color-success)]/10'
+                : 'border-[var(--color-danger)]/25 bg-[var(--color-danger)]/10'
+            }`}
+          >
+            {sale.status === 'FINALIZED' ? (
+              <CheckCircle2 className="mt-0.5 size-5 shrink-0 text-[var(--color-success)]" />
+            ) : (
+              <CircleAlert className="mt-0.5 size-5 shrink-0 text-[var(--color-danger)]" />
+            )}
+            <div>
+              <p className="text-sm font-bold">
+                {sale.status === 'FINALIZED' ? 'Sale finalized' : 'Sale voided'}
+              </p>
+              <p className="mt-1 text-xs leading-5 text-[var(--color-text-muted)]">
+                {completionMessage}
+              </p>
+            </div>
+          </div>
+        ) : null}
+
+        <div className="grid gap-4 lg:grid-cols-[minmax(0,1.15fr)_minmax(340px,0.85fr)]">
+          <div className="space-y-4">
+            <article className="rounded-[var(--radius-card)] border border-[var(--color-border)] bg-[var(--color-surface)] p-4 shadow-sm">
               <div className="flex items-center gap-2">
                 <CreditCard className="size-4" />
                 <h3 className="font-bold">Payment</h3>
@@ -240,7 +264,7 @@ export function SaleCompletionDialog({
             </article>
 
             {sale.payments.length > 0 ? (
-              <article className="rounded-[var(--radius-card)] border border-[var(--color-border)] p-5">
+              <article className="rounded-[var(--radius-card)] border border-[var(--color-border)] bg-[var(--color-surface)] p-4 shadow-sm">
                 <h3 className="font-bold">Payment attempts</h3>
                 <div className="mt-4 space-y-3">
                   {sale.payments.map((payment) => (
@@ -297,7 +321,7 @@ export function SaleCompletionDialog({
               </article>
             ) : null}
 
-            <article className="rounded-[var(--radius-card)] border border-[var(--color-border)] p-5">
+            <article className="rounded-[var(--radius-card)] border border-[var(--color-border)] bg-[var(--color-surface)] p-4 shadow-sm">
               <h3 className="font-bold">Order discount</h3>
               <p className="mt-2 text-xs text-[var(--color-text-muted)]">
                 One active ORDER discount is supported by backend v0.3.0.
@@ -353,8 +377,8 @@ export function SaleCompletionDialog({
             </article>
           </div>
 
-          <aside className="space-y-5">
-            <article className="rounded-[var(--radius-card)] border border-[var(--color-border)] bg-[var(--color-surface-muted)] p-5">
+          <aside className="space-y-4">
+            <article className="rounded-[var(--radius-card)] border border-[var(--color-border)] bg-[var(--color-surface)] p-4 shadow-sm">
               <h3 className="font-bold">Settlement</h3>
               <dl className="mt-4 space-y-3 text-sm">
                 <div className="flex justify-between gap-4">
@@ -384,7 +408,7 @@ export function SaleCompletionDialog({
               </dl>
             </article>
 
-            <article className="rounded-[var(--radius-card)] border border-[var(--color-border)] p-5">
+            <article className="rounded-[var(--radius-card)] border border-[var(--color-border)] bg-[var(--color-surface)] p-4 shadow-sm">
               <div className="flex items-center gap-2">
                 {viewModel.domainReadiness.ready ? (
                   <BadgeCheck className="size-4 text-[var(--color-success)]" />
@@ -411,7 +435,7 @@ export function SaleCompletionDialog({
               )}
             </article>
 
-            <article className="rounded-[var(--radius-card)] border border-[var(--color-border)] p-5">
+            <article className="rounded-[var(--radius-card)] border border-[var(--color-border)] bg-[var(--color-surface)] p-4 shadow-sm">
               <h3 className="font-bold">Complete Sale</h3>
               {viewModel.finalizeMutation.state === 'DISABLED' ? (
                 <p className="mt-2 text-xs leading-5 text-[var(--color-text-muted)]">

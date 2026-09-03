@@ -22,7 +22,7 @@ export function VariantPicker({ item, variants, onSelect, onClose }: VariantPick
       closeOnEscape
       closeOnOverlay
       overlayClassName="grid place-items-end bg-slate-950/20 backdrop-blur-[1px] sm:place-items-center sm:p-6"
-      className="w-full rounded-t-xl border border-[var(--color-border)] bg-[var(--color-surface)] p-5 shadow-xl sm:max-w-lg sm:rounded-xl"
+      className="w-full rounded-t-[var(--radius-card)] border border-[var(--color-border)] bg-[var(--color-surface)] p-4 shadow-2xl sm:max-w-lg sm:rounded-[var(--radius-card)]"
     >
       <div className="flex items-start justify-between gap-4">
         <div>

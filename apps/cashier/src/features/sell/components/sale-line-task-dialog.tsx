@@ -191,9 +191,9 @@ export function SaleLineTaskDialog({
       open
       onClose={onClose}
       ariaLabel={`Manage ${line.itemNameSnapshot}`}
-      className="flex max-h-[94vh] w-full max-w-5xl flex-col overflow-hidden rounded-t-xl border border-[var(--color-border)] bg-[var(--color-surface)] shadow-xl sm:rounded-xl"
+      className="flex max-h-[94vh] w-full max-w-5xl flex-col overflow-hidden rounded-t-[var(--radius-card)] border border-[var(--color-border)] bg-[var(--color-surface)] shadow-2xl sm:rounded-[var(--radius-card)]"
     >
-      <header className="flex items-start justify-between gap-4 border-b border-[var(--color-border)] p-5 sm:p-6">
+      <header className="flex items-start justify-between gap-4 border-b border-[var(--color-border)] p-4 sm:p-5">
         <div>
           <p className="text-xs font-bold uppercase tracking-[0.16em] text-[var(--color-brand)]">
             Line task
@@ -208,16 +208,16 @@ export function SaleLineTaskDialog({
         </Button>
       </header>
 
-      <div className="min-h-0 flex-1 overflow-y-auto p-5 sm:p-6">
+      <div className="min-h-0 flex-1 overflow-y-auto bg-[var(--color-background)] p-4 sm:p-5">
         {formError ? (
           <div className="mb-5 rounded-[var(--radius-control)] bg-[var(--color-accent-coral)]/25 px-4 py-3 text-sm font-semibold">
             {formError}
           </div>
         ) : null}
 
-        <div className="grid gap-5 lg:grid-cols-2">
+        <div className="grid gap-4 lg:grid-cols-2">
           {line.itemTypeSnapshot === 'SERVICE' && line.employeeAssignmentModeSnapshot !== 'NONE' ? (
-            <article className="rounded-[var(--radius-card)] border border-[var(--color-border)] p-5">
+            <article className="rounded-[var(--radius-card)] border border-[var(--color-border)] bg-[var(--color-surface)] p-4 shadow-sm">
               <div className="flex items-center gap-2">
                 <UserRound className="size-4" />
                 <h3 className="font-bold">Employee assignment</h3>
@@ -264,7 +264,7 @@ export function SaleLineTaskDialog({
           ) : null}
 
           {line.allowEmployeeContributionSnapshot ? (
-            <article className="rounded-[var(--radius-card)] border border-[var(--color-border)] p-5">
+            <article className="rounded-[var(--radius-card)] border border-[var(--color-border)] bg-[var(--color-surface)] p-4 shadow-sm">
               <div className="flex items-center gap-2">
                 <Percent className="size-4" />
                 <h3 className="font-bold">Employee contribution</h3>
@@ -349,7 +349,7 @@ export function SaleLineTaskDialog({
           ) : null}
 
           {line.fulfillmentBehaviorSnapshot === 'TRACKED' && line.fulfillment ? (
-            <article className="rounded-[var(--radius-card)] border border-[var(--color-border)] p-5">
+            <article className="rounded-[var(--radius-card)] border border-[var(--color-border)] bg-[var(--color-surface)] p-4 shadow-sm">
               <div className="flex items-center gap-2">
                 <CircleDot className="size-4" />
                 <h3 className="font-bold">Tracked fulfillment</h3>
@@ -380,7 +380,7 @@ export function SaleLineTaskDialog({
             </article>
           ) : null}
 
-          <article className="rounded-[var(--radius-card)] border border-[var(--color-border)] p-5">
+          <article className="rounded-[var(--radius-card)] border border-[var(--color-border)] bg-[var(--color-surface)] p-4 shadow-sm">
             <h3 className="font-bold">Price override</h3>
             <p className="mt-2 text-xs leading-5 text-[var(--color-text-muted)]">
               Resolved price stays captured. Override stores a separate final unit price and reason.
@@ -425,7 +425,7 @@ export function SaleLineTaskDialog({
             ) : null}
           </article>
 
-          <article className="rounded-[var(--radius-card)] border border-[var(--color-border)] p-5">
+          <article className="rounded-[var(--radius-card)] border border-[var(--color-border)] bg-[var(--color-surface)] p-4 shadow-sm">
             <h3 className="font-bold">Line discount</h3>
             <div className="mt-4 grid grid-cols-[140px_minmax(0,1fr)] gap-2">
               <Select
