@@ -1,7 +1,7 @@
 import { useAuth } from '@digvation/pos-auth';
 import { createDecimal, formatMoney } from '@digvation/pos-money';
 import { useRuntime } from '@digvation/pos-runtime';
-import { Button, Combobox, Dialog, Skeleton } from '@digvation/pos-ui';
+import { Badge, Button, Combobox, Dialog, Input, Skeleton } from '@digvation/pos-ui';
 import { useQuery } from '@tanstack/react-query';
 import {
   AlertCircle,
@@ -30,6 +30,11 @@ import { useEffect, useMemo, useState, type ReactNode } from 'react';
 
 import { cashierTransactionKeys } from '../cashier-transaction-keys';
 import { createCashierTransactionAdapter } from '../cashier-transaction-client';
+import {
+  customerMemberLookup,
+  type MemberCustomerLookupResult,
+  type TransactionCustomer,
+} from '../customer-member-lookup';
 import type {
   CatalogItem,
   Employee,
@@ -47,17 +52,7 @@ import './replatformed-pos-workspace.css';
 type Workspace = ReturnType<typeof useCashierTransactionWorkspace>;
 type QueueStatus = 'DRAFT' | 'PROGRESS' | 'COMPLETED' | 'CANCELED';
 
-interface PosCustomer {
-  name: string;
-  phone: string;
-  memberCode?: string;
-}
-
-const localCustomerChoices: readonly PosCustomer[] = [
-  { name: 'Budi Santoso', phone: '081234567890' },
-  { name: 'Rina Amelia', phone: '085712345678' },
-  { name: 'Andi Pratama', phone: '081298765432' },
-];
+type PosCustomer = TransactionCustomer;
 
 const CURRENT_CUSTOMER_KEY = 'digvation-pos-demo-current-customer';
 const saleCustomerKey = (saleId: string) => `digvation-pos-demo-customer:${saleId}`;
@@ -126,6 +121,15 @@ function transactionNumber(saleId: string) {
 function saleCustomer(saleId?: string): PosCustomer {
   const stored = saleId ? readStoredCustomer(saleCustomerKey(saleId)) : null;
   return stored ?? { name: 'Pelanggan umum', phone: '' };
+}
+
+function customerStatus(customer: PosCustomer | null): {
+  label: 'Guest' | 'Member' | 'Non-member';
+  variant: 'default' | 'primary' | 'outline';
+} {
+  if (!customer) return { label: 'Guest', variant: 'default' };
+  if (customer.membership) return { label: 'Member', variant: 'primary' };
+  return { label: 'Non-member', variant: 'outline' };
 }
 
 function employeeSummary(line: SaleLine, employees: readonly Employee[]): string {
@@ -1120,6 +1124,7 @@ function ReferenceCartPanel({
   onManageLine: (line: SaleLine) => void;
   onCheckout: () => void;
 }) {
+  const status = customerStatus(customer);
   const increment = (line: SaleLine, direction: 'up' | 'down') => {
     const next =
       direction === 'up'
@@ -1141,9 +1146,12 @@ function ReferenceCartPanel({
             <User className="size-4" />
           </div>
           <div className="min-w-0 flex-1">
-            <p className="truncate text-xs font-semibold">
-              {customer?.name ?? 'Pelanggan umum'}
-            </p>
+            <div className="flex min-w-0 items-center gap-1.5">
+              <p className="truncate text-xs font-semibold">{customer?.name ?? 'Pelanggan umum'}</p>
+              <Badge variant={status.variant} className="shrink-0 px-2 py-0 text-[10px]">
+                {status.label}
+              </Badge>
+            </div>
             <p className="mt-0.5 truncate text-[11px] text-[var(--color-text-muted)]">
               {customer?.phone ?? 'Pilih pelanggan untuk transaksi ini'}
             </p>
@@ -1297,24 +1305,27 @@ function ReferenceCustomerDialog({
   onChoose: (customer: PosCustomer) => void;
   onUseGeneralCustomer: () => void;
 }) {
-  const [query, setQuery] = useState('');
-  const [isQuickAddOpen, setQuickAddOpen] = useState(false);
+  const [mode, setMode] = useState<'MEMBER' | 'NON_MEMBER'>('MEMBER');
+  const [memberSearch, setMemberSearch] = useState('');
+  const [selectedMember, setSelectedMember] = useState<MemberCustomerLookupResult | null>(null);
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
-  const normalizedQuery = query.trim().toLowerCase();
-  const matches = localCustomerChoices.filter(
-    (choice) =>
-      !normalizedQuery ||
-      `${choice.name} ${choice.phone}`.toLowerCase().includes(normalizedQuery),
+  const memberResults = useMemo(
+    () => customerMemberLookup.searchMembers(memberSearch),
+    [memberSearch],
   );
-  const addCustomer = () => {
+  const chooseNonMember = () => {
     const normalizedName = name.trim();
     const normalizedPhone = phone.trim();
     if (!normalizedName || !normalizedPhone) return;
     onChoose({ name: normalizedName, phone: normalizedPhone });
     setName('');
     setPhone('');
-    setQuickAddOpen(false);
+  };
+  const changeMode = (nextMode: 'MEMBER' | 'NON_MEMBER') => {
+    setMode(nextMode);
+    setSelectedMember(null);
+    setMemberSearch('');
   };
 
   return (
@@ -1344,16 +1355,6 @@ function ReferenceCustomerDialog({
           </button>
         </header>
         <div className="min-h-0 space-y-3 overflow-y-auto p-4">
-          <PosInput
-            aria-label="Search customers by name or phone"
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-            placeholder="Cari nama atau nomor telepon"
-            leftIcon={<Search className="size-4" />}
-            clearable={Boolean(query)}
-            onClear={() => setQuery('')}
-            className="h-10 rounded-xl"
-          />
           <button
             type="button"
             onClick={onUseGeneralCustomer}
@@ -1368,72 +1369,93 @@ function ReferenceCustomerDialog({
                 Lanjutkan tanpa memilih pelanggan.
               </p>
             </div>
-            {customer === null ? <CheckCircle2 className="size-4 text-[var(--color-brand)]" /> : null}
-          </button>
-          <div className="space-y-1.5">
-            {matches.map((choice) => {
-              const selected = customer?.name === choice.name && customer.phone === choice.phone;
-              return (
-                <button
-                  key={`${choice.name}-${choice.phone}`}
-                  type="button"
-                  onClick={() => onChoose(choice)}
-                  className={`flex w-full items-center gap-3 rounded-xl border px-3 py-2.5 text-left transition-colors ${selected ? 'border-[var(--color-brand)] bg-[var(--color-brand)]/5' : 'border-[var(--color-border)] hover:bg-[var(--color-surface-muted)]'}`}
-                >
-                  <div className="grid size-8 place-items-center rounded-lg bg-[var(--color-surface-muted)] text-[var(--color-text-muted)]">
-                    <User className="size-4" />
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-semibold">{choice.name}</p>
-                    <p className="mt-0.5 text-xs text-[var(--color-text-muted)]">{choice.phone}</p>
-                  </div>
-                  {selected ? <CheckCircle2 className="size-4 text-[var(--color-brand)]" /> : null}
-                </button>
-              );
-            })}
-            {!matches.length ? (
-              <p className="px-1 py-3 text-center text-xs text-[var(--color-text-muted)]">
-                Pelanggan tidak ditemukan.
-              </p>
+            {customer === null ? (
+              <CheckCircle2 className="size-4 text-[var(--color-brand)]" />
             ) : null}
-          </div>
+          </button>
           <div className="border-t border-[var(--color-border)] pt-3">
-            {isQuickAddOpen ? (
-              <div className="space-y-2 rounded-xl bg-[var(--color-surface-muted)]/50 p-3">
-                <p className="text-xs font-semibold">Tambah pelanggan cepat</p>
-                <PosInput
+            <div className="flex gap-2" aria-label="Customer type">
+              <Button
+                size="sm"
+                variant={mode === 'MEMBER' ? 'primary' : 'secondary'}
+                onClick={() => changeMode('MEMBER')}
+              >
+                Member
+              </Button>
+              <Button
+                size="sm"
+                variant={mode === 'NON_MEMBER' ? 'primary' : 'secondary'}
+                onClick={() => changeMode('NON_MEMBER')}
+              >
+                Non-member
+              </Button>
+            </div>
+
+            {mode === 'MEMBER' ? (
+              <div className="mt-3 space-y-3">
+                <Combobox
+                  key="member-search"
+                  ariaLabel="Search members by name or phone"
+                  value={selectedMember?.customerId ?? ''}
+                  options={memberResults.map((member) => ({
+                    value: member.customerId,
+                    label: member.name,
+                    detail: `${member.phone} · ${member.membership.memberCode}`,
+                  }))}
+                  onChange={(customerId) => {
+                    setSelectedMember(
+                      memberResults.find((member) => member.customerId === customerId) ?? null,
+                    );
+                  }}
+                  onSearchChange={(query) => {
+                    setMemberSearch(query);
+                    setSelectedMember(null);
+                  }}
+                  placeholder="Cari nama atau nomor telepon"
+                  idleMessage="Ketik nama, nomor telepon, atau kode member untuk mencari."
+                  emptyMessage="Member tidak ditemukan."
+                  renderOption={(option) => (
+                    <span className="min-w-0">
+                      <span className="block truncate">{option.label}</span>
+                      <span className="mt-0.5 block truncate text-xs font-normal text-[var(--color-text-muted)]">
+                        {option.detail}
+                      </span>
+                    </span>
+                  )}
+                />
+                <Button
+                  fullWidth
+                  disabled={!selectedMember}
+                  onClick={() => selectedMember && onChoose(selectedMember)}
+                >
+                  Gunakan pelanggan
+                </Button>
+              </div>
+            ) : (
+              <div className="mt-3 space-y-3">
+                <Input
                   aria-label="Customer name"
+                  label="Nama"
                   value={name}
                   onChange={(event) => setName(event.target.value)}
                   placeholder="Nama pelanggan"
-                  className="h-9 rounded-lg text-sm"
                 />
-                <PosInput
+                <Input
                   aria-label="Customer phone"
+                  label="Nomor telepon"
                   value={phone}
                   onChange={(event) => setPhone(event.target.value)}
                   placeholder="Nomor telepon"
                   inputMode="tel"
-                  className="h-9 rounded-lg text-sm"
                 />
-                <div className="flex justify-end gap-2 pt-1">
-                  <Button variant="ghost" size="sm" onClick={() => setQuickAddOpen(false)}>
-                    Batal
-                  </Button>
-                  <Button size="sm" disabled={!name.trim() || !phone.trim()} onClick={addCustomer}>
-                    Gunakan pelanggan
-                  </Button>
-                </div>
+                <Button
+                  fullWidth
+                  disabled={!name.trim() || !phone.trim()}
+                  onClick={chooseNonMember}
+                >
+                  Gunakan pelanggan
+                </Button>
               </div>
-            ) : (
-              <button
-                type="button"
-                onClick={() => setQuickAddOpen(true)}
-                className="flex w-full items-center justify-center gap-2 rounded-xl border border-dashed border-[var(--color-border)] px-3 py-2.5 text-xs font-semibold text-[var(--color-brand)] transition-colors hover:bg-[var(--color-brand)]/5"
-              >
-                <UserPlus className="size-4" />
-                Tambah pelanggan cepat
-              </button>
             )}
           </div>
         </div>
@@ -1870,10 +1892,16 @@ function ReferenceTransactionDetail({
           <div className="min-h-0 flex-1 space-y-4 overflow-y-auto bg-[var(--color-surface-muted)]/30 px-4 py-4">
             <div className="overflow-hidden rounded-2xl border border-[var(--color-border)] bg-[var(--color-background)]">
               <div className="bg-gradient-to-br from-[var(--color-brand)]/5 to-transparent px-5 py-4">
-                <p className="font-mono text-xs text-[var(--color-text-muted)]">{transactionNumber(sale.id)}</p>
+                <p className="font-mono text-xs text-[var(--color-text-muted)]">
+                  {transactionNumber(sale.id)}
+                </p>
                 <p className="mt-3 text-xs text-[var(--color-text-muted)]">Total Transaksi</p>
-                <h3 className="mt-0.5 text-3xl font-bold tracking-tight">{money(sale.totalAmount, locale)}</h3>
-                <span className={`mt-3 inline-flex rounded-full px-2.5 py-0.5 text-xs font-medium ${statusMeta[status].tone}`}>
+                <h3 className="mt-0.5 text-3xl font-bold tracking-tight">
+                  {money(sale.totalAmount, locale)}
+                </h3>
+                <span
+                  className={`mt-3 inline-flex rounded-full px-2.5 py-0.5 text-xs font-medium ${statusMeta[status].tone}`}
+                >
                   {statusMeta[status].label}
                 </span>
               </div>
@@ -1902,7 +1930,9 @@ function ReferenceTransactionDetail({
             </div>
           </div>
           <footer className="shrink-0 border-t border-[var(--color-border)] bg-[var(--color-surface-muted)]/30 px-6 py-3 text-right">
-            <Button variant="outline" onClick={onClose}>Tutup</Button>
+            <Button variant="outline" onClick={onClose}>
+              Tutup
+            </Button>
           </footer>
         </div>
       )}
