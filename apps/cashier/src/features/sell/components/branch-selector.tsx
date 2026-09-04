@@ -1,5 +1,7 @@
 import { MapPin } from 'lucide-react';
 
+import { Select } from '@digvation/pos-ui';
+
 import type { SellingLocation } from '../cashier-transaction.types';
 
 interface BranchSelectorProps {
@@ -11,21 +13,21 @@ interface BranchSelectorProps {
 
 export function BranchSelector({ locations, value, isLoading, onChange }: BranchSelectorProps) {
   return (
-    <div className="w-full max-w-sm">
+    <div className="w-full max-w-xs">
       <label
         htmlFor="branch"
-        className="text-xs font-bold uppercase tracking-[0.14em] text-[var(--color-text-muted)]"
+        className="text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--color-text-muted)]"
       >
         Branch
       </label>
-      <div className="relative mt-2">
-        <MapPin className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-[var(--color-text-muted)]" />
-        <select
+      <div className="relative mt-1">
+        <MapPin className="pointer-events-none absolute left-3 top-1/2 size-3.5 -translate-y-1/2 text-[var(--color-text-muted)]" />
+        <Select
           id="branch"
           value={value}
           onChange={(event) => onChange(event.target.value)}
           disabled={isLoading || locations.length === 0}
-          className="min-h-11 w-full appearance-none rounded-[var(--radius-control)] border border-[var(--color-border)] bg-[var(--color-surface)] pl-10 pr-4 text-sm font-semibold outline-none transition-shadow focus:ring-2 focus:ring-[var(--color-focus)]"
+          className="h-9 w-full appearance-none bg-[var(--color-surface)] pl-9 pr-4 text-xs font-medium"
         >
           <option value="">Select Branch</option>
           {locations.map((location) => (
@@ -33,7 +35,7 @@ export function BranchSelector({ locations, value, isLoading, onChange }: Branch
               {location.name}
             </option>
           ))}
-        </select>
+        </Select>
       </div>
     </div>
   );

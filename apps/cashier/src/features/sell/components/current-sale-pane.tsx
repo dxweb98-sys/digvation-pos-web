@@ -7,6 +7,7 @@ import {
   CircleAlert,
   Plus,
   ShoppingBag,
+  UserRound,
 } from 'lucide-react';
 
 import type { SaleLine } from '../cashier-transaction.types';
@@ -60,13 +61,13 @@ export function CurrentSalePane({
     return (
       <section
         aria-label="Current Sale"
-        className="flex min-h-[440px] flex-col rounded-[var(--radius-panel)] border border-[var(--color-border)] bg-[var(--color-surface)] p-6 shadow-[var(--shadow-panel)]"
+        className="flex min-h-[440px] flex-col rounded-[var(--radius-card)] border border-[var(--color-border)] bg-[var(--color-surface)] p-5 shadow-[var(--shadow-panel)]"
       >
         <p className="text-xs font-bold uppercase tracking-[0.16em] text-[var(--color-text-muted)]">
           Current Sale
         </p>
         <div className="my-auto text-center">
-          <div className="mx-auto grid size-12 place-items-center rounded-2xl bg-[var(--color-accent-mint)]">
+          <div className="mx-auto grid size-12 place-items-center rounded-xl bg-[var(--color-brand)]/10 text-[var(--color-brand)]">
             <ShoppingBag className="size-5" />
           </div>
           <h2 className="mt-4 text-lg font-bold">Ready for a new Sale</h2>
@@ -91,15 +92,15 @@ export function CurrentSalePane({
   return (
     <section
       aria-label="Current Sale"
-      className="flex min-h-[520px] flex-col rounded-[var(--radius-panel)] border border-[var(--color-border)] bg-[var(--color-surface)] shadow-[var(--shadow-panel)]"
+      className="flex min-h-[520px] flex-col rounded-[var(--radius-card)] border border-[var(--color-border)] bg-[var(--color-surface)] shadow-[var(--shadow-panel)]"
     >
-      <div className="border-b border-[var(--color-border)] p-5">
+      <div className="border-b border-[var(--color-border)] p-4">
         <div className="flex items-start justify-between gap-4">
           <div className="min-w-0">
             <p className="text-xs font-bold uppercase tracking-[0.16em] text-[var(--color-brand)]">
-              Current Sale
+              Cart
             </p>
-            <h2 className="mt-2 truncate text-lg font-bold">Sale {sale.id.slice(0, 8)}</h2>
+            <h2 className="mt-1 truncate text-base font-bold">Sale {sale.id.slice(0, 8)}</h2>
             <p className="mt-1 text-xs text-[var(--color-text-muted)]">
               Version {sale.version} · {sale.status}
             </p>
@@ -107,6 +108,14 @@ export function CurrentSalePane({
           <Button variant="ghost" onClick={onOpenSales} className="px-3" aria-label="Open Sales">
             <ArrowRightLeft className="size-4" />
           </Button>
+        </div>
+
+        <div className="mt-3 flex items-center gap-2 rounded-[var(--radius-control)] border border-[var(--color-brand)]/15 bg-[var(--color-brand)]/5 px-3 py-2 text-xs">
+          <UserRound className="size-3.5 shrink-0 text-[var(--color-brand)]" />
+          <span className="font-semibold">Guest customer</span>
+          <span className="text-[var(--color-text-muted)]">
+            Customer attachment is not available for this Sale.
+          </span>
         </div>
 
         {statusMessage ? (
@@ -135,9 +144,9 @@ export function CurrentSalePane({
         ) : null}
       </div>
 
-      <div className="min-h-0 flex-1 space-y-3 overflow-y-auto p-4">
+      <div className="min-h-0 flex-1 space-y-2 overflow-y-auto bg-[var(--color-surface-muted)]/30 p-3">
         {viewModel.activeLines.length === 0 ? (
-          <div className="rounded-[var(--radius-card)] border border-dashed border-[var(--color-border)] bg-[var(--color-surface-muted)] p-5 text-center">
+          <div className="rounded-[var(--radius-card)] border border-dashed border-[var(--color-border)] bg-[var(--color-surface)] p-6 text-center">
             <ShoppingBag className="mx-auto size-5 text-[var(--color-text-muted)]" />
             <p className="mt-3 text-sm font-semibold">This OPEN Sale has no active lines</p>
             <p className="mt-1 text-xs leading-5 text-[var(--color-text-muted)]">
@@ -159,8 +168,8 @@ export function CurrentSalePane({
         )}
       </div>
 
-      <div className="border-t border-[var(--color-border)] bg-[var(--color-surface-muted)] p-5">
-        <dl className="space-y-2 text-sm">
+      <div className="border-t border-[var(--color-border)] bg-[var(--color-surface)] p-4">
+        <dl className="space-y-1.5 text-sm">
           <div className="flex justify-between gap-4 text-[var(--color-text-muted)]">
             <dt>Gross</dt>
             <dd className="tabular-nums">{formatMoney(sale.grossAmount, sale.currency, locale)}</dd>
@@ -177,13 +186,13 @@ export function CurrentSalePane({
             <dt>Tax</dt>
             <dd className="tabular-nums">{formatMoney(sale.taxAmount, sale.currency, locale)}</dd>
           </div>
-          <div className="flex justify-between gap-4 pt-2 text-base font-bold">
+          <div className="flex justify-between gap-4 border-t border-[var(--color-border)] pt-2 text-base font-bold">
             <dt>Total</dt>
             <dd className="tabular-nums">{formatMoney(sale.totalAmount, sale.currency, locale)}</dd>
           </div>
         </dl>
 
-        <div className="mt-4 grid grid-cols-3 gap-2 rounded-[var(--radius-control)] border border-[var(--color-border)] bg-[var(--color-surface)] p-3 text-center">
+        <div className="mt-3 grid grid-cols-3 gap-2 rounded-[var(--radius-control)] border border-[var(--color-border)] bg-[var(--color-surface-muted)]/60 p-2.5 text-center">
           <div>
             <p className="text-[10px] font-bold uppercase tracking-[0.1em] text-[var(--color-text-muted)]">
               Paid
@@ -210,7 +219,7 @@ export function CurrentSalePane({
           </div>
         </div>
 
-        <Button className="mt-4 w-full" onClick={onContinue}>
+        <Button className="mt-3 w-full" onClick={onContinue}>
           {isTerminal ? 'View Sale Completion' : 'Continue'}
           <ArrowRight className="ml-2 size-4" />
         </Button>

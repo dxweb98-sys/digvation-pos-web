@@ -1,6 +1,6 @@
 import { formatMoney } from '@digvation/pos-money';
-import { Button } from '@digvation/pos-ui';
-import { LoaderCircle, PackageSearch, Plus, Search } from 'lucide-react';
+import { Input, Skeleton } from '@digvation/pos-ui';
+import { PackageSearch, Search, ShoppingBag, Wrench } from 'lucide-react';
 
 import type { CatalogCategory, CatalogItem, ResolvedPrice } from '../cashier-transaction.types';
 import type { ActionAvailability } from '../sale-workspace-view-model';
@@ -37,53 +37,77 @@ export function SellingCatalogPane({
   const isMutationDisabled = availability.state !== 'AVAILABLE' || !hasBranch;
 
   return (
-    <section className="rounded-[var(--radius-panel)] border border-[var(--color-border)] bg-[var(--color-surface)] p-5 shadow-[var(--shadow-panel)] lg:p-6">
-      <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
-        <div>
-          <p className="text-xs font-bold uppercase tracking-[0.16em] text-[var(--color-text-muted)]">
-            Selling Catalog
-          </p>
-          <h2 className="mt-2 text-xl font-bold tracking-[-0.02em]">Choose an item</h2>
-        </div>
-
-        <div className="flex flex-col gap-2 sm:flex-row">
-          <label className="relative block min-w-56">
+    <section className="flex min-h-0 flex-col">
+      <div className="rounded-[var(--radius-card)] border border-[var(--color-border)] bg-[var(--color-surface)] p-3 shadow-[var(--shadow-panel)]">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="inline-flex w-full rounded-xl bg-[var(--color-surface-muted)] p-1 sm:w-auto">
+            <span className="inline-flex h-8 items-center gap-2 rounded-lg bg-[var(--color-surface)] px-3 text-xs font-bold text-[var(--color-brand)] shadow-sm ring-1 ring-[var(--color-border)]">
+              <ShoppingBag className="size-3.5" /> Catalog
+            </span>
+          </div>
+          <label className="relative block w-full sm:w-72">
             <span className="sr-only">Search catalog</span>
             <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-[var(--color-text-muted)]" />
-            <input
+            <Input
               value={search}
               onChange={(event) => onSearchChange(event.target.value)}
-              placeholder="Search item or code"
-              className="min-h-11 w-full rounded-[var(--radius-control)] border border-[var(--color-border)] bg-[var(--color-surface)] pl-10 pr-3 text-sm outline-none focus:ring-2 focus:ring-[var(--color-focus)]"
+              placeholder="Search items..."
+              className="h-9 bg-[var(--color-background)] pl-9 pr-3 text-xs"
             />
           </label>
-          <select
-            aria-label="Catalog category"
-            value={categoryId}
-            onChange={(event) => onCategoryChange(event.target.value)}
-            className="min-h-11 rounded-[var(--radius-control)] border border-[var(--color-border)] bg-[var(--color-surface)] px-3 text-sm font-semibold outline-none focus:ring-2 focus:ring-[var(--color-focus)]"
+        </div>
+
+        <div
+          className="mt-3 flex gap-2 overflow-x-auto pb-0.5"
+          role="group"
+          aria-label="Catalog category"
+        >
+          <button
+            type="button"
+            onClick={() => onCategoryChange('')}
+            className={`h-8 shrink-0 rounded-lg px-3 text-xs font-semibold transition-colors ${
+              categoryId === ''
+                ? 'bg-[var(--color-brand)] text-white'
+                : 'bg-[var(--color-surface-muted)] text-[var(--color-text-muted)] hover:bg-[var(--color-border)]'
+            }`}
           >
-            <option value="">All categories</option>
-            {categories.map((category) => (
-              <option key={category.id} value={category.id}>
-                {category.name}
-              </option>
-            ))}
-          </select>
+            All items
+          </button>
+          {categories.map((category) => (
+            <button
+              key={category.id}
+              type="button"
+              onClick={() => onCategoryChange(category.id)}
+              className={`h-8 shrink-0 rounded-lg px-3 text-xs font-semibold transition-colors ${
+                categoryId === category.id
+                  ? 'bg-[var(--color-brand)] text-white'
+                  : 'bg-[var(--color-surface-muted)] text-[var(--color-text-muted)] hover:bg-[var(--color-border)]'
+              }`}
+            >
+              {category.name}
+            </button>
+          ))}
         </div>
       </div>
 
       {!hasBranch ? (
-        <div className="mt-5 rounded-[var(--radius-card)] bg-[var(--color-accent-yellow)]/35 p-4 text-sm font-semibold">
+        <div className="mt-3 rounded-[var(--radius-card)] bg-[var(--color-accent-yellow)]/35 p-4 text-sm font-semibold">
           Select a Branch before starting a Sale.
         </div>
       ) : null}
 
-      <div className="mt-5 grid gap-3 sm:grid-cols-2 2xl:grid-cols-3">
+      <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5">
         {isLoading ? (
-          <div className="col-span-full flex min-h-52 items-center justify-center text-sm text-[var(--color-text-muted)]">
-            <LoaderCircle className="mr-2 size-4 animate-spin" /> Loading catalog…
-          </div>
+          Array.from({ length: 6 }, (item, index) => (
+            <div
+              key={index}
+              className="aspect-[.88] rounded-[var(--radius-card)] border border-[var(--color-border)] bg-[var(--color-surface)] p-3"
+            >
+              <Skeleton className="aspect-square w-full" />
+              <Skeleton className="mt-3 h-3 w-1/2" />
+              <Skeleton className="mt-2 h-4 w-3/4" />
+            </div>
+          ))
         ) : items.length === 0 ? (
           <div className="col-span-full rounded-[var(--radius-card)] border border-dashed border-[var(--color-border)] bg-[var(--color-surface-muted)] p-8 text-center">
             <PackageSearch className="mx-auto size-6 text-[var(--color-text-muted)]" />
@@ -97,37 +121,37 @@ export function SellingCatalogPane({
             const price = priceByItemId.get(item.id);
 
             return (
-              <article
+              <button
                 key={item.id}
-                className="flex min-h-44 flex-col rounded-[var(--radius-card)] border border-[var(--color-border)] bg-[var(--color-surface)] p-4 transition-[transform,box-shadow,border-color] duration-200 hover:-translate-y-0.5 hover:shadow-md"
+                type="button"
+                aria-label={`Add ${item.name}`}
+                disabled={isMutationDisabled}
+                onClick={() => onSelectItem(item)}
+                className="group flex aspect-[.88] min-w-0 flex-col rounded-[var(--radius-card)] border border-[var(--color-border)] bg-[var(--color-surface)] p-3 text-left shadow-[var(--shadow-panel)] transition-[transform,box-shadow,border-color] duration-150 hover:border-[var(--color-brand)]/40 hover:shadow-md active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50"
               >
-                <div className="flex items-center justify-between gap-3">
-                  <span
-                    className={`rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.1em] ${
-                      item.type === 'SERVICE'
-                        ? 'bg-[var(--color-accent-lavender)]'
-                        : 'bg-[var(--color-accent-sky)]'
-                    }`}
-                  >
-                    {item.type}
-                  </span>
-                  <span className="text-xs text-[var(--color-text-muted)]">{item.code}</span>
+                <div
+                  className={`grid aspect-square w-full place-items-center rounded-xl ${
+                    item.type === 'SERVICE'
+                      ? 'bg-[var(--color-accent-lavender)]/45 text-[var(--color-brand)]'
+                      : 'bg-[var(--color-brand)]/10 text-[var(--color-brand)]'
+                  }`}
+                >
+                  {item.type === 'SERVICE' ? (
+                    <Wrench className="size-7" />
+                  ) : (
+                    <ShoppingBag className="size-7" />
+                  )}
                 </div>
-
-                <h3 className="mt-4 line-clamp-2 text-sm font-bold">{item.name}</h3>
-                <p className="mt-2 text-sm font-bold tabular-nums">
+                <span className="mt-2 truncate font-mono text-[10px] text-[var(--color-text-muted)]">
+                  {item.code}
+                </span>
+                <h3 className="mt-1 line-clamp-2 min-h-10 text-sm font-semibold leading-5">
+                  {item.name}
+                </h3>
+                <p className="mt-auto pt-2 text-sm font-bold text-[var(--color-brand)] tabular-nums">
                   {price ? formatMoney(price.amount, price.currency, locale) : 'Price unavailable'}
                 </p>
-
-                <Button
-                  variant="secondary"
-                  className="mt-auto w-full"
-                  disabled={isMutationDisabled}
-                  onClick={() => onSelectItem(item)}
-                >
-                  <Plus className="mr-2 size-4" /> Add
-                </Button>
-              </article>
+              </button>
             );
           })
         )}

@@ -1,5 +1,5 @@
 import { createDecimal, formatMoney } from '@digvation/pos-money';
-import { Button } from '@digvation/pos-ui';
+import { Button, Dialog, Input, Select } from '@digvation/pos-ui';
 import {
   BadgeCheck,
   Banknote,
@@ -138,319 +138,339 @@ export function SaleCompletionDialog({
             : 'This workspace can stay open while payment and operational work progress independently.';
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-slate-950/35 p-0 backdrop-blur-[2px] sm:items-center sm:p-5">
-      <section
-        role="dialog"
-        aria-modal="true"
-        aria-label="Sale Completion"
-        className="flex max-h-[96vh] w-full max-w-6xl flex-col overflow-hidden rounded-t-[var(--radius-panel)] border border-[var(--color-border)] bg-[var(--color-surface)] shadow-2xl sm:rounded-[var(--radius-panel)]"
-      >
-        <header className="flex items-start justify-between gap-4 border-b border-[var(--color-border)] p-5 sm:p-6">
-          <div>
-            <p className="text-xs font-bold uppercase tracking-[0.16em] text-[var(--color-brand)]">
-              Sale Completion
-            </p>
-            <h2 className="mt-2 text-xl font-bold">Sale {sale.id.slice(0, 8)}</h2>
-            <p className="mt-1 text-sm text-[var(--color-text-muted)]">{completionMessage}</p>
+    <Dialog
+      open
+      onClose={onClose}
+      ariaLabel="Sale Completion"
+      overlayClassName="bg-slate-950/35"
+      className="flex max-h-[96vh] w-full max-w-6xl flex-col overflow-hidden rounded-t-[var(--radius-card)] border border-[var(--color-border)] bg-[var(--color-surface)] shadow-2xl sm:rounded-[var(--radius-card)]"
+    >
+      <header className="flex items-start justify-between gap-4 border-b border-[var(--color-border)] p-4 sm:p-5">
+        <div>
+          <p className="text-xs font-bold uppercase tracking-[0.16em] text-[var(--color-brand)]">
+            Sale Completion
+          </p>
+          <h2 className="mt-2 text-xl font-bold">Sale {sale.id.slice(0, 8)}</h2>
+          <p className="mt-1 text-sm text-[var(--color-text-muted)]">{completionMessage}</p>
+        </div>
+        <Button
+          variant="ghost"
+          aria-label="Close Sale Completion"
+          onClick={onClose}
+          className="px-3"
+        >
+          <X className="size-5" />
+        </Button>
+      </header>
+
+      <div className="min-h-0 flex-1 overflow-y-auto bg-[var(--color-background)] p-4 sm:p-5">
+        {formError ? (
+          <div className="mb-5 rounded-[var(--radius-control)] bg-[var(--color-accent-coral)]/25 px-4 py-3 text-sm font-semibold">
+            {formError}
           </div>
-          <Button
-            variant="ghost"
-            aria-label="Close Sale Completion"
-            onClick={onClose}
-            className="px-3"
+        ) : null}
+
+        {sale.status === 'FINALIZED' || sale.status === 'VOIDED' ? (
+          <div
+            className={`mb-4 flex items-start gap-3 rounded-[var(--radius-card)] border p-4 ${
+              sale.status === 'FINALIZED'
+                ? 'border-[var(--color-success)]/25 bg-[var(--color-success)]/10'
+                : 'border-[var(--color-danger)]/25 bg-[var(--color-danger)]/10'
+            }`}
           >
-            <X className="size-5" />
-          </Button>
-        </header>
-
-        <div className="min-h-0 flex-1 overflow-y-auto p-5 sm:p-6">
-          {formError ? (
-            <div className="mb-5 rounded-[var(--radius-control)] bg-[var(--color-accent-coral)]/25 px-4 py-3 text-sm font-semibold">
-              {formError}
+            {sale.status === 'FINALIZED' ? (
+              <CheckCircle2 className="mt-0.5 size-5 shrink-0 text-[var(--color-success)]" />
+            ) : (
+              <CircleAlert className="mt-0.5 size-5 shrink-0 text-[var(--color-danger)]" />
+            )}
+            <div>
+              <p className="text-sm font-bold">
+                {sale.status === 'FINALIZED' ? 'Sale finalized' : 'Sale voided'}
+              </p>
+              <p className="mt-1 text-xs leading-5 text-[var(--color-text-muted)]">
+                {completionMessage}
+              </p>
             </div>
-          ) : null}
+          </div>
+        ) : null}
 
-          <div className="grid gap-5 lg:grid-cols-[minmax(0,1.15fr)_minmax(340px,0.85fr)]">
-            <div className="space-y-5">
-              <article className="rounded-[var(--radius-card)] border border-[var(--color-border)] p-5">
-                <div className="flex items-center gap-2">
-                  <CreditCard className="size-4" />
-                  <h3 className="font-bold">Payment</h3>
-                </div>
-                <div className="mt-4 grid gap-3 sm:grid-cols-2">
-                  <label className="text-xs font-semibold text-[var(--color-text-muted)]">
-                    Method
-                    <select
-                      aria-label="Payment method"
-                      value={method}
+        <div className="grid gap-4 lg:grid-cols-[minmax(0,1.15fr)_minmax(340px,0.85fr)]">
+          <div className="space-y-4">
+            <article className="rounded-[var(--radius-card)] border border-[var(--color-border)] bg-[var(--color-surface)] p-4 shadow-sm">
+              <div className="flex items-center gap-2">
+                <CreditCard className="size-4" />
+                <h3 className="font-bold">Payment</h3>
+              </div>
+              <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                <label className="text-xs font-semibold text-[var(--color-text-muted)]">
+                  Method
+                  <Select
+                    aria-label="Payment method"
+                    value={method}
+                    disabled={paymentDisabled}
+                    onChange={(event) => setMethod(event.target.value as PaymentMethod)}
+                    className="mt-1.5"
+                  >
+                    <option value="CASH">Cash</option>
+                    <option value="BANK_TRANSFER">Bank transfer</option>
+                    <option value="WALLET">Wallet</option>
+                    <option value="QRIS">QRIS</option>
+                  </Select>
+                </label>
+                <label className="text-xs font-semibold text-[var(--color-text-muted)]">
+                  Applied amount
+                  <Input
+                    aria-label="Payment applied amount"
+                    value={appliedAmount}
+                    disabled={paymentDisabled}
+                    onChange={(event) => setAppliedAmount(event.target.value)}
+                    inputMode="decimal"
+                    className="mt-1.5"
+                  />
+                </label>
+                {method === 'CASH' ? (
+                  <label className="text-xs font-semibold text-[var(--color-text-muted)] sm:col-span-2">
+                    Tendered cash
+                    <Input
+                      aria-label="Cash tendered amount"
+                      value={tenderedAmount}
                       disabled={paymentDisabled}
-                      onChange={(event) => setMethod(event.target.value as PaymentMethod)}
-                      className="mt-1.5 w-full rounded-[var(--radius-control)] border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2.5 text-sm text-[var(--color-text)]"
-                    >
-                      <option value="CASH">Cash</option>
-                      <option value="BANK_TRANSFER">Bank transfer</option>
-                      <option value="WALLET">Wallet</option>
-                      <option value="QRIS">QRIS</option>
-                    </select>
-                  </label>
-                  <label className="text-xs font-semibold text-[var(--color-text-muted)]">
-                    Applied amount
-                    <input
-                      aria-label="Payment applied amount"
-                      value={appliedAmount}
-                      disabled={paymentDisabled}
-                      onChange={(event) => setAppliedAmount(event.target.value)}
+                      onChange={(event) => setTenderedAmount(event.target.value)}
                       inputMode="decimal"
-                      className="mt-1.5 w-full rounded-[var(--radius-control)] border border-[var(--color-border)] px-3 py-2.5 text-sm text-[var(--color-text)] outline-none focus:border-[var(--color-focus)]"
+                      className="mt-1.5"
                     />
                   </label>
-                  {method === 'CASH' ? (
-                    <label className="text-xs font-semibold text-[var(--color-text-muted)] sm:col-span-2">
-                      Tendered cash
-                      <input
-                        aria-label="Cash tendered amount"
-                        value={tenderedAmount}
-                        disabled={paymentDisabled}
-                        onChange={(event) => setTenderedAmount(event.target.value)}
-                        inputMode="decimal"
-                        className="mt-1.5 w-full rounded-[var(--radius-control)] border border-[var(--color-border)] px-3 py-2.5 text-sm text-[var(--color-text)] outline-none focus:border-[var(--color-focus)]"
-                      />
-                    </label>
-                  ) : (
-                    <label className="text-xs font-semibold text-[var(--color-text-muted)] sm:col-span-2">
-                      Provider reference (optional)
-                      <input
-                        aria-label="Payment provider reference"
-                        value={providerReference}
-                        disabled={paymentDisabled}
-                        onChange={(event) => setProviderReference(event.target.value)}
-                        className="mt-1.5 w-full rounded-[var(--radius-control)] border border-[var(--color-border)] px-3 py-2.5 text-sm text-[var(--color-text)] outline-none focus:border-[var(--color-focus)]"
-                      />
-                    </label>
-                  )}
-                </div>
-                {viewModel.paymentMutation.state === 'DISABLED' ? (
-                  <p className="mt-3 text-xs text-[var(--color-text-muted)]">
-                    {actionBlockMessage(viewModel.paymentMutation.reason)}
-                  </p>
-                ) : null}
-                <Button className="mt-4 w-full" disabled={paymentDisabled} onClick={createPayment}>
-                  <Banknote className="mr-2 size-4" /> Add payment
-                </Button>
-              </article>
+                ) : (
+                  <label className="text-xs font-semibold text-[var(--color-text-muted)] sm:col-span-2">
+                    Provider reference (optional)
+                    <Input
+                      aria-label="Payment provider reference"
+                      value={providerReference}
+                      disabled={paymentDisabled}
+                      onChange={(event) => setProviderReference(event.target.value)}
+                      className="mt-1.5"
+                    />
+                  </label>
+                )}
+              </div>
+              {viewModel.paymentMutation.state === 'DISABLED' ? (
+                <p className="mt-3 text-xs text-[var(--color-text-muted)]">
+                  {actionBlockMessage(viewModel.paymentMutation.reason)}
+                </p>
+              ) : null}
+              <Button className="mt-4 w-full" disabled={paymentDisabled} onClick={createPayment}>
+                <Banknote className="mr-2 size-4" /> Add payment
+              </Button>
+            </article>
 
-              {sale.payments.length > 0 ? (
-                <article className="rounded-[var(--radius-card)] border border-[var(--color-border)] p-5">
-                  <h3 className="font-bold">Payment attempts</h3>
-                  <div className="mt-4 space-y-3">
-                    {sale.payments.map((payment) => (
-                      <div
-                        key={payment.id}
-                        className="rounded-[var(--radius-control)] bg-[var(--color-surface-muted)] p-3"
-                      >
-                        <div className="flex items-center justify-between gap-3">
-                          <div>
-                            <p className="text-sm font-bold">{payment.method.replace('_', ' ')}</p>
-                            <p className="mt-1 text-xs text-[var(--color-text-muted)]">
-                              {payment.status}
-                            </p>
-                          </div>
-                          <p className="text-sm font-bold tabular-nums">
-                            {formatMoney(payment.appliedAmount, sale.currency, locale)}
+            {sale.payments.length > 0 ? (
+              <article className="rounded-[var(--radius-card)] border border-[var(--color-border)] bg-[var(--color-surface)] p-4 shadow-sm">
+                <h3 className="font-bold">Payment attempts</h3>
+                <div className="mt-4 space-y-3">
+                  {sale.payments.map((payment) => (
+                    <div
+                      key={payment.id}
+                      className="rounded-[var(--radius-control)] bg-[var(--color-surface-muted)] p-3"
+                    >
+                      <div className="flex items-center justify-between gap-3">
+                        <div>
+                          <p className="text-sm font-bold">{payment.method.replace('_', ' ')}</p>
+                          <p className="mt-1 text-xs text-[var(--color-text-muted)]">
+                            {payment.status}
                           </p>
                         </div>
-                        {payment.status === 'PENDING' && sale.status === 'OPEN' ? (
-                          <div className="mt-3 flex flex-wrap gap-2">
-                            <Button
-                              variant="secondary"
-                              disabled={isBusy}
-                              onClick={() => onTransitionPayment(payment, 'SUCCEEDED')}
-                            >
-                              Mark succeeded
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              disabled={isBusy}
-                              onClick={() => onTransitionPayment(payment, 'FAILED')}
-                            >
-                              Failed
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              disabled={isBusy}
-                              onClick={() => onTransitionPayment(payment, 'CANCELLED')}
-                            >
-                              Cancel
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              disabled={isBusy}
-                              onClick={() => onTransitionPayment(payment, 'EXPIRED')}
-                            >
-                              Expire
-                            </Button>
-                          </div>
-                        ) : null}
+                        <p className="text-sm font-bold tabular-nums">
+                          {formatMoney(payment.appliedAmount, sale.currency, locale)}
+                        </p>
                       </div>
-                    ))}
-                  </div>
-                </article>
-              ) : null}
-
-              <article className="rounded-[var(--radius-card)] border border-[var(--color-border)] p-5">
-                <h3 className="font-bold">Order discount</h3>
-                <p className="mt-2 text-xs text-[var(--color-text-muted)]">
-                  One active ORDER discount is supported by backend v0.3.0.
-                </p>
-                <div className="mt-4 grid grid-cols-[140px_minmax(0,1fr)] gap-2">
-                  <select
-                    aria-label="Order discount type"
-                    value={discountType}
-                    disabled={monetaryDisabled}
-                    onChange={(event) => {
-                      setDiscountType(event.target.value as DiscountType);
-                      setDiscountValue('');
-                    }}
-                    className="rounded-[var(--radius-control)] border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2.5 text-sm"
-                  >
-                    <option value="PERCENTAGE">Percentage</option>
-                    <option value="FIXED_AMOUNT">Fixed amount</option>
-                  </select>
-                  <input
-                    aria-label="Order discount value"
-                    value={discountValue}
-                    disabled={monetaryDisabled}
-                    onChange={(event) => setDiscountValue(event.target.value)}
-                    placeholder={discountType === 'PERCENTAGE' ? '10 (%)' : '50000'}
-                    inputMode="decimal"
-                    className="rounded-[var(--radius-control)] border border-[var(--color-border)] px-3 py-2.5 text-sm outline-none focus:border-[var(--color-focus)]"
-                  />
+                      {payment.status === 'PENDING' && sale.status === 'OPEN' ? (
+                        <div className="mt-3 flex flex-wrap gap-2">
+                          <Button
+                            variant="secondary"
+                            disabled={isBusy}
+                            onClick={() => onTransitionPayment(payment, 'SUCCEEDED')}
+                          >
+                            Mark succeeded
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            disabled={isBusy}
+                            onClick={() => onTransitionPayment(payment, 'FAILED')}
+                          >
+                            Failed
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            disabled={isBusy}
+                            onClick={() => onTransitionPayment(payment, 'CANCELLED')}
+                          >
+                            Cancel
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            disabled={isBusy}
+                            onClick={() => onTransitionPayment(payment, 'EXPIRED')}
+                          >
+                            Expire
+                          </Button>
+                        </div>
+                      ) : null}
+                    </div>
+                  ))}
                 </div>
-                <input
-                  aria-label="Order discount reason"
-                  value={discountReason}
+              </article>
+            ) : null}
+
+            <article className="rounded-[var(--radius-card)] border border-[var(--color-border)] bg-[var(--color-surface)] p-4 shadow-sm">
+              <h3 className="font-bold">Order discount</h3>
+              <p className="mt-2 text-xs text-[var(--color-text-muted)]">
+                One active ORDER discount is supported by backend v0.3.0.
+              </p>
+              <div className="mt-4 grid grid-cols-[140px_minmax(0,1fr)] gap-2">
+                <Select
+                  aria-label="Order discount type"
+                  value={discountType}
                   disabled={monetaryDisabled}
-                  onChange={(event) => setDiscountReason(event.target.value)}
-                  placeholder="Reason"
-                  className="mt-2 w-full rounded-[var(--radius-control)] border border-[var(--color-border)] px-3 py-2.5 text-sm outline-none focus:border-[var(--color-focus)]"
-                />
-                <div className="mt-4 flex gap-2">
-                  <Button
-                    variant="secondary"
-                    disabled={monetaryDisabled}
-                    onClick={applyOrderDiscount}
-                  >
-                    Apply order discount
-                  </Button>
-                  {sale.orderDiscountType ? (
-                    <Button
-                      variant="ghost"
-                      disabled={monetaryDisabled}
-                      onClick={onClearOrderDiscount}
-                    >
-                      Remove
-                    </Button>
-                  ) : null}
-                </div>
-              </article>
-            </div>
-
-            <aside className="space-y-5">
-              <article className="rounded-[var(--radius-card)] border border-[var(--color-border)] bg-[var(--color-surface-muted)] p-5">
-                <h3 className="font-bold">Settlement</h3>
-                <dl className="mt-4 space-y-3 text-sm">
-                  <div className="flex justify-between gap-4">
-                    <dt className="text-[var(--color-text-muted)]">Sale total</dt>
-                    <dd className="font-bold tabular-nums">
-                      {formatMoney(sale.totalAmount, sale.currency, locale)}
-                    </dd>
-                  </div>
-                  <div className="flex justify-between gap-4">
-                    <dt className="text-[var(--color-text-muted)]">Paid</dt>
-                    <dd className="font-semibold tabular-nums">
-                      {formatMoney(viewModel.paidAmount, sale.currency, locale)}
-                    </dd>
-                  </div>
-                  <div className="flex justify-between gap-4">
-                    <dt className="text-[var(--color-text-muted)]">Pending</dt>
-                    <dd className="font-semibold tabular-nums">
-                      {formatMoney(viewModel.pendingAmount, sale.currency, locale)}
-                    </dd>
-                  </div>
-                  <div className="flex justify-between gap-4 border-t border-[var(--color-border)] pt-3 text-base">
-                    <dt className="font-bold">Available to pay</dt>
-                    <dd className="font-bold tabular-nums">
-                      {formatMoney(viewModel.availableToPay, sale.currency, locale)}
-                    </dd>
-                  </div>
-                </dl>
-              </article>
-
-              <article className="rounded-[var(--radius-card)] border border-[var(--color-border)] p-5">
-                <div className="flex items-center gap-2">
-                  {viewModel.domainReadiness.ready ? (
-                    <BadgeCheck className="size-4 text-[var(--color-success)]" />
-                  ) : (
-                    <CircleAlert className="size-4 text-[var(--color-warning)]" />
-                  )}
-                  <h3 className="font-bold">Domain readiness</h3>
-                </div>
-                {viewModel.domainReadiness.ready ? (
-                  <p className="mt-3 text-sm text-[var(--color-text-muted)]">
-                    Exact settlement and operational requirements are ready for backend
-                    finalization.
-                  </p>
-                ) : (
-                  <ul className="mt-3 space-y-2 text-sm">
-                    {viewModel.domainReadiness.blockers.map((blocker, index) => (
-                      <li
-                        key={`${blocker.code}-${blocker.saleLineId ?? index}`}
-                        className="flex gap-2 text-[var(--color-text-muted)]"
-                      >
-                        <CircleAlert className="mt-0.5 size-3.5 shrink-0" /> {blocker.message}
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </article>
-
-              <article className="rounded-[var(--radius-card)] border border-[var(--color-border)] p-5">
-                <h3 className="font-bold">Complete Sale</h3>
-                {viewModel.finalizeMutation.state === 'DISABLED' ? (
-                  <p className="mt-2 text-xs leading-5 text-[var(--color-text-muted)]">
-                    {actionBlockMessage(viewModel.finalizeMutation.reason)}
-                  </p>
-                ) : null}
-                <Button className="mt-4 w-full" disabled={finalizeDisabled} onClick={onFinalize}>
-                  <CheckCircle2 className="mr-2 size-4" /> Finalize Sale
-                </Button>
-                <Button
-                  variant="ghost"
-                  className="mt-2 w-full text-[var(--color-danger)]"
-                  disabled={voidDisabled}
-                  onClick={onVoid}
+                  onChange={(event) => {
+                    setDiscountType(event.target.value as DiscountType);
+                    setDiscountValue('');
+                  }}
                 >
-                  <Trash2 className="mr-2 size-4" /> Void unpaid Sale
+                  <option value="PERCENTAGE">Percentage</option>
+                  <option value="FIXED_AMOUNT">Fixed amount</option>
+                </Select>
+                <Input
+                  aria-label="Order discount value"
+                  value={discountValue}
+                  disabled={monetaryDisabled}
+                  onChange={(event) => setDiscountValue(event.target.value)}
+                  placeholder={discountType === 'PERCENTAGE' ? '10 (%)' : '50000'}
+                  inputMode="decimal"
+                />
+              </div>
+              <Input
+                aria-label="Order discount reason"
+                value={discountReason}
+                disabled={monetaryDisabled}
+                onChange={(event) => setDiscountReason(event.target.value)}
+                placeholder="Reason"
+                className="mt-2"
+              />
+              <div className="mt-4 flex gap-2">
+                <Button
+                  variant="secondary"
+                  disabled={monetaryDisabled}
+                  onClick={applyOrderDiscount}
+                >
+                  Apply order discount
                 </Button>
-                {viewModel.voidMutation.state === 'DISABLED' ? (
-                  <p className="mt-2 text-xs text-[var(--color-text-muted)]">
-                    {actionBlockMessage(viewModel.voidMutation.reason)}
-                  </p>
+                {sale.orderDiscountType ? (
+                  <Button
+                    variant="ghost"
+                    disabled={monetaryDisabled}
+                    onClick={onClearOrderDiscount}
+                  >
+                    Remove
+                  </Button>
                 ) : null}
-              </article>
-
-              {viewModel.synchronization !== 'CLEAN' ? (
-                <article className="rounded-[var(--radius-card)] bg-[var(--color-accent-yellow)]/30 p-4 text-sm">
-                  <div className="flex items-center gap-2 font-bold">
-                    <RefreshCcw className="size-4" /> Synchronization attention
-                  </div>
-                  <p className="mt-2 text-[var(--color-text-muted)]">{viewModel.synchronization}</p>
-                </article>
-              ) : null}
-            </aside>
+              </div>
+            </article>
           </div>
+
+          <aside className="space-y-4">
+            <article className="rounded-[var(--radius-card)] border border-[var(--color-border)] bg-[var(--color-surface)] p-4 shadow-sm">
+              <h3 className="font-bold">Settlement</h3>
+              <dl className="mt-4 space-y-3 text-sm">
+                <div className="flex justify-between gap-4">
+                  <dt className="text-[var(--color-text-muted)]">Sale total</dt>
+                  <dd className="font-bold tabular-nums">
+                    {formatMoney(sale.totalAmount, sale.currency, locale)}
+                  </dd>
+                </div>
+                <div className="flex justify-between gap-4">
+                  <dt className="text-[var(--color-text-muted)]">Paid</dt>
+                  <dd className="font-semibold tabular-nums">
+                    {formatMoney(viewModel.paidAmount, sale.currency, locale)}
+                  </dd>
+                </div>
+                <div className="flex justify-between gap-4">
+                  <dt className="text-[var(--color-text-muted)]">Pending</dt>
+                  <dd className="font-semibold tabular-nums">
+                    {formatMoney(viewModel.pendingAmount, sale.currency, locale)}
+                  </dd>
+                </div>
+                <div className="flex justify-between gap-4 border-t border-[var(--color-border)] pt-3 text-base">
+                  <dt className="font-bold">Available to pay</dt>
+                  <dd className="font-bold tabular-nums">
+                    {formatMoney(viewModel.availableToPay, sale.currency, locale)}
+                  </dd>
+                </div>
+              </dl>
+            </article>
+
+            <article className="rounded-[var(--radius-card)] border border-[var(--color-border)] bg-[var(--color-surface)] p-4 shadow-sm">
+              <div className="flex items-center gap-2">
+                {viewModel.domainReadiness.ready ? (
+                  <BadgeCheck className="size-4 text-[var(--color-success)]" />
+                ) : (
+                  <CircleAlert className="size-4 text-[var(--color-warning)]" />
+                )}
+                <h3 className="font-bold">Domain readiness</h3>
+              </div>
+              {viewModel.domainReadiness.ready ? (
+                <p className="mt-3 text-sm text-[var(--color-text-muted)]">
+                  Exact settlement and operational requirements are ready for backend finalization.
+                </p>
+              ) : (
+                <ul className="mt-3 space-y-2 text-sm">
+                  {viewModel.domainReadiness.blockers.map((blocker, index) => (
+                    <li
+                      key={`${blocker.code}-${blocker.saleLineId ?? index}`}
+                      className="flex gap-2 text-[var(--color-text-muted)]"
+                    >
+                      <CircleAlert className="mt-0.5 size-3.5 shrink-0" /> {blocker.message}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </article>
+
+            <article className="rounded-[var(--radius-card)] border border-[var(--color-border)] bg-[var(--color-surface)] p-4 shadow-sm">
+              <h3 className="font-bold">Complete Sale</h3>
+              {viewModel.finalizeMutation.state === 'DISABLED' ? (
+                <p className="mt-2 text-xs leading-5 text-[var(--color-text-muted)]">
+                  {actionBlockMessage(viewModel.finalizeMutation.reason)}
+                </p>
+              ) : null}
+              <Button className="mt-4 w-full" disabled={finalizeDisabled} onClick={onFinalize}>
+                <CheckCircle2 className="mr-2 size-4" /> Finalize Sale
+              </Button>
+              <Button
+                variant="ghost"
+                className="mt-2 w-full text-[var(--color-danger)]"
+                disabled={voidDisabled}
+                onClick={onVoid}
+              >
+                <Trash2 className="mr-2 size-4" /> Void unpaid Sale
+              </Button>
+              {viewModel.voidMutation.state === 'DISABLED' ? (
+                <p className="mt-2 text-xs text-[var(--color-text-muted)]">
+                  {actionBlockMessage(viewModel.voidMutation.reason)}
+                </p>
+              ) : null}
+            </article>
+
+            {viewModel.synchronization !== 'CLEAN' ? (
+              <article className="rounded-[var(--radius-card)] bg-[var(--color-accent-yellow)]/30 p-4 text-sm">
+                <div className="flex items-center gap-2 font-bold">
+                  <RefreshCcw className="size-4" /> Synchronization attention
+                </div>
+                <p className="mt-2 text-[var(--color-text-muted)]">{viewModel.synchronization}</p>
+              </article>
+            ) : null}
+          </aside>
         </div>
-      </section>
-    </div>
+      </div>
+    </Dialog>
   );
 }

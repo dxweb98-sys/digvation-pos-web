@@ -1,7 +1,8 @@
 import { readdir } from 'node:fs/promises';
 import { extname, relative, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
-const root = resolve(new URL('../..', import.meta.url).pathname);
+const root = resolve(fileURLToPath(new URL('../..', import.meta.url)));
 const scanRoots = ['apps', 'packages', 'tooling'];
 const ignoredDirectories = new Set(['node_modules', 'dist', 'coverage', 'generated']);
 const allowedRootLikeFiles = new Set([
