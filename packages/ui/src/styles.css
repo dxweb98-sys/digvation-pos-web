@@ -95,3 +95,13 @@ textarea {
   background: var(--color-accent-sky);
   color: var(--color-text);
 }
+
+@keyframes boot-progress {
+  0% {
+    transform: translateX(-110%);
+  }
+  55%,
+  100% {
+    transform: translateX(220%);
+  }
+}

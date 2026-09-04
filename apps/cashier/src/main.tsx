@@ -3,12 +3,16 @@ import ReactDOM from 'react-dom/client';
 
 import '@digvation/pos-ui/styles.css';
 
+import { AppBootScreen } from './app/bootstrap/app-boot-screen';
+import { BootstrapTransition } from './app/bootstrap/bootstrap-transition';
 import { bootstrapCashier } from './app/bootstrap/bootstrap-cashier';
+
+const BOOT_SPLASH_MINIMUM_DURATION_MS = 560;
 
 function renderBootstrapFailure(error: unknown) {
   const message = error instanceof Error ? error.message : 'Unknown startup error';
 
-  ReactDOM.createRoot(document.getElementById('root')!).render(
+  root.render(
     <React.StrictMode>
       <main className="grid min-h-screen place-items-center p-6">
         <section className="max-w-lg rounded-2xl border border-[var(--color-border)] bg-white p-6 shadow-sm">
@@ -23,10 +27,27 @@ function renderBootstrapFailure(error: unknown) {
   );
 }
 
+const root = ReactDOM.createRoot(document.getElementById('root')!);
+const bootStartedAt = performance.now();
+
+root.render(
+  <React.StrictMode>
+    <AppBootScreen />
+  </React.StrictMode>,
+);
+
 void bootstrapCashier()
   .then((app) => {
-    ReactDOM.createRoot(document.getElementById('root')!).render(
-      <React.StrictMode>{app}</React.StrictMode>,
+    const remainingDuration = Math.max(
+      0,
+      BOOT_SPLASH_MINIMUM_DURATION_MS - (performance.now() - bootStartedAt),
     );
+    window.setTimeout(() => {
+      root.render(
+        <React.StrictMode>
+          <BootstrapTransition>{app}</BootstrapTransition>
+        </React.StrictMode>,
+      );
+    }, remainingDuration);
   })
   .catch(renderBootstrapFailure);

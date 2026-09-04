@@ -1,161 +1,158 @@
 import { formatMoney } from '@digvation/pos-money';
-import { Input, Skeleton } from '@digvation/pos-ui';
+import { Button, Input, Skeleton } from '@digvation/pos-ui';
 import { PackageSearch, Search, ShoppingBag, Wrench } from 'lucide-react';
 
-import type { CatalogCategory, CatalogItem, ResolvedPrice } from '../cashier-transaction.types';
+import type { CatalogItem, ResolvedPrice } from '../cashier-transaction.types';
 import type { ActionAvailability } from '../sale-workspace-view-model';
+import type { CatalogItemTypeFilter } from '../use-selling-catalog';
 
 interface SellingCatalogPaneProps {
   items: readonly CatalogItem[];
-  categories: readonly CatalogCategory[];
   priceByItemId: ReadonlyMap<string, ResolvedPrice>;
   locale: string;
   search: string;
-  categoryId: string;
+  itemType: CatalogItemTypeFilter;
   isLoading: boolean;
   availability: ActionAvailability;
   hasBranch: boolean;
   onSearchChange: (search: string) => void;
-  onCategoryChange: (categoryId: string) => void;
+  onItemTypeChange: (itemType: CatalogItemTypeFilter) => void;
+  onChooseBranch: () => void;
   onSelectItem: (item: CatalogItem) => void;
 }
 
 export function SellingCatalogPane({
   items,
-  categories,
   priceByItemId,
   locale,
   search,
-  categoryId,
+  itemType,
   isLoading,
   availability,
   hasBranch,
   onSearchChange,
-  onCategoryChange,
+  onItemTypeChange,
+  onChooseBranch,
   onSelectItem,
 }: SellingCatalogPaneProps) {
   const isMutationDisabled = availability.state !== 'AVAILABLE' || !hasBranch;
 
   return (
     <section className="flex min-h-0 flex-col">
-      <div className="rounded-[var(--radius-card)] border border-[var(--color-border)] bg-[var(--color-surface)] p-3 shadow-[var(--shadow-panel)]">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div className="inline-flex w-full rounded-xl bg-[var(--color-surface-muted)] p-1 sm:w-auto">
-            <span className="inline-flex h-8 items-center gap-2 rounded-lg bg-[var(--color-surface)] px-3 text-xs font-bold text-[var(--color-brand)] shadow-sm ring-1 ring-[var(--color-border)]">
-              <ShoppingBag className="size-3.5" /> Catalog
-            </span>
-          </div>
-          <label className="relative block w-full sm:w-72">
-            <span className="sr-only">Search catalog</span>
-            <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-[var(--color-text-muted)]" />
-            <Input
-              value={search}
-              onChange={(event) => onSearchChange(event.target.value)}
-              placeholder="Search items..."
-              className="h-9 bg-[var(--color-background)] pl-9 pr-3 text-xs"
-            />
-          </label>
+      <div className="flex shrink-0 flex-col gap-2 rounded-[var(--radius-card)] border border-[var(--color-border)] bg-[var(--color-surface)] p-2.5 shadow-[var(--shadow-panel)] lg:flex-row lg:items-center">
+        <div className="inline-flex h-9 shrink-0 items-center gap-2 px-2 text-xs font-bold text-[var(--color-brand)]">
+          <ShoppingBag className="size-3.5" /> Catalog
         </div>
-
         <div
-          className="mt-3 flex gap-2 overflow-x-auto pb-0.5"
+          className="inline-flex h-9 shrink-0 rounded-[var(--radius-control)] bg-[var(--color-surface-muted)] p-1"
           role="group"
-          aria-label="Catalog category"
+          aria-label="Item type"
         >
-          <button
-            type="button"
-            onClick={() => onCategoryChange('')}
-            className={`h-8 shrink-0 rounded-lg px-3 text-xs font-semibold transition-colors ${
-              categoryId === ''
-                ? 'bg-[var(--color-brand)] text-white'
-                : 'bg-[var(--color-surface-muted)] text-[var(--color-text-muted)] hover:bg-[var(--color-border)]'
-            }`}
-          >
-            All items
-          </button>
-          {categories.map((category) => (
+          {(['ALL', 'PRODUCT', 'SERVICE'] as const).map((type) => (
             <button
-              key={category.id}
+              key={type}
               type="button"
-              onClick={() => onCategoryChange(category.id)}
-              className={`h-8 shrink-0 rounded-lg px-3 text-xs font-semibold transition-colors ${
-                categoryId === category.id
-                  ? 'bg-[var(--color-brand)] text-white'
-                  : 'bg-[var(--color-surface-muted)] text-[var(--color-text-muted)] hover:bg-[var(--color-border)]'
+              onClick={() => onItemTypeChange(type)}
+              aria-pressed={itemType === type}
+              className={`h-7 rounded-md px-3 text-xs font-semibold transition-colors ${
+                itemType === type
+                  ? 'bg-[var(--color-surface)] text-[var(--color-brand)] shadow-sm ring-1 ring-[var(--color-border)]'
+                  : 'text-[var(--color-text-muted)] hover:text-[var(--color-text)]'
               }`}
             >
-              {category.name}
+              {type === 'ALL' ? 'All' : `${type.slice(0, 1)}${type.slice(1).toLocaleLowerCase()}`}
             </button>
           ))}
         </div>
+        <label className="relative block min-w-0 flex-1">
+          <span className="sr-only">Search catalog</span>
+          <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-[var(--color-text-muted)]" />
+          <Input
+            value={search}
+            onChange={(event) => onSearchChange(event.target.value)}
+            placeholder="Search items"
+            className="h-9 bg-[var(--color-background)] pl-9 pr-3 text-xs"
+          />
+        </label>
       </div>
 
       {!hasBranch ? (
-        <div className="mt-3 rounded-[var(--radius-card)] bg-[var(--color-accent-yellow)]/35 p-4 text-sm font-semibold">
-          Select a Branch before starting a Sale.
+        <div className="mt-3 flex min-h-0 flex-1 flex-col items-center justify-center rounded-[var(--radius-card)] border border-dashed border-[var(--color-border)] bg-[var(--color-surface-muted)] p-6 text-center">
+          <PackageSearch className="size-7 text-[var(--color-text-muted)]" />
+          <p className="mt-3 text-sm font-bold">Choose a branch to begin</p>
+          <p className="mt-1 max-w-xs text-xs leading-5 text-[var(--color-text-muted)]">
+            Select the active branch from the workspace controls before adding items to a Sale.
+          </p>
+          <Button variant="secondary" className="mt-4" onClick={onChooseBranch}>
+            Choose branch
+          </Button>
         </div>
       ) : null}
 
-      <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5">
-        {isLoading ? (
-          Array.from({ length: 6 }, (item, index) => (
-            <div
-              key={index}
-              className="aspect-[.88] rounded-[var(--radius-card)] border border-[var(--color-border)] bg-[var(--color-surface)] p-3"
-            >
-              <Skeleton className="aspect-square w-full" />
-              <Skeleton className="mt-3 h-3 w-1/2" />
-              <Skeleton className="mt-2 h-4 w-3/4" />
-            </div>
-          ))
-        ) : items.length === 0 ? (
-          <div className="col-span-full rounded-[var(--radius-card)] border border-dashed border-[var(--color-border)] bg-[var(--color-surface-muted)] p-8 text-center">
-            <PackageSearch className="mx-auto size-6 text-[var(--color-text-muted)]" />
-            <p className="mt-3 text-sm font-bold">No matching active items</p>
-            <p className="mt-1 text-xs text-[var(--color-text-muted)]">
-              Try another search or category.
-            </p>
-          </div>
-        ) : (
-          items.map((item) => {
-            const price = priceByItemId.get(item.id);
-
-            return (
-              <button
-                key={item.id}
-                type="button"
-                aria-label={`Add ${item.name}`}
-                disabled={isMutationDisabled}
-                onClick={() => onSelectItem(item)}
-                className="group flex aspect-[.88] min-w-0 flex-col rounded-[var(--radius-card)] border border-[var(--color-border)] bg-[var(--color-surface)] p-3 text-left shadow-[var(--shadow-panel)] transition-[transform,box-shadow,border-color] duration-150 hover:border-[var(--color-brand)]/40 hover:shadow-md active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50"
+      {hasBranch ? (
+        <div className="mt-3 grid min-h-0 flex-1 grid-cols-2 content-start gap-3 overflow-y-auto pr-1 sm:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5">
+          {isLoading ? (
+            Array.from({ length: 6 }, (item, index) => (
+              <div
+                key={index}
+                className="aspect-[.88] rounded-[var(--radius-card)] border border-[var(--color-border)] bg-[var(--color-surface)] p-3"
               >
-                <div
-                  className={`grid aspect-square w-full place-items-center rounded-xl ${
-                    item.type === 'SERVICE'
-                      ? 'bg-[var(--color-accent-lavender)]/45 text-[var(--color-brand)]'
-                      : 'bg-[var(--color-brand)]/10 text-[var(--color-brand)]'
-                  }`}
+                <Skeleton className="aspect-square w-full" />
+                <Skeleton className="mt-3 h-3 w-1/2" />
+                <Skeleton className="mt-2 h-4 w-3/4" />
+              </div>
+            ))
+          ) : items.length === 0 ? (
+            <div className="col-span-full rounded-[var(--radius-card)] border border-dashed border-[var(--color-border)] bg-[var(--color-surface-muted)] p-8 text-center">
+              <PackageSearch className="mx-auto size-6 text-[var(--color-text-muted)]" />
+              <p className="mt-3 text-sm font-bold">No matching active items</p>
+              <p className="mt-1 text-xs text-[var(--color-text-muted)]">
+                Try another search or item type.
+              </p>
+            </div>
+          ) : (
+            items.map((item) => {
+              const price = priceByItemId.get(item.id);
+
+              return (
+                <button
+                  key={item.id}
+                  type="button"
+                  aria-label={`Add ${item.name}`}
+                  disabled={isMutationDisabled}
+                  onClick={() => onSelectItem(item)}
+                  className="group flex aspect-[.88] min-w-0 flex-col rounded-[var(--radius-card)] border border-[var(--color-border)] bg-[var(--color-surface)] p-3 text-left shadow-[var(--shadow-panel)] transition-[transform,box-shadow,border-color] duration-150 hover:border-[var(--color-brand)]/40 hover:shadow-md active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50"
                 >
-                  {item.type === 'SERVICE' ? (
-                    <Wrench className="size-7" />
-                  ) : (
-                    <ShoppingBag className="size-7" />
-                  )}
-                </div>
-                <span className="mt-2 truncate font-mono text-[10px] text-[var(--color-text-muted)]">
-                  {item.code}
-                </span>
-                <h3 className="mt-1 line-clamp-2 min-h-10 text-sm font-semibold leading-5">
-                  {item.name}
-                </h3>
-                <p className="mt-auto pt-2 text-sm font-bold text-[var(--color-brand)] tabular-nums">
-                  {price ? formatMoney(price.amount, price.currency, locale) : 'Price unavailable'}
-                </p>
-              </button>
-            );
-          })
-        )}
-      </div>
+                  <div
+                    className={`grid aspect-square w-full place-items-center rounded-xl ${
+                      item.type === 'SERVICE'
+                        ? 'bg-[var(--color-accent-lavender)]/45 text-[var(--color-brand)]'
+                        : 'bg-[var(--color-brand)]/10 text-[var(--color-brand)]'
+                    }`}
+                  >
+                    {item.type === 'SERVICE' ? (
+                      <Wrench className="size-7" />
+                    ) : (
+                      <ShoppingBag className="size-7" />
+                    )}
+                  </div>
+                  <span className="mt-2 truncate font-mono text-[10px] text-[var(--color-text-muted)]">
+                    {item.code}
+                  </span>
+                  <h3 className="mt-1 line-clamp-2 min-h-10 text-sm font-semibold leading-5">
+                    {item.name}
+                  </h3>
+                  <p className="mt-auto pt-2 text-sm font-bold text-[var(--color-brand)] tabular-nums">
+                    {price
+                      ? formatMoney(price.amount, price.currency, locale)
+                      : 'Price unavailable'}
+                  </p>
+                </button>
+              );
+            })
+          )}
+        </div>
+      ) : null}
     </section>
   );
 }

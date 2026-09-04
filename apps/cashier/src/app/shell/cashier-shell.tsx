@@ -1,8 +1,23 @@
 import { useAuth } from '@digvation/pos-auth';
+import { ApiClient } from '@digvation/pos-api';
 import { useConnectivity, useRuntime } from '@digvation/pos-runtime';
-import { Building2, CircleUserRound, LayoutGrid, ReceiptText, Rows3 } from 'lucide-react';
-import { NavLink, Outlet } from 'react-router';
+import { Button, Dialog } from '@digvation/pos-ui';
+import { useQuery } from '@tanstack/react-query';
+import {
+  Check,
+  ChevronDown,
+  CircleUserRound,
+  LayoutGrid,
+  MapPin,
+  ReceiptText,
+  Rows3,
+} from 'lucide-react';
+import { useEffect, useMemo } from 'react';
+import { NavLink, Outlet, useLocation, useNavigate } from 'react-router';
 
+import { useCashierSession } from '../providers/cashier-session-provider';
+import { cashierTransactionKeys } from '../../features/sell/cashier-transaction-keys';
+import { HttpCashierTransactionAdapter } from '../../features/sell/cashier-transaction.adapter';
 import { getAppVersion } from '../version/app-version';
 
 const NAVIGATION = [
@@ -24,9 +39,55 @@ export function CashierShell() {
   const runtime = useRuntime();
   const connectivity = useConnectivity();
   const { session } = useAuth();
+  const {
+    selectedLocationId,
+    selectLocation,
+    isBranchPickerOpen,
+    openBranchPicker,
+    closeBranchPicker,
+  } = useCashierSession();
+  const navigate = useNavigate();
+  const routerLocation = useLocation();
   const version = getAppVersion();
+  const transactionAdapter = useMemo(
+    () => new HttpCashierTransactionAdapter(new ApiClient({ baseUrl: runtime.apiBaseUrl })),
+    [runtime.apiBaseUrl],
+  );
+  const locationsQuery = useQuery({
+    queryKey: cashierTransactionKeys.locations(),
+    queryFn: ({ signal }) => transactionAdapter.listSellingLocations(signal),
+  });
+  const locations = useMemo(
+    () => (locationsQuery.data?.items ?? []).filter((location) => location.status === 'ACTIVE'),
+    [locationsQuery.data],
+  );
+  const selectedLocation = locations.find((location) => location.id === selectedLocationId) ?? null;
   const brandSubtitle =
     runtime.branding.businessName ?? runtime.branding.companyName ?? runtime.workspace;
+
+  useEffect(() => {
+    if (!selectedLocationId && locations.length > 0) {
+      selectLocation(locations[0]!.id);
+    }
+  }, [locations, selectLocation, selectedLocationId]);
+
+  const handleLocationSelect = (locationId: string) => {
+    if (locationId === selectedLocationId) {
+      closeBranchPicker();
+      return;
+    }
+
+    if (/^\/sell\/[^/]+$/.test(routerLocation.pathname)) {
+      const confirmed = window.confirm(
+        'Changing Branch leaves the current Sale OPEN and returns you to a new Sale. Continue?',
+      );
+      if (!confirmed) return;
+      navigate('/sell');
+    }
+
+    selectLocation(locationId);
+    closeBranchPicker();
+  };
 
   return (
     <div className="flex h-screen flex-col overflow-hidden bg-[var(--color-background)] lg:grid lg:grid-cols-[256px_minmax(0,1fr)]">
@@ -51,14 +112,26 @@ export function CashierShell() {
           </div>
         </div>
 
-        <div className="mx-3 mt-3 rounded-[var(--radius-control)] bg-[var(--color-surface-muted)] px-3 py-2.5">
-          <div className="flex items-center gap-2 text-[var(--color-text-muted)]">
-            <Building2 className="size-4" />
-            <span className="text-[11px] font-semibold uppercase tracking-[0.14em]">Branch</span>
-          </div>
-          <p className="mt-1 text-xs font-medium text-[var(--color-text-muted)]">
-            Branch selected in Sell
-          </p>
+        <div className="px-3 pt-3">
+          <button
+            type="button"
+            onClick={openBranchPicker}
+            aria-haspopup="dialog"
+            aria-expanded={isBranchPickerOpen}
+            className="flex w-full items-center gap-2 rounded-[var(--radius-control)] border border-[var(--color-border)] bg-[var(--color-surface-muted)] px-3 py-2.5 text-left transition-colors hover:bg-[var(--color-background)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-focus)]"
+          >
+            <MapPin className="size-4 shrink-0 text-[var(--color-brand)]" />
+            <span className="min-w-0 flex-1">
+              <span className="block text-[10px] font-bold uppercase tracking-[0.12em] text-[var(--color-text-muted)]">
+                Active branch
+              </span>
+              <span className="mt-0.5 block truncate text-sm font-semibold">
+                {selectedLocation?.name ??
+                  (locationsQuery.isLoading ? 'Loading branch' : 'Choose branch')}
+              </span>
+            </span>
+            <ChevronDown className="size-4 shrink-0 text-[var(--color-text-muted)]" />
+          </button>
         </div>
 
         <nav className="mt-3 flex gap-1 px-3 lg:flex-col">
@@ -112,6 +185,65 @@ export function CashierShell() {
           <Outlet />
         </div>
       </main>
+
+      <Dialog
+        open={isBranchPickerOpen}
+        onClose={closeBranchPicker}
+        ariaLabel="Choose active branch"
+        closeOnEscape
+        closeOnOverlay
+        className="w-full max-w-md rounded-t-[var(--radius-panel)] bg-[var(--color-surface)] shadow-2xl sm:rounded-[var(--radius-panel)]"
+      >
+        <div className="border-b border-[var(--color-border)] px-5 py-4">
+          <p className="text-xs font-bold uppercase tracking-[0.14em] text-[var(--color-brand)]">
+            Workspace
+          </p>
+          <h2 className="mt-1 text-lg font-bold">Choose active branch</h2>
+          <p className="mt-1 text-sm text-[var(--color-text-muted)]">
+            Sales and catalog pricing use this branch context.
+          </p>
+        </div>
+        <div className="max-h-[min(420px,60vh)] overflow-y-auto p-3">
+          {locationsQuery.isLoading ? (
+            <p className="p-3 text-sm text-[var(--color-text-muted)]">Loading branches…</p>
+          ) : locations.length === 0 ? (
+            <div className="p-3 text-sm text-[var(--color-text-muted)]">
+              No active branches are available for this workspace.
+            </div>
+          ) : (
+            <div className="space-y-1">
+              {locations.map((location) => {
+                const isSelected = location.id === selectedLocationId;
+                return (
+                  <button
+                    key={location.id}
+                    type="button"
+                    onClick={() => handleLocationSelect(location.id)}
+                    className={`flex w-full items-center justify-between gap-3 rounded-[var(--radius-control)] px-3 py-3 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-focus)] ${
+                      isSelected
+                        ? 'bg-[var(--color-brand)]/10 text-[var(--color-brand)]'
+                        : 'hover:bg-[var(--color-surface-muted)]'
+                    }`}
+                  >
+                    <span className="min-w-0">
+                      <span className="block truncate text-sm font-semibold">{location.name}</span>
+                      <span className="mt-0.5 block font-mono text-[10px] text-[var(--color-text-muted)]">
+                        {location.code}
+                      </span>
+                    </span>
+                    {isSelected ? <Check className="size-4 shrink-0" /> : null}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </div>
+        <div className="border-t border-[var(--color-border)] p-3">
+          <Button variant="secondary" className="w-full" onClick={closeBranchPicker}>
+            Close
+          </Button>
+        </div>
+      </Dialog>
     </div>
   );
 }

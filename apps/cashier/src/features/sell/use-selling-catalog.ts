@@ -1,16 +1,17 @@
 import { useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 
 import type { SellingCatalogQuery } from './cashier-transaction.adapter';
 import { cashierTransactionKeys } from './cashier-transaction-keys';
 import type { CatalogItem, CatalogVariant, ResolvedPrice } from './cashier-transaction.types';
+
+export type CatalogItemTypeFilter = 'ALL' | 'PRODUCT' | 'SERVICE';
 
 interface UseSellingCatalogOptions {
   query: SellingCatalogQuery;
   selectedLocationId: string | null;
   currency: string;
   locale: string;
-  onAutoSelectLocation: (locationId: string) => void;
 }
 
 export function useSellingCatalog({
@@ -18,33 +19,15 @@ export function useSellingCatalog({
   selectedLocationId,
   currency,
   locale,
-  onAutoSelectLocation,
 }: UseSellingCatalogOptions) {
   const queryClient = useQueryClient();
   const [search, setSearch] = useState('');
-  const [categoryId, setCategoryId] = useState('');
-
-  const locationsQuery = useQuery({
-    queryKey: cashierTransactionKeys.locations(),
-    queryFn: ({ signal }) => query.listSellingLocations(signal),
-  });
-  const categoriesQuery = useQuery({
-    queryKey: cashierTransactionKeys.categories(),
-    queryFn: ({ signal }) => query.listCatalogCategories(signal),
-  });
+  const [itemType, setItemType] = useState<CatalogItemTypeFilter>('SERVICE');
   const itemsQuery = useQuery({
     queryKey: cashierTransactionKeys.items(),
     queryFn: ({ signal }) => query.listCatalogItems(signal),
   });
 
-  const locations = useMemo(
-    () => (locationsQuery.data?.items ?? []).filter((location) => location.status === 'ACTIVE'),
-    [locationsQuery.data],
-  );
-  const categories = useMemo(
-    () => (categoriesQuery.data?.items ?? []).filter((category) => category.status === 'ACTIVE'),
-    [categoriesQuery.data],
-  );
   const activeItems = useMemo(
     () => (itemsQuery.data?.items ?? []).filter((item) => item.lifecycle === 'ACTIVE'),
     [itemsQuery.data],
@@ -52,17 +35,11 @@ export function useSellingCatalog({
   const items = useMemo(() => {
     const normalizedSearch = search.trim().toLocaleLowerCase(locale);
     return activeItems.filter((item) => {
-      if (categoryId && item.categoryId !== categoryId) return false;
+      if (itemType !== 'ALL' && item.type !== itemType) return false;
       if (!normalizedSearch) return true;
       return `${item.name} ${item.code}`.toLocaleLowerCase(locale).includes(normalizedSearch);
     });
-  }, [activeItems, categoryId, locale, search]);
-
-  useEffect(() => {
-    if (!selectedLocationId && locations.length === 1) {
-      onAutoSelectLocation(locations[0]!.id);
-    }
-  }, [locations, onAutoSelectLocation, selectedLocationId]);
+  }, [activeItems, itemType, locale, search]);
 
   const priceQueries = useQueries({
     queries: items.map((item) => ({
@@ -104,16 +81,14 @@ export function useSellingCatalog({
   };
 
   return {
-    locations,
-    categories,
     items,
     priceByItemId,
     search,
-    categoryId,
-    error: locationsQuery.error ?? categoriesQuery.error ?? itemsQuery.error,
-    isLoading: locationsQuery.isLoading || categoriesQuery.isLoading || itemsQuery.isLoading,
+    itemType,
+    error: itemsQuery.error,
+    isLoading: itemsQuery.isLoading,
     setSearch,
-    setCategoryId,
+    setItemType,
     loadActiveVariants,
   };
 }

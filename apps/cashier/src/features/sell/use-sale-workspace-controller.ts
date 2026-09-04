@@ -79,32 +79,42 @@ export function useSaleWorkspaceController({
 
         let saleId = intent.saleId;
         let expectedVersion = intent.expectedVersion;
+        let createdSale: typeof saleQuery.data | null = null;
         createdSaleIdRef.current = saleId ?? null;
 
         if (!saleId || expectedVersion === undefined) {
-          const createdSale = await client.createSale(
+          createdSale = await client.createSale(
             { sellingLocationId: intent.sellingLocationId, currency: intent.currency },
             intent.createIdempotencyKey,
           );
           saleId = createdSale.id;
           expectedVersion = createdSale.version;
           createdSaleIdRef.current = createdSale.id;
-          command.commitSale(createdSale);
           selectLocation(createdSale.sellingLocationId);
-          navigate(`/sell/${createdSale.id}`, { replace: true });
           setRetryIntent({ ...intent, saleId, expectedVersion });
         }
 
-        return client.addSaleLine(
-          saleId,
-          {
-            expectedVersion,
-            catalogItemId: intent.catalogItemId,
-            ...(intent.catalogVariantId ? { catalogVariantId: intent.catalogVariantId } : {}),
-            quantity: intent.quantity,
-          },
-          intent.addIdempotencyKey,
-        );
+        try {
+          const updatedSale = await client.addSaleLine(
+            saleId,
+            {
+              expectedVersion,
+              catalogItemId: intent.catalogItemId,
+              ...(intent.catalogVariantId ? { catalogVariantId: intent.catalogVariantId } : {}),
+              quantity: intent.quantity,
+            },
+            intent.addIdempotencyKey,
+          );
+          command.commitSale(updatedSale);
+          if (createdSale) navigate(`/sell/${createdSale.id}`, { replace: true });
+          return updatedSale;
+        } catch (error) {
+          if (createdSale) {
+            command.commitSale(createdSale);
+            navigate(`/sell/${createdSale.id}`, { replace: true });
+          }
+          throw error;
+        }
       }),
     onSuccess: (sale) => {
       command.commitSale(sale);

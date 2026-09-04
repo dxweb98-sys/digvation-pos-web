@@ -5,9 +5,9 @@ import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router';
 
 import { useCashierSession } from '../../app/providers/cashier-session-provider';
-import { HttpCashierTransactionAdapter } from './cashier-transaction.adapter';
 import { cashierTransactionErrorMessage } from './cashier-transaction-errors';
 import { cashierTransactionKeys } from './cashier-transaction-keys';
+import { HttpCashierTransactionAdapter } from './cashier-transaction.adapter';
 import type { CatalogItem, SaleLine } from './cashier-transaction.types';
 import type { VariantPickerState } from './components/variant-picker';
 import { useEmployeeOptions } from './use-employee-options';
@@ -24,6 +24,7 @@ export function useCashierTransactionWorkspace(routeSaleId?: string) {
   const [variantPicker, setVariantPicker] = useState<VariantPickerState | null>(null);
   const [lineTaskId, setLineTaskId] = useState<string | null>(null);
   const [isCompletionOpen, setCompletionOpen] = useState(false);
+  const [resumedSaleId, setResumedSaleId] = useState<string | null>(null);
   const transactionAdapter = useMemo(
     () => new HttpCashierTransactionAdapter(new ApiClient({ baseUrl: runtime.apiBaseUrl })),
     [runtime.apiBaseUrl],
@@ -36,15 +37,15 @@ export function useCashierTransactionWorkspace(routeSaleId?: string) {
     selectedLocationId,
     currency: runtime.currency,
     locale: runtime.locale,
-    onAutoSelectLocation: selectLocation,
   });
 
   const employeeOptions = useEmployeeOptions(transactionAdapter);
 
+  const activeSaleId = routeSaleId ?? resumedSaleId ?? undefined;
   const saleWorkspace = useSaleWorkspaceController({
     client: transactionAdapter,
     command,
-    ...(routeSaleId === undefined ? {} : { routeSaleId }),
+    ...(activeSaleId === undefined ? {} : { routeSaleId: activeSaleId }),
     selectedLocationId,
     currency: runtime.currency,
     connectivity: connectivity.state,
@@ -98,19 +99,6 @@ export function useCashierTransactionWorkspace(routeSaleId?: string) {
     saleWorkspace.addItem(item.id, catalogVariantId ?? undefined);
   };
 
-  const changeBranch = (locationId: string) => {
-    const sale = saleWorkspace.sale;
-    if (sale && locationId !== sale.sellingLocationId) {
-      const confirmed = window.confirm(
-        'Changing Branch leaves the current Sale OPEN and clears it from this workspace. Continue?',
-      );
-      if (!confirmed) return;
-      navigate('/sell');
-    }
-    selectLocation(locationId || null);
-    command.clearAttention();
-  };
-
   const newSale = () => {
     if (saleWorkspace.sale?.status === 'OPEN') {
       const confirmed = window.confirm(
@@ -119,6 +107,14 @@ export function useCashierTransactionWorkspace(routeSaleId?: string) {
       if (!confirmed) return;
     }
     navigate('/sell');
+    setResumedSaleId(null);
+    setCompletionOpen(false);
+    setLineTaskId(null);
+    command.clearAttention();
+  };
+
+  const resumeSale = (saleId: string) => {
+    setResumedSaleId(saleId);
     setCompletionOpen(false);
     setLineTaskId(null);
     command.clearAttention();
@@ -133,14 +129,13 @@ export function useCashierTransactionWorkspace(routeSaleId?: string) {
 
   return {
     locale: runtime.locale,
-    locations: catalog.locations,
-    categories: catalog.categories,
+    currency: runtime.currency,
     items: catalog.items,
     priceByItemId: catalog.priceByItemId,
     employees: employeeOptions.employees,
     selectedLocationId: selectedLocationId ?? '',
     search: catalog.search,
-    categoryId: catalog.categoryId,
+    itemType: catalog.itemType,
     notice:
       command.notice ??
       (saleWorkspace.saleQueryError
@@ -160,8 +155,7 @@ export function useCashierTransactionWorkspace(routeSaleId?: string) {
     isCoreMutating: core.isPending,
     canRetryLastCommand: core.canRetryLastCoreCommand || saleWorkspace.canRetryLastAdd,
     setSearch: catalog.setSearch,
-    setCategoryId: catalog.setCategoryId,
-    changeBranch,
+    setItemType: catalog.setItemType,
     selectItem,
     selectVariant,
     closeVariantPicker: () => setVariantPicker(null),
@@ -185,6 +179,7 @@ export function useCashierTransactionWorkspace(routeSaleId?: string) {
     finalizeSale: core.finalizeSale,
     voidSale: core.voidSale,
     newSale,
+    resumeSale,
     openSales: () => navigate('/open-sales'),
     acknowledgeLatestState: command.acknowledgeLatestState,
     retryLastCommand,
