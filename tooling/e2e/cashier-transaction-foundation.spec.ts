@@ -55,6 +55,12 @@ function createEmptySale() {
     netPreTaxAmount: '0.0000',
     taxAmount: '0.0000',
     totalAmount: '0.0000',
+    orderDiscountType: null,
+    orderDiscountValue: null,
+    orderDiscountReason: null,
+    orderDiscountAmount: '0.0000',
+    finalizedAt: null,
+    voidedAt: null,
     createdAt: '2026-09-02T00:00:00.000Z',
     updatedAt: '2026-09-02T00:00:00.000Z',
     lines: [],
@@ -68,21 +74,40 @@ function createLine(quantity = '1.0000', total = '125000.0000') {
     saleId,
     catalogItemId: catalogItem.id,
     catalogVariantId: null,
+    catalogPriceId: '55555555-5555-4555-8555-555555555555',
     itemCodeSnapshot: catalogItem.code,
     itemNameSnapshot: catalogItem.name,
     itemTypeSnapshot: catalogItem.type,
     variantCodeSnapshot: null,
     variantNameSnapshot: null,
     fulfillmentBehaviorSnapshot: 'INSTANT',
+    employeeAssignmentModeSnapshot: 'NONE',
+    allowEmployeeContributionSnapshot: false,
+    defaultDurationMinutesSnapshot: null,
     quantity,
     currency: 'IDR',
     resolvedUnitPrice: '125000.0000',
     effectiveUnitPrice: '125000.0000',
+    overrideAmount: null,
+    overrideReason: null,
+    discountType: null,
+    discountValue: null,
+    discountReason: null,
     grossAmount: total,
+    lineDiscountAmount: '0.0000',
+    orderDiscountAllocationAmount: '0.0000',
+    discountedCustomerBaseAmount: total,
+    includedTaxAmount: '0.0000',
+    excludedTaxAmount: '0.0000',
     netPreTaxAmount: total,
     taxAmount: '0.0000',
     totalAmount: total,
     removedAt: null,
+    createdAt: '2026-09-02T00:00:00.000Z',
+    updatedAt: '2026-09-02T00:00:00.000Z',
+    fulfillment: null,
+    participations: [],
+    contributions: [],
   };
 }
 
@@ -149,6 +174,10 @@ async function installRoutes(page: Page, options: Partial<RouteState> = {}) {
 
     if (method === 'GET' && url.pathname === '/api/v1/locations') {
       await route.fulfill({ json: envelope({ items: [branch], limit: 100, offset: 0 }) });
+      return;
+    }
+    if (method === 'GET' && url.pathname === '/api/v1/employees') {
+      await route.fulfill({ json: envelope({ items: [], limit: 100, offset: 0 }) });
       return;
     }
     if (method === 'GET' && url.pathname === '/api/v1/catalog/categories') {
