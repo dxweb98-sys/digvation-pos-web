@@ -1,4 +1,3 @@
-import { ApiClient } from '@digvation/pos-api';
 import { useConnectivity, useRuntime } from '@digvation/pos-runtime';
 import { useQuery } from '@tanstack/react-query';
 import { useMemo, useState } from 'react';
@@ -7,8 +6,8 @@ import { useNavigate } from 'react-router';
 import { useCashierSession } from '../../app/providers/cashier-session-provider';
 import { cashierTransactionErrorMessage } from './cashier-transaction-errors';
 import { cashierTransactionKeys } from './cashier-transaction-keys';
-import { HttpCashierTransactionAdapter } from './cashier-transaction.adapter';
 import type { CatalogItem, SaleLine } from './cashier-transaction.types';
+import { createCashierTransactionAdapter, isCashierDemoMode } from './cashier-transaction-client';
 import type { VariantPickerState } from './components/variant-picker';
 import { useEmployeeOptions } from './use-employee-options';
 import { useSaleCommandCoordinator } from './use-sale-command-coordinator';
@@ -26,9 +25,10 @@ export function useCashierTransactionWorkspace(routeSaleId?: string) {
   const [isCompletionOpen, setCompletionOpen] = useState(false);
   const [resumedSaleId, setResumedSaleId] = useState<string | null>(null);
   const transactionAdapter = useMemo(
-    () => new HttpCashierTransactionAdapter(new ApiClient({ baseUrl: runtime.apiBaseUrl })),
+    () => createCashierTransactionAdapter(runtime.apiBaseUrl),
     [runtime.apiBaseUrl],
   );
+  const effectiveConnectivity = isCashierDemoMode() ? 'ONLINE' : connectivity.state;
 
   const command = useSaleCommandCoordinator({ client: transactionAdapter, rememberSale });
 
@@ -48,7 +48,7 @@ export function useCashierTransactionWorkspace(routeSaleId?: string) {
     ...(activeSaleId === undefined ? {} : { routeSaleId: activeSaleId }),
     selectedLocationId,
     currency: runtime.currency,
-    connectivity: connectivity.state,
+    connectivity: effectiveConnectivity,
     selectLocation,
     rememberSale,
   });
@@ -57,7 +57,7 @@ export function useCashierTransactionWorkspace(routeSaleId?: string) {
     client: transactionAdapter,
     command,
     sale: saleWorkspace.sale,
-    connectivity: connectivity.state,
+    connectivity: effectiveConnectivity,
   });
 
   const lineTask =
@@ -78,25 +78,74 @@ export function useCashierTransactionWorkspace(routeSaleId?: string) {
     enabled: Boolean(saleWorkspace.sale && lineTask?.allowEmployeeContributionSnapshot),
   });
 
+  const addCatalogItem = async (item: CatalogItem, catalogVariantId?: string) => {
+    if (!selectedLocationId) {
+      saleWorkspace.addItem(item.id, catalogVariantId);
+      return;
+    }
+    const resolvedPrice =
+      catalogVariantId === undefined
+        ? catalog.priceByItemId.get(item.id) ??
+          (await transactionAdapter.resolvePrice({
+            catalogItemId: item.id,
+            sellingLocationId: selectedLocationId,
+            currency: runtime.currency,
+            effectiveAt: new Date().toISOString(),
+          }))
+        : await transactionAdapter.resolvePrice({
+            catalogItemId: item.id,
+            catalogVariantId,
+            sellingLocationId: selectedLocationId,
+            currency: runtime.currency,
+            effectiveAt: new Date().toISOString(),
+          });
+
+    saleWorkspace.addItem(item.id, catalogVariantId, { catalogItem: item, resolvedPrice });
+  };
+
   const selectItem = async (item: CatalogItem) => {
     command.clearNotice();
     try {
       const variants = await catalog.loadActiveVariants(item);
       if (variants.length > 0) {
-        setVariantPicker({ item, variants });
+        const priceEntries = selectedLocationId
+          ? await Promise.all(
+              variants.map(async (variant) => {
+                const price = await transactionAdapter.resolvePrice({
+                  catalogItemId: item.id,
+                  catalogVariantId: variant.id,
+                  sellingLocationId: selectedLocationId,
+                  currency: runtime.currency,
+                  effectiveAt: new Date().toISOString(),
+                });
+                return [variant.id, price.amount] as const;
+              }),
+            )
+          : [];
+        setVariantPicker({
+          item,
+          variants,
+          pricesByVariantId: Object.fromEntries(priceEntries),
+          locale: runtime.locale,
+          currency: runtime.currency,
+        });
         return;
       }
-      saleWorkspace.addItem(item.id);
+      await addCatalogItem(item);
     } catch (error) {
       command.reportError(error);
     }
   };
 
-  const selectVariant = (catalogVariantId: string | null) => {
+  const selectVariant = async (catalogVariantId: string | null) => {
     if (!variantPicker) return;
     const item = variantPicker.item;
     setVariantPicker(null);
-    saleWorkspace.addItem(item.id, catalogVariantId ?? undefined);
+    try {
+      await addCatalogItem(item, catalogVariantId ?? undefined);
+    } catch (error) {
+      command.reportError(error);
+    }
   };
 
   const newSale = () => {

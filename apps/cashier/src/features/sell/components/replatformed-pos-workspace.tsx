@@ -1,5 +1,5 @@
+import { useAuth } from '@digvation/pos-auth';
 import { createDecimal, formatMoney } from '@digvation/pos-money';
-import { ApiClient } from '@digvation/pos-api';
 import { useRuntime } from '@digvation/pos-runtime';
 import { Button, Dialog, Skeleton } from '@digvation/pos-ui';
 import { useQuery } from '@tanstack/react-query';
@@ -14,6 +14,7 @@ import {
   Minus,
   PlayCircle,
   Plus,
+  Printer,
   QrCode,
   RotateCcw,
   Search,
@@ -25,10 +26,10 @@ import {
   X,
   XCircle,
 } from 'lucide-react';
-import { useMemo, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 
 import { cashierTransactionKeys } from '../cashier-transaction-keys';
-import { HttpCashierTransactionAdapter } from '../cashier-transaction.adapter';
+import { createCashierTransactionAdapter } from '../cashier-transaction-client';
 import type {
   CatalogItem,
   Employee,
@@ -55,6 +56,33 @@ interface PosCustomer {
   name: string;
   phone: string;
   memberCode?: string;
+}
+
+const localCustomerChoices: readonly PosCustomer[] = [
+  { name: 'Budi Santoso', phone: '081234567890' },
+  { name: 'Rina Amelia', phone: '085712345678' },
+  { name: 'Andi Pratama', phone: '081298765432' },
+];
+
+const CURRENT_CUSTOMER_KEY = 'digvation-pos-demo-current-customer';
+const saleCustomerKey = (saleId: string) => `digvation-pos-demo-customer:${saleId}`;
+
+function readStoredCustomer(key: string): PosCustomer | null {
+  try {
+    const raw = window.sessionStorage.getItem(key);
+    return raw ? (JSON.parse(raw) as PosCustomer) : null;
+  } catch {
+    return null;
+  }
+}
+
+function writeStoredCustomer(key: string, customer: PosCustomer | null): void {
+  try {
+    if (customer) window.sessionStorage.setItem(key, JSON.stringify(customer));
+    else window.sessionStorage.removeItem(key);
+  } catch {
+    // Session storage is optional presentation state only.
+  }
 }
 
 const statusMeta: Record<
@@ -97,11 +125,26 @@ function quantity(value: string) {
 }
 
 function transactionNumber(saleId: string) {
-  return `Sale ${saleId.slice(0, 8)}`;
+  return saleId.startsWith('SALE-DEMO-') ? saleId : `Sale ${saleId.slice(0, 8)}`;
 }
 
-function saleCustomer(): PosCustomer {
-  return { name: 'Umum', phone: 'Pelanggan belum dipilih' };
+function saleCustomer(saleId?: string): PosCustomer {
+  const stored = saleId ? readStoredCustomer(saleCustomerKey(saleId)) : null;
+  return stored ?? { name: 'Pelanggan umum', phone: '' };
+}
+
+function employeeSummary(line: SaleLine, employees: readonly Employee[]): string {
+  const assigned = line.participations.filter((participation) => participation.assigned);
+  if (!assigned.length) return 'Pilih karyawan';
+  return assigned
+    .map((participation) => {
+      const employee = employees.find((candidate) => candidate.id === participation.employeeId);
+      const share = participation.shareRate
+        ? ` ${createDecimal(participation.shareRate).times(100).toFixed(0)}%`
+        : '';
+      return `${employee?.displayName ?? participation.employeeId}${share}`;
+    })
+    .join(' · ');
 }
 
 function queueStatus(sale: Sale): QueueStatus {
@@ -123,11 +166,28 @@ function workflowIssues(sale: Sale, requiresEmployeeAttribution = true) {
   const issues: string[] = [];
   const active = sale.lines.filter((line) => line.removedAt === null);
   if (!active.length) issues.push('Tambahkan setidaknya satu item.');
+
+  const succeeded = sale.payments
+    .filter((payment) => payment.status === 'SUCCEEDED')
+    .reduce((sum, payment) => sum.plus(createDecimal(payment.appliedAmount)), createDecimal('0'));
+  if (!succeeded.equals(createDecimal(sale.totalAmount))) {
+    issues.push('Pembayaran berhasil harus sama dengan total transaksi.');
+  }
+  if (sale.payments.some((payment) => payment.status === 'PENDING')) {
+    issues.push('Selesaikan pembayaran yang masih pending.');
+  }
+
   for (const line of active) {
     if (!isPositiveDecimal(line.quantity))
       issues.push(`${line.itemNameSnapshot}: qty harus lebih dari 0.`);
     if (!isPositiveDecimal(line.effectiveUnitPrice))
       issues.push(`${line.itemNameSnapshot}: harga harus valid.`);
+    if (
+      line.fulfillmentBehaviorSnapshot === 'TRACKED' &&
+      line.fulfillment?.status !== 'COMPLETED'
+    ) {
+      issues.push(`${line.itemNameSnapshot}: pekerjaan belum selesai.`);
+    }
     if (
       requiresEmployeeAttribution &&
       line.employeeAssignmentModeSnapshot === 'REQUIRED' &&
@@ -151,8 +211,9 @@ function workflowIssues(sale: Sale, requiresEmployeeAttribution = true) {
 
 export function ReplatformedPosWorkspace({ workspace }: { workspace: Workspace }) {
   const runtime = useRuntime();
+  const { session } = useAuth();
   const adapter = useMemo(
-    () => new HttpCashierTransactionAdapter(new ApiClient({ baseUrl: runtime.apiBaseUrl })),
+    () => createCashierTransactionAdapter(runtime.apiBaseUrl),
     [runtime.apiBaseUrl],
   );
   const transactionsQuery = useQuery({
@@ -169,16 +230,33 @@ export function ReplatformedPosWorkspace({ workspace }: { workspace: Workspace }
   const [cancelTarget, setCancelTarget] = useState<Sale | null>(null);
   const [cancelReason, setCancelReason] = useState('');
   const [cartOpen, setCartOpen] = useState(false);
+  const [cartCustomer, setCartCustomer] = useState<PosCustomer | null>(() =>
+    readStoredCustomer(CURRENT_CUSTOMER_KEY),
+  );
+  const [customerPickerOpen, setCustomerPickerOpen] = useState(false);
   const [checkoutOpen, setCheckoutOpen] = useState(false);
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('CASH');
   const [provider, setProvider] = useState('');
   const [tender, setTender] = useState('');
   const [reviewTarget, setReviewTarget] = useState<Sale | null>(null);
   const [assignmentLine, setAssignmentLine] = useState<SaleLine | null>(null);
+  const [receiptSaleId, setReceiptSaleId] = useState<string | null>(null);
 
   const sale = workspace.viewModel.sale;
   const lines = workspace.viewModel.activeLines;
   const total = sale?.totalAmount ?? '0.0000';
+
+  useEffect(() => {
+    writeStoredCustomer(CURRENT_CUSTOMER_KEY, cartCustomer);
+    if (sale?.id) writeStoredCustomer(saleCustomerKey(sale.id), cartCustomer);
+  }, [cartCustomer, sale?.id]);
+
+  useEffect(() => {
+    if (!receiptSaleId || sale?.id !== receiptSaleId || sale.status !== 'FINALIZED') return;
+    setQueueDetail(sale);
+    setReceiptSaleId(null);
+    setCartOpen(false);
+  }, [receiptSaleId, sale]);
   const categories = useMemo(
     () => [
       ...new Set(
@@ -213,6 +291,9 @@ export function ReplatformedPosWorkspace({ workspace }: { workspace: Workspace }
   };
   const resume = (transaction: Sale) => {
     workspace.resumeSale(transaction.id);
+    const customer = readStoredCustomer(saleCustomerKey(transaction.id));
+    setCartCustomer(customer);
+    writeStoredCustomer(CURRENT_CUSTOMER_KEY, customer);
     setQueueIssues((current) => ({ ...current, [transaction.id]: [] }));
     setCartOpen(true);
   };
@@ -223,6 +304,7 @@ export function ReplatformedPosWorkspace({ workspace }: { workspace: Workspace }
   const complete = () => {
     const currentReview = sale?.id === reviewTarget?.id ? sale : reviewTarget;
     if (!currentReview || workflowIssues(currentReview).length) return;
+    setReceiptSaleId(currentReview.id);
     workspace.finalizeSale();
     setReviewTarget(null);
   };
@@ -383,6 +465,10 @@ export function ReplatformedPosWorkspace({ workspace }: { workspace: Workspace }
         total={total}
         gross={sale?.grossAmount ?? '0.0000'}
         locale={workspace.locale}
+        customer={cartCustomer}
+        employees={workspace.employees}
+        onChooseCustomer={() => setCustomerPickerOpen(true)}
+        onManageEmployee={setAssignmentLine}
         onQuantity={(line, next) => workspace.changeQuantity(line, next)}
         onRemove={workspace.removeLine}
         onCheckout={() => {
@@ -394,6 +480,20 @@ export function ReplatformedPosWorkspace({ workspace }: { workspace: Workspace }
         }}
       />
 
+      <ReferenceCustomerDialog
+        open={customerPickerOpen}
+        customer={cartCustomer}
+        onClose={() => setCustomerPickerOpen(false)}
+        onChoose={(customer) => {
+          setCartCustomer(customer);
+          setCustomerPickerOpen(false);
+        }}
+        onUseGeneralCustomer={() => {
+          setCartCustomer(null);
+          setCustomerPickerOpen(false);
+        }}
+      />
+
       <ReferencePaymentDialog
         open={checkoutOpen}
         onClose={() => setCheckoutOpen(false)}
@@ -401,6 +501,7 @@ export function ReplatformedPosWorkspace({ workspace }: { workspace: Workspace }
         total={total}
         gross={sale?.grossAmount ?? '0.0000'}
         locale={workspace.locale}
+        customer={cartCustomer}
         method={paymentMethod}
         provider={provider}
         tender={tender}
@@ -419,10 +520,21 @@ export function ReplatformedPosWorkspace({ workspace }: { workspace: Workspace }
       <ReferenceTransactionDetail
         sale={queueDetail}
         locale={workspace.locale}
+        employees={workspace.employees}
+        businessName={runtime.branding.businessName ?? runtime.branding.productName}
+        branchName="Main Branch"
+        cashierName={session.identity.displayName}
         onClose={() => setQueueDetail(null)}
+        onNewSale={() => {
+          setQueueDetail(null);
+          setCartCustomer(null);
+          writeStoredCustomer(CURRENT_CUSTOMER_KEY, null);
+          setCartOpen(false);
+          workspace.newSale();
+        }}
       />
       <ReferenceReviewDialog
-        sale={reviewTarget}
+        sale={reviewTarget && sale?.id === reviewTarget.id ? sale : reviewTarget}
         activeSale={workspace.viewModel.sale}
         locale={workspace.locale}
         employees={workspace.employees}
@@ -435,6 +547,7 @@ export function ReplatformedPosWorkspace({ workspace }: { workspace: Workspace }
           setReviewTarget(null);
         }}
         onAssign={setAssignmentLine}
+        onFulfillment={(line, status) => workspace.transitionFulfillment(line, status)}
         onComplete={complete}
       />
       <ReferenceCancelDialog
@@ -740,7 +853,7 @@ function ReferenceQueueCard({
 }) {
   const meta = statusMeta[status];
   const paid = sale.payments.some((payment) => payment.status === 'SUCCEEDED');
-  const customer = saleCustomer();
+  const customer = saleCustomer(sale.id);
   const actionItems = [
     { label: 'Detail', icon: <Eye className="size-3.5" />, onSelect: () => onView(sale) },
     ...(status === 'DRAFT'
@@ -749,6 +862,11 @@ function ReferenceQueueCard({
             label: 'Lanjutkan',
             icon: <PlayCircle className="size-3.5" />,
             onSelect: () => onResume(sale),
+          },
+          {
+            label: 'Review & Selesaikan',
+            icon: <CheckCircle2 className="size-3.5" />,
+            onSelect: () => onComplete(sale),
           },
           {
             label: 'Batalkan',
@@ -835,6 +953,10 @@ function ReferenceFloatingCart({
   total,
   gross,
   locale,
+  customer,
+  employees,
+  onChooseCustomer,
+  onManageEmployee,
   onQuantity,
   onRemove,
   onCheckout,
@@ -845,6 +967,10 @@ function ReferenceFloatingCart({
   total: string;
   gross: string;
   locale: string;
+  customer: PosCustomer | null;
+  employees: readonly Employee[];
+  onChooseCustomer: () => void;
+  onManageEmployee: (line: SaleLine) => void;
   onQuantity: (line: SaleLine, quantity: string) => void;
   onRemove: (line: SaleLine) => void;
   onCheckout: () => void;
@@ -855,6 +981,10 @@ function ReferenceFloatingCart({
       total={total}
       gross={gross}
       locale={locale}
+      customer={customer}
+      employees={employees}
+      onChooseCustomer={onChooseCustomer}
+      onManageEmployee={onManageEmployee}
       onQuantity={onQuantity}
       onRemove={onRemove}
       onCheckout={onCheckout}
@@ -950,6 +1080,10 @@ function ReferenceCartPanel({
   total,
   gross,
   locale,
+  customer,
+  employees,
+  onChooseCustomer,
+  onManageEmployee,
   onQuantity,
   onRemove,
   onCheckout,
@@ -958,6 +1092,10 @@ function ReferenceCartPanel({
   total: string;
   gross: string;
   locale: string;
+  customer: PosCustomer | null;
+  employees: readonly Employee[];
+  onChooseCustomer: () => void;
+  onManageEmployee: (line: SaleLine) => void;
   onQuantity: (line: SaleLine, quantity: string) => void;
   onRemove: (line: SaleLine) => void;
   onCheckout: () => void;
@@ -973,17 +1111,25 @@ function ReferenceCartPanel({
   return (
     <div className="flex min-h-0 flex-1 flex-col bg-[var(--color-background)]">
       <div className="shrink-0 space-y-2.5 border-b border-[var(--color-border)] bg-[var(--color-surface)] px-4 py-3">
-        <div className="flex items-center gap-3 rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface-muted)]/45 px-3 py-3">
+        <button
+          type="button"
+          aria-label="Choose customer"
+          onClick={onChooseCustomer}
+          className="flex w-full items-center gap-3 rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface-muted)]/45 px-3 py-2.5 text-left transition-colors hover:border-[var(--color-brand)]/35 hover:bg-[var(--color-brand)]/5"
+        >
           <div className="grid size-8 place-items-center rounded-xl bg-[var(--color-background)] text-[var(--color-text-muted)]">
             <User className="size-4" />
           </div>
-          <div className="min-w-0">
-            <p className="text-xs font-semibold">Pelanggan umum</p>
-            <p className="mt-0.5 text-[11px] text-[var(--color-text-muted)]">
-              Pemilihan pelanggan belum tersedia pada checkpoint ini.
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-xs font-semibold">
+              {customer?.name ?? 'Pelanggan umum'}
+            </p>
+            <p className="mt-0.5 truncate text-[11px] text-[var(--color-text-muted)]">
+              {customer?.phone ?? 'Pilih pelanggan untuk transaksi ini'}
             </p>
           </div>
-        </div>
+          <ChevronDown className="size-4 shrink-0 text-[var(--color-text-muted)]" />
+        </button>
       </div>
       <div
         className={`min-h-0 border-y border-[var(--color-border)] bg-[var(--color-surface-muted)]/20 ${lines.length ? 'flex-1 overflow-y-auto' : 'shrink-0'}`}
@@ -1017,6 +1163,20 @@ function ReferenceCartPanel({
                     <Trash2 className="size-3.5" />
                   </button>
                 </div>
+                {line.itemTypeSnapshot === 'SERVICE' ? (
+                  <button
+                    type="button"
+                    onClick={() => onManageEmployee(line)}
+                    className="mt-2 flex w-full items-center justify-between gap-2 rounded-xl bg-[var(--color-brand)]/5 px-3 py-2 text-left text-xs transition-colors hover:bg-[var(--color-brand)]/10"
+                  >
+                    <span className="min-w-0 truncate font-semibold text-[var(--color-brand)]">
+                      {employeeSummary(line, employees)}
+                    </span>
+                    <span className="shrink-0 text-[10px] font-semibold text-[var(--color-text-muted)]">
+                      Atur
+                    </span>
+                  </button>
+                ) : null}
                 <div className="mt-3 flex items-center justify-between gap-3">
                   <div className="inline-grid grid-cols-[36px_48px_36px] items-center overflow-hidden rounded-lg border border-[var(--color-border)] bg-[var(--color-background)] shadow-[inset_0_1px_0_rgb(15_23_42_/_0.02)]">
                     <button
@@ -1095,6 +1255,164 @@ function ReferenceCartPanel({
   );
 }
 
+function ReferenceCustomerDialog({
+  open,
+  customer,
+  onClose,
+  onChoose,
+  onUseGeneralCustomer,
+}: {
+  open: boolean;
+  customer: PosCustomer | null;
+  onClose: () => void;
+  onChoose: (customer: PosCustomer) => void;
+  onUseGeneralCustomer: () => void;
+}) {
+  const [query, setQuery] = useState('');
+  const [isQuickAddOpen, setQuickAddOpen] = useState(false);
+  const [name, setName] = useState('');
+  const [phone, setPhone] = useState('');
+  const normalizedQuery = query.trim().toLowerCase();
+  const matches = localCustomerChoices.filter(
+    (choice) =>
+      !normalizedQuery ||
+      `${choice.name} ${choice.phone}`.toLowerCase().includes(normalizedQuery),
+  );
+  const addCustomer = () => {
+    const normalizedName = name.trim();
+    const normalizedPhone = phone.trim();
+    if (!normalizedName || !normalizedPhone) return;
+    onChoose({ name: normalizedName, phone: normalizedPhone });
+    setName('');
+    setPhone('');
+    setQuickAddOpen(false);
+  };
+
+  return (
+    <Dialog
+      open={open}
+      onClose={onClose}
+      ariaLabel="Choose customer"
+      closeOnEscape
+      closeOnOverlay
+      className="pos-reference-dialog w-full max-w-md overflow-hidden rounded-t-2xl bg-[var(--color-surface)] shadow-xl sm:rounded-xl"
+    >
+      <div className="flex max-h-[80dvh] min-h-0 flex-col">
+        <header className="flex items-center justify-between border-b border-[var(--color-border)] px-5 py-4">
+          <div>
+            <h2 className="text-base font-bold">Pilih pelanggan</h2>
+            <p className="mt-0.5 text-xs text-[var(--color-text-muted)]">
+              Hanya untuk konteks transaksi ini.
+            </p>
+          </div>
+          <button
+            type="button"
+            aria-label="Close customer picker"
+            onClick={onClose}
+            className="rounded-lg p-2 text-[var(--color-text-muted)] hover:bg-[var(--color-surface-muted)]"
+          >
+            <X className="size-[18px]" />
+          </button>
+        </header>
+        <div className="min-h-0 space-y-3 overflow-y-auto p-4">
+          <PosInput
+            aria-label="Search customers by name or phone"
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder="Cari nama atau nomor telepon"
+            leftIcon={<Search className="size-4" />}
+            clearable={Boolean(query)}
+            onClear={() => setQuery('')}
+            className="h-10 rounded-xl"
+          />
+          <button
+            type="button"
+            onClick={onUseGeneralCustomer}
+            className={`flex w-full items-center gap-3 rounded-xl border px-3 py-3 text-left transition-colors ${customer === null ? 'border-[var(--color-brand)] bg-[var(--color-brand)]/5' : 'border-[var(--color-border)] hover:bg-[var(--color-surface-muted)]'}`}
+          >
+            <div className="grid size-8 place-items-center rounded-lg bg-[var(--color-surface-muted)] text-[var(--color-text-muted)]">
+              <User className="size-4" />
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-semibold">Gunakan pelanggan umum</p>
+              <p className="mt-0.5 text-xs text-[var(--color-text-muted)]">
+                Lanjutkan tanpa memilih pelanggan.
+              </p>
+            </div>
+            {customer === null ? <CheckCircle2 className="size-4 text-[var(--color-brand)]" /> : null}
+          </button>
+          <div className="space-y-1.5">
+            {matches.map((choice) => {
+              const selected = customer?.name === choice.name && customer.phone === choice.phone;
+              return (
+                <button
+                  key={`${choice.name}-${choice.phone}`}
+                  type="button"
+                  onClick={() => onChoose(choice)}
+                  className={`flex w-full items-center gap-3 rounded-xl border px-3 py-2.5 text-left transition-colors ${selected ? 'border-[var(--color-brand)] bg-[var(--color-brand)]/5' : 'border-[var(--color-border)] hover:bg-[var(--color-surface-muted)]'}`}
+                >
+                  <div className="grid size-8 place-items-center rounded-lg bg-[var(--color-surface-muted)] text-[var(--color-text-muted)]">
+                    <User className="size-4" />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-semibold">{choice.name}</p>
+                    <p className="mt-0.5 text-xs text-[var(--color-text-muted)]">{choice.phone}</p>
+                  </div>
+                  {selected ? <CheckCircle2 className="size-4 text-[var(--color-brand)]" /> : null}
+                </button>
+              );
+            })}
+            {!matches.length ? (
+              <p className="px-1 py-3 text-center text-xs text-[var(--color-text-muted)]">
+                Pelanggan tidak ditemukan.
+              </p>
+            ) : null}
+          </div>
+          <div className="border-t border-[var(--color-border)] pt-3">
+            {isQuickAddOpen ? (
+              <div className="space-y-2 rounded-xl bg-[var(--color-surface-muted)]/50 p-3">
+                <p className="text-xs font-semibold">Tambah pelanggan cepat</p>
+                <PosInput
+                  aria-label="Customer name"
+                  value={name}
+                  onChange={(event) => setName(event.target.value)}
+                  placeholder="Nama pelanggan"
+                  className="h-9 rounded-lg text-sm"
+                />
+                <PosInput
+                  aria-label="Customer phone"
+                  value={phone}
+                  onChange={(event) => setPhone(event.target.value)}
+                  placeholder="Nomor telepon"
+                  inputMode="tel"
+                  className="h-9 rounded-lg text-sm"
+                />
+                <div className="flex justify-end gap-2 pt-1">
+                  <Button variant="ghost" size="sm" onClick={() => setQuickAddOpen(false)}>
+                    Batal
+                  </Button>
+                  <Button size="sm" disabled={!name.trim() || !phone.trim()} onClick={addCustomer}>
+                    Gunakan pelanggan
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setQuickAddOpen(true)}
+                className="flex w-full items-center justify-center gap-2 rounded-xl border border-dashed border-[var(--color-border)] px-3 py-2.5 text-xs font-semibold text-[var(--color-brand)] transition-colors hover:bg-[var(--color-brand)]/5"
+              >
+                <UserPlus className="size-4" />
+                Tambah pelanggan cepat
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+    </Dialog>
+  );
+}
+
 function ReferencePaymentDialog({
   open,
   onClose,
@@ -1102,6 +1420,7 @@ function ReferencePaymentDialog({
   total,
   gross,
   locale,
+  customer,
   method,
   provider,
   tender,
@@ -1120,6 +1439,7 @@ function ReferencePaymentDialog({
   total: string;
   gross: string;
   locale: string;
+  customer: PosCustomer | null;
   method: PaymentMethod;
   provider: string;
   tender: string;
@@ -1181,7 +1501,9 @@ function ReferencePaymentDialog({
               </div>
               <div className="min-w-0 text-right">
                 <p className="text-xs text-[var(--color-text-muted)]">Pelanggan</p>
-                <p className="max-w-[170px] truncate text-sm font-semibold">Umum</p>
+                <p className="max-w-[170px] truncate text-sm font-semibold">
+                  {customer?.name ?? 'Pelanggan umum'}
+                </p>
                 <p className="text-[11px] text-[var(--color-text-muted)]">{lines.length} item</p>
               </div>
             </div>
@@ -1260,7 +1582,7 @@ function ReferencePaymentDialog({
               <div className="mt-3 rounded-xl border border-[var(--color-brand)]/20 bg-[var(--color-brand)]/5 p-3">
                 <p className="text-sm font-bold text-[var(--color-brand)]">QRIS</p>
                 <p className="mt-1 text-xs text-[var(--color-text-muted)]">
-                  Pembayaran QRIS akan dicatat sebagai pembayaran tertunda untuk review POS.
+                  Pembayaran QRIS akan dicatat sebagai pembayaran berhasil untuk transaksi ini.
                 </p>
               </div>
             ) : null}
@@ -1339,7 +1661,7 @@ function ReferencePaymentDialog({
             onClick={onPay}
             leftIcon={<CheckCircle2 className="size-3.5" />}
           >
-            {method === 'QRIS' ? 'Buat QRIS' : 'Bayar Langsung'}
+            {method === 'QRIS' ? 'Bayar QRIS' : 'Bayar Langsung'}
           </Button>
         </footer>
       </div>
@@ -1350,156 +1672,211 @@ function ReferencePaymentDialog({
 function ReferenceTransactionDetail({
   sale,
   locale,
+  employees,
+  businessName,
+  branchName,
+  cashierName,
   onClose,
+  onNewSale,
 }: {
   sale: Sale | null;
   locale: string;
+  employees: readonly Employee[];
+  businessName: string;
+  branchName: string;
+  cashierName: string;
   onClose: () => void;
+  onNewSale: () => void;
 }) {
   if (!sale) return null;
   const status =
     sale.status === 'FINALIZED' ? 'COMPLETED' : sale.status === 'VOIDED' ? 'CANCELED' : 'DRAFT';
-  const customer = saleCustomer();
+  const customer = saleCustomer(sale.id);
+  const activeLines = sale.lines.filter((line) => !line.removedAt);
+  const payment = sale.payments.find((candidate) => candidate.status === 'SUCCEEDED') ?? null;
+  const finalized = sale.status === 'FINALIZED';
+  const transactionDate = new Intl.DateTimeFormat(locale, {
+    dateStyle: 'medium',
+    timeStyle: 'short',
+  }).format(new Date(sale.finalizedAt ?? sale.updatedAt));
+
   return (
     <Dialog
       open
       onClose={onClose}
-      ariaLabel="Transaction detail"
+      ariaLabel={finalized ? 'Receipt preview' : 'Transaction detail'}
       closeOnEscape
       closeOnOverlay
-      className="pos-reference-dialog w-full max-w-lg overflow-hidden rounded-t-2xl bg-[var(--color-surface)] shadow-xl sm:rounded-xl"
+      className={`pos-reference-dialog w-full overflow-hidden rounded-t-2xl bg-[var(--color-surface)] shadow-xl sm:rounded-xl ${finalized ? 'max-w-md' : 'max-w-lg'}`}
     >
-      <div className="flex max-h-[85dvh] min-h-0 flex-col">
-        <header className="flex items-center justify-between border-b border-[var(--color-border)] px-6 py-4">
-          <div>
-            <h2 className="text-lg font-semibold">Detail Transaksi POS</h2>
-            <p className="mt-0.5 font-mono text-sm text-[var(--color-text-muted)]">
-              {transactionNumber(sale.id)}
-            </p>
-          </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="rounded-lg p-2 text-[var(--color-text-muted)] hover:bg-[var(--color-surface-muted)]"
-          >
-            <X className="size-[18px]" />
-          </button>
-        </header>
-        <div className="min-h-0 flex-1 space-y-4 overflow-y-auto bg-[var(--color-surface-muted)]/30 px-4 py-4">
-          <div className="overflow-hidden rounded-2xl border border-[var(--color-border)] bg-[var(--color-background)]">
-            <div className="bg-gradient-to-br from-[var(--color-brand)]/5 to-transparent px-5 py-4">
-              <div className="flex items-center gap-2 text-xs text-[var(--color-text-muted)]">
-                <Clock className="size-3.5" />
-                <span className="font-mono">{transactionNumber(sale.id)}</span>
-              </div>
-              <p className="mt-3 text-xs text-[var(--color-text-muted)]">Total Transaksi</p>
-              <h3 className="mt-0.5 text-3xl font-bold tracking-tight">
-                {money(sale.totalAmount, locale)}
-              </h3>
-              <div className="mt-3 flex flex-wrap items-center gap-2">
-                <span
-                  className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${statusMeta[status].tone}`}
-                >
-                  {statusMeta[status].label}
-                </span>
-                <span className="rounded-full bg-[var(--color-surface-muted)] px-2.5 py-0.5 text-xs font-medium">
-                  {sale.payments.some((payment) => payment.status === 'SUCCEEDED')
-                    ? 'Lunas'
-                    : 'Belum Bayar'}
-                </span>
-              </div>
-            </div>
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            <ReferenceInfoTile
-              icon={<User className="size-4" />}
-              label="Pelanggan"
-              value={customer.name || 'Umum'}
-              sub={customer.phone}
-            />
-            <ReferenceInfoTile
-              icon={<ShoppingBag className="size-4" />}
-              label="Total Item"
-              value={`${sale.lines.filter((line) => !line.removedAt).length} item`}
-              sub={`${sale.lines
-                .filter((line) => !line.removedAt)
-                .map((line) => quantity(line.quantity))
-                .join(' + ')} qty`}
-            />
-          </div>
-          <div className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-background)] p-4">
-            <p className="mb-3 text-xs uppercase tracking-wide text-[var(--color-text-muted)]">
-              Ringkasan
-            </p>
-            <div className="space-y-2 text-sm">
-              <div className="flex justify-between">
-                <span className="text-[var(--color-text-muted)]">Subtotal</span>
-                <span>{money(sale.grossAmount, locale)}</span>
-              </div>
-              <div className="flex justify-between border-t border-[var(--color-border)] pt-2">
-                <span className="font-medium">Total</span>
-                <span className="text-base font-bold text-[var(--color-brand)]">
-                  {money(sale.totalAmount, locale)}
-                </span>
-              </div>
-            </div>
-          </div>
-          <div className="divide-y divide-[var(--color-border)] overflow-hidden rounded-2xl border border-[var(--color-border)] bg-[var(--color-background)]">
-            <div className="px-4 py-3 text-xs uppercase tracking-wide text-[var(--color-text-muted)]">
-              Daftar Item
-            </div>
-            {sale.lines
-              .filter((line) => !line.removedAt)
-              .map((line) => (
-                <div key={line.id} className="p-4">
+      {finalized ? (
+        <div className="flex max-h-[92dvh] min-h-0 flex-col">
+          <div className="pos-receipt-print min-h-0 flex-1 overflow-y-auto bg-white px-6 py-6 text-slate-950">
+            <header className="text-center">
+              <h2 className="text-lg font-black tracking-tight">{businessName}</h2>
+              <p className="mt-1 text-xs text-slate-500">{branchName}</p>
+              <div className="my-4 border-t border-dashed border-slate-300" />
+              <p className="font-mono text-xs font-semibold">{transactionNumber(sale.id)}</p>
+              <p className="mt-1 text-[11px] text-slate-500">{transactionDate}</p>
+              <p className="mt-1 text-[11px] text-slate-500">Kasir: {cashierName}</p>
+            </header>
+
+            <section className="mt-4 text-xs">
+              <p className="font-semibold">Pelanggan</p>
+              <p className="mt-1">{customer.name}</p>
+              {customer.phone ? <p className="text-slate-500">{customer.phone}</p> : null}
+            </section>
+
+            <div className="my-4 border-t border-dashed border-slate-300" />
+
+            <section className="space-y-4">
+              {activeLines.map((line) => (
+                <div key={line.id} className="text-xs">
                   <div className="flex items-start justify-between gap-3">
-                    <div className="flex min-w-0 items-start gap-2">
-                      <div
-                        className={`flex size-8 shrink-0 items-center justify-center rounded-lg ${line.itemTypeSnapshot === 'SERVICE' ? 'bg-cyan-500/10 text-cyan-600' : 'bg-[var(--color-brand)]/10 text-[var(--color-brand)]'}`}
-                      >
-                        {line.itemTypeSnapshot === 'SERVICE' ? (
-                          <Wrench className="size-4" />
-                        ) : (
-                          <ShoppingBag className="size-4" />
-                        )}
-                      </div>
-                      <div className="min-w-0">
-                        <p className="truncate text-sm font-semibold">{line.itemNameSnapshot}</p>
-                        <p className="text-xs text-[var(--color-text-muted)]">
-                          {quantity(line.quantity)} × {money(line.effectiveUnitPrice, locale)}
-                          {line.variantNameSnapshot ? ` · ${line.variantNameSnapshot}` : ''}
-                        </p>
-                      </div>
+                    <div className="min-w-0">
+                      <p className="font-bold">{line.itemNameSnapshot}</p>
+                      {line.variantNameSnapshot ? (
+                        <p className="mt-0.5 text-slate-500">{line.variantNameSnapshot}</p>
+                      ) : null}
                     </div>
-                    <p className="shrink-0 text-sm font-bold">{money(line.totalAmount, locale)}</p>
+                    <p className="shrink-0 font-bold">{money(line.totalAmount, locale)}</p>
                   </div>
-                  {line.participations.some((participation) => participation.assigned) ? (
-                    <div className="mt-2 flex flex-wrap gap-1 pl-10">
-                      {line.participations
-                        .filter((participation) => participation.assigned)
-                        .map((participation) => (
-                          <span
-                            key={participation.employeeId}
-                            className="rounded-full bg-[var(--color-surface-muted)] px-2 py-0.5 text-[10px]"
-                          >
-                            {participation.employeeId}{' '}
-                            {participation.shareRate
-                              ? `${createDecimal(participation.shareRate).times(100).toFixed(0)}%`
-                              : ''}
-                          </span>
-                        ))}
-                    </div>
+                  <p className="mt-1 text-slate-500">
+                    {quantity(line.quantity)} × {money(line.effectiveUnitPrice, locale)}
+                  </p>
+                  {line.itemTypeSnapshot === 'SERVICE' &&
+                  line.participations.some((participation) => participation.assigned) ? (
+                    <p className="mt-1 leading-5 text-slate-600">
+                      {employeeSummary(line, employees)}
+                    </p>
                   ) : null}
                 </div>
               ))}
+            </section>
+
+            <div className="my-4 border-t border-dashed border-slate-300" />
+
+            <dl className="space-y-1.5 text-xs">
+              <div className="flex justify-between gap-3">
+                <dt className="text-slate-500">Subtotal</dt>
+                <dd>{money(sale.grossAmount, locale)}</dd>
+              </div>
+              {sale.discountAmount !== '0.0000' ? (
+                <div className="flex justify-between gap-3">
+                  <dt className="text-slate-500">Diskon</dt>
+                  <dd>−{money(sale.discountAmount, locale)}</dd>
+                </div>
+              ) : null}
+              <div className="flex justify-between gap-3">
+                <dt className="text-slate-500">Pajak</dt>
+                <dd>{money(sale.taxAmount, locale)}</dd>
+              </div>
+              <div className="mt-2 flex justify-between gap-3 border-t border-slate-200 pt-2 text-sm font-black">
+                <dt>TOTAL</dt>
+                <dd>{money(sale.totalAmount, locale)}</dd>
+              </div>
+            </dl>
+
+            <div className="my-4 border-t border-dashed border-slate-300" />
+
+            <section className="space-y-1.5 text-xs">
+              <div className="flex justify-between gap-3">
+                <span className="text-slate-500">Pembayaran</span>
+                <span className="font-semibold">{payment?.method.replace('_', ' ') ?? '-'}</span>
+              </div>
+              <div className="flex justify-between gap-3">
+                <span className="text-slate-500">Dibayar</span>
+                <span>{payment ? money(payment.appliedAmount, locale) : '-'}</span>
+              </div>
+              {payment?.method === 'CASH' ? (
+                <>
+                  <div className="flex justify-between gap-3">
+                    <span className="text-slate-500">Uang diterima</span>
+                    <span>{money(payment.tenderedAmount ?? payment.appliedAmount, locale)}</span>
+                  </div>
+                  <div className="flex justify-between gap-3">
+                    <span className="text-slate-500">Kembalian</span>
+                    <span>{money(payment.changeAmount ?? '0.0000', locale)}</span>
+                  </div>
+                </>
+              ) : null}
+            </section>
+
+            <div className="my-4 border-t border-dashed border-slate-300" />
+            <p className="text-center text-xs font-bold">LUNAS · FINALIZED</p>
+            <p className="mt-2 text-center text-[11px] text-slate-500">
+              Terima kasih telah bertransaksi.
+            </p>
           </div>
+
+          <footer className="pos-receipt-actions flex shrink-0 gap-2 border-t border-[var(--color-border)] bg-[var(--color-surface)] px-4 py-3">
+            <Button variant="outline" className="flex-1" onClick={onClose}>
+              Tutup
+            </Button>
+            <Button variant="outline" className="flex-1" onClick={() => window.print()}>
+              <Printer className="mr-2 size-4" /> Cetak
+            </Button>
+            <Button className="flex-1" onClick={onNewSale}>
+              Transaksi Baru
+            </Button>
+          </footer>
         </div>
-        <footer className="shrink-0 border-t border-[var(--color-border)] bg-[var(--color-surface-muted)]/30 px-6 py-3 text-right">
-          <Button variant="outline" onClick={onClose}>
-            Tutup
-          </Button>
-        </footer>
-      </div>
+      ) : (
+        <div className="flex max-h-[85dvh] min-h-0 flex-col">
+          <header className="flex items-center justify-between border-b border-[var(--color-border)] px-6 py-4">
+            <div>
+              <h2 className="text-lg font-semibold">Detail Transaksi POS</h2>
+              <p className="mt-0.5 font-mono text-sm text-[var(--color-text-muted)]">
+                {transactionNumber(sale.id)}
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={onClose}
+              className="rounded-lg p-2 text-[var(--color-text-muted)] hover:bg-[var(--color-surface-muted)]"
+            >
+              <X className="size-[18px]" />
+            </button>
+          </header>
+          <div className="min-h-0 flex-1 space-y-4 overflow-y-auto bg-[var(--color-surface-muted)]/30 px-4 py-4">
+            <div className="overflow-hidden rounded-2xl border border-[var(--color-border)] bg-[var(--color-background)]">
+              <div className="bg-gradient-to-br from-[var(--color-brand)]/5 to-transparent px-5 py-4">
+                <p className="font-mono text-xs text-[var(--color-text-muted)]">{transactionNumber(sale.id)}</p>
+                <p className="mt-3 text-xs text-[var(--color-text-muted)]">Total Transaksi</p>
+                <h3 className="mt-0.5 text-3xl font-bold tracking-tight">{money(sale.totalAmount, locale)}</h3>
+                <span className={`mt-3 inline-flex rounded-full px-2.5 py-0.5 text-xs font-medium ${statusMeta[status].tone}`}>
+                  {statusMeta[status].label}
+                </span>
+              </div>
+            </div>
+            <ReferenceInfoTile
+              icon={<User className="size-4" />}
+              label="Pelanggan"
+              value={customer.name}
+              sub={customer.phone || undefined}
+            />
+            <div className="divide-y divide-[var(--color-border)] overflow-hidden rounded-2xl border border-[var(--color-border)] bg-[var(--color-background)]">
+              {activeLines.map((line) => (
+                <div key={line.id} className="p-4">
+                  <div className="flex justify-between gap-3">
+                    <div>
+                      <p className="text-sm font-semibold">{line.itemNameSnapshot}</p>
+                      <p className="mt-1 text-xs text-[var(--color-text-muted)]">
+                        {quantity(line.quantity)} × {money(line.effectiveUnitPrice, locale)}
+                        {line.variantNameSnapshot ? ` · ${line.variantNameSnapshot}` : ''}
+                      </p>
+                    </div>
+                    <p className="text-sm font-bold">{money(line.totalAmount, locale)}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+          <footer className="shrink-0 border-t border-[var(--color-border)] bg-[var(--color-surface-muted)]/30 px-6 py-3 text-right">
+            <Button variant="outline" onClick={onClose}>Tutup</Button>
+          </footer>
+        </div>
+      )}
     </Dialog>
   );
 }
@@ -1542,6 +1919,7 @@ function ReferenceReviewDialog({
   onClose,
   onFix,
   onAssign,
+  onFulfillment,
   onComplete,
 }: {
   sale: Sale | null;
@@ -1552,6 +1930,7 @@ function ReferenceReviewDialog({
   onClose: () => void;
   onFix: () => void;
   onAssign: (line: SaleLine) => void;
+  onFulfillment: (line: SaleLine, status: 'IN_PROGRESS' | 'COMPLETED') => void;
   onComplete: () => void;
 }) {
   if (!sale) return null;
@@ -1576,7 +1955,7 @@ function ReferenceReviewDialog({
           <div>
             <h2 className="text-lg font-semibold">Review &amp; Selesaikan</h2>
             <p className="mt-0.5 text-sm text-[var(--color-text-muted)]">
-              {transactionNumber(sale.id)} · {saleCustomer().name}
+              {transactionNumber(sale.id)} · {saleCustomer(sale.id).name}
             </p>
           </div>
           <button
@@ -1649,6 +2028,36 @@ function ReferenceReviewDialog({
                                   : 'Pilih karyawan'}
                               </button>
                             ) : null}
+                            {line.fulfillmentBehaviorSnapshot === 'TRACKED' ? (
+                              <>
+                                <span className="rounded-md bg-[var(--color-surface-muted)] px-2 py-1 font-semibold text-[var(--color-text-muted)]">
+                                  {line.fulfillment?.status === 'COMPLETED'
+                                    ? 'Pekerjaan selesai'
+                                    : line.fulfillment?.status === 'IN_PROGRESS'
+                                      ? 'Sedang dikerjakan'
+                                      : 'Menunggu dikerjakan'}
+                                </span>
+                                {line.fulfillment?.status !== 'COMPLETED' ? (
+                                  <button
+                                    type="button"
+                                    disabled={!active}
+                                    onClick={() =>
+                                      onFulfillment(
+                                        line,
+                                        line.fulfillment?.status === 'IN_PROGRESS'
+                                          ? 'COMPLETED'
+                                          : 'IN_PROGRESS',
+                                      )
+                                    }
+                                    className="rounded-md bg-[var(--color-brand)]/10 px-2 py-1 font-semibold text-[var(--color-brand)] transition-colors hover:bg-[var(--color-brand)]/15 disabled:opacity-50"
+                                  >
+                                    {line.fulfillment?.status === 'IN_PROGRESS'
+                                      ? 'Tandai selesai'
+                                      : 'Mulai pekerjaan'}
+                                  </button>
+                                ) : null}
+                              </>
+                            ) : null}
                           </div>
                         ) : null}
                       </div>
@@ -1664,8 +2073,8 @@ function ReferenceReviewDialog({
             <ReferenceInfoTile
               icon={<User className="size-4" />}
               label="Pelanggan"
-              value={saleCustomer().name}
-              sub={saleCustomer().phone}
+              value={saleCustomer(sale.id).name}
+              sub={saleCustomer(sale.id).phone || undefined}
             />
             <ReferenceInfoTile
               icon={<CreditCard className="size-4" />}

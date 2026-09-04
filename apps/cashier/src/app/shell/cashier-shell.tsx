@@ -1,5 +1,4 @@
 import { useAuth } from '@digvation/pos-auth';
-import { ApiClient } from '@digvation/pos-api';
 import { useConnectivity, useRuntime } from '@digvation/pos-runtime';
 import { Button, Dialog } from '@digvation/pos-ui';
 import { useQuery } from '@tanstack/react-query';
@@ -15,9 +14,9 @@ import {
 import { useEffect, useMemo } from 'react';
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router';
 
-import { useCashierSession } from '../providers/cashier-session-provider';
 import { cashierTransactionKeys } from '../../features/sell/cashier-transaction-keys';
-import { HttpCashierTransactionAdapter } from '../../features/sell/cashier-transaction.adapter';
+import { createCashierTransactionAdapter } from '../../features/sell/cashier-transaction-client';
+import { useCashierSession } from '../providers/cashier-session-provider';
 import { getAppVersion } from '../version/app-version';
 
 const NAVIGATION = [
@@ -50,7 +49,7 @@ export function CashierShell() {
   const routerLocation = useLocation();
   const version = getAppVersion();
   const transactionAdapter = useMemo(
-    () => new HttpCashierTransactionAdapter(new ApiClient({ baseUrl: runtime.apiBaseUrl })),
+    () => createCashierTransactionAdapter(runtime.apiBaseUrl),
     [runtime.apiBaseUrl],
   );
   const locationsQuery = useQuery({
@@ -195,9 +194,7 @@ export function CashierShell() {
         className="w-full max-w-md rounded-t-[var(--radius-panel)] bg-[var(--color-surface)] shadow-2xl sm:rounded-[var(--radius-panel)]"
       >
         <div className="border-b border-[var(--color-border)] px-5 py-4">
-          <p className="text-xs font-bold uppercase tracking-[0.14em] text-[var(--color-brand)]">
-            Workspace
-          </p>
+          <p className="text-xs font-bold uppercase tracking-[0.14em] text-[var(--color-brand)]">Workspace</p>
           <h2 className="mt-1 text-lg font-bold">Choose active branch</h2>
           <p className="mt-1 text-sm text-[var(--color-text-muted)]">
             Sales and catalog pricing use this branch context.
@@ -207,9 +204,7 @@ export function CashierShell() {
           {locationsQuery.isLoading ? (
             <p className="p-3 text-sm text-[var(--color-text-muted)]">Loading branches…</p>
           ) : locations.length === 0 ? (
-            <div className="p-3 text-sm text-[var(--color-text-muted)]">
-              No active branches are available for this workspace.
-            </div>
+            <div className="p-3 text-sm text-[var(--color-text-muted)]">No active branches are available for this workspace.</div>
           ) : (
             <div className="space-y-1">
               {locations.map((location) => {
@@ -227,9 +222,7 @@ export function CashierShell() {
                   >
                     <span className="min-w-0">
                       <span className="block truncate text-sm font-semibold">{location.name}</span>
-                      <span className="mt-0.5 block font-mono text-[10px] text-[var(--color-text-muted)]">
-                        {location.code}
-                      </span>
+                      <span className="mt-0.5 block font-mono text-[10px] text-[var(--color-text-muted)]">{location.code}</span>
                     </span>
                     {isSelected ? <Check className="size-4 shrink-0" /> : null}
                   </button>
@@ -239,9 +232,7 @@ export function CashierShell() {
           )}
         </div>
         <div className="border-t border-[var(--color-border)] p-3">
-          <Button variant="secondary" className="w-full" onClick={closeBranchPicker}>
-            Close
-          </Button>
+          <Button variant="secondary" className="w-full" onClick={closeBranchPicker}>Close</Button>
         </div>
       </Dialog>
     </div>

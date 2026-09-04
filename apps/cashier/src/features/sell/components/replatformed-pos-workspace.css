@@ -37,3 +37,35 @@
 .no-scrollbar::-webkit-scrollbar {
   display: none;
 }
+
+@media print {
+  @page {
+    margin: 8mm;
+  }
+
+  body * {
+    visibility: hidden !important;
+  }
+
+  .pos-receipt-print,
+  .pos-receipt-print * {
+    visibility: visible !important;
+  }
+
+  .pos-receipt-print {
+    position: fixed;
+    inset: 0;
+    width: 80mm;
+    max-width: 80mm;
+    height: auto;
+    margin: 0 auto;
+    overflow: visible !important;
+    background: white !important;
+    color: black !important;
+    box-shadow: none !important;
+  }
+
+  .pos-receipt-actions {
+    display: none !important;
+  }
+}
