@@ -64,7 +64,9 @@ export function BackofficeShell() {
 
           <div className="mt-6 hidden rounded-[var(--radius-card)] border border-[var(--color-border)] bg-[var(--color-surface-muted)] p-3 text-xs leading-5 text-[var(--color-text-muted)] lg:block">
             Signed in as{' '}
-            <strong className="text-[var(--color-text)]">{session.identity.displayName}</strong>
+            <strong className="text-[var(--color-text)]">
+              {session?.identity.displayName ?? 'Unauthenticated user'}
+            </strong>
           </div>
         </aside>
 

@@ -10,6 +10,7 @@ export interface AuthSession {
 }
 
 export interface AuthPort {
-  me(): Promise<AuthSession>;
+  me(): Promise<AuthSession | null>;
+  login(username: string, password: string): Promise<AuthSession>;
   logout(): Promise<void>;
 }

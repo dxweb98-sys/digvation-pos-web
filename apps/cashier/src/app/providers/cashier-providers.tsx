@@ -21,7 +21,7 @@ const queryClient = new QueryClient({
 
 interface CashierProvidersProps {
   runtime: RuntimeConfig;
-  session: AuthSession;
+  session: AuthSession | null;
   authPort: AuthPort;
   router: RouterProviderProps['router'];
 }

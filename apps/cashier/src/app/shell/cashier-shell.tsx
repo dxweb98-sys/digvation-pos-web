@@ -23,10 +23,12 @@ function formatCurrentDate(locale: string): string {
 export function CashierShell() {
   const runtime = useRuntime();
   const connectivity = useConnectivity();
-  const { session } = useAuth();
+  const { session, logout } = useAuth();
   const version = getAppVersion();
   const brandSubtitle =
     runtime.branding.businessName ?? runtime.branding.companyName ?? runtime.workspace;
+
+  if (!session) return null;
 
   return (
     <div className="flex h-screen flex-col overflow-hidden bg-[var(--color-background)] lg:grid lg:grid-cols-[248px_minmax(0,1fr)]">
@@ -105,7 +107,16 @@ export function CashierShell() {
           </div>
           <div className="min-w-0 text-right">
             <p className="truncate text-sm font-semibold">{session.identity.displayName}</p>
-            <p className="text-xs text-[var(--color-text-muted)]">{runtime.deploymentProfile}</p>
+            <div className="flex items-center justify-end gap-2">
+              <p className="text-xs text-[var(--color-text-muted)]">{runtime.deploymentProfile}</p>
+              <button
+                type="button"
+                onClick={() => void logout()}
+                className="text-xs font-semibold text-[var(--color-brand)] underline-offset-2 hover:underline"
+              >
+                Sign out
+              </button>
+            </div>
           </div>
         </header>
 

@@ -8,15 +8,19 @@ export function AccountPage() {
   const runtime = useRuntime();
   const version = getAppVersion();
 
-  return (
-    <section className="px-5 py-6 lg:px-8 lg:py-8">
-      <div className="mx-auto max-w-4xl">
-        <h1 className="text-2xl font-bold tracking-[-0.03em]">Account & diagnostics</h1>
-        <p className="mt-2 text-sm text-[var(--color-text-muted)]">
-          Development identity and runtime facts for the current frontend foundation.
-        </p>
+  if (!session) return null;
 
-        <dl className="mt-6 grid gap-3 sm:grid-cols-2">
+  return (
+    <section className="h-full min-h-0 overflow-y-auto px-4 py-4 lg:px-6 lg:py-5">
+      <div className="mx-auto max-w-[1800px]">
+        <div className="rounded-[var(--radius-card)] border border-[var(--color-border)] bg-[var(--color-surface)] p-4 shadow-[var(--shadow-panel)]">
+          <h1 className="text-xl font-bold tracking-[-0.03em]">Account & diagnostics</h1>
+          <p className="mt-1 text-sm text-[var(--color-text-muted)]">
+            Current workspace and application details.
+          </p>
+        </div>
+
+        <dl className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
           {[
             ['User', session.identity.displayName],
             ['Workspace', runtime.workspace],
@@ -27,7 +31,7 @@ export function AccountPage() {
           ].map(([label, value]) => (
             <div
               key={label}
-              className="rounded-2xl border border-[var(--color-border)] bg-white p-5"
+              className="rounded-[var(--radius-card)] border border-[var(--color-border)] bg-[var(--color-surface)] p-4 shadow-[var(--shadow-panel)]"
             >
               <dt className="text-xs font-semibold uppercase tracking-[0.12em] text-[var(--color-text-muted)]">
                 {label}

@@ -13,7 +13,7 @@ const queryClient = new QueryClient({
 
 interface BackofficeProvidersProps {
   runtime: RuntimeConfig;
-  session: AuthSession;
+  session: AuthSession | null;
   authPort: AuthPort;
   router: RouterProviderProps['router'];
 }

@@ -8,6 +8,8 @@ export function AccountPage() {
   const runtime = useRuntime();
   const version = getAppVersion();
 
+  if (!session) return null;
+
   return (
     <section className="px-5 py-6 lg:px-8 lg:py-8">
       <div className="max-w-3xl rounded-2xl border border-[var(--color-border)] bg-white p-6 shadow-sm">
