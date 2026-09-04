@@ -8,14 +8,17 @@ import { useNavigate } from 'react-router';
 
 import { useCashierSession } from '../../app/providers/cashier-session-provider';
 import { cashierTransactionKeys } from '../../features/sell/cashier-transaction-keys';
-import { createCashierTransactionAdapter } from '../../features/sell/cashier-transaction-adapter-factory';
+import { createCashierTransactionAdapter } from '../../features/sell/cashier-transaction-client';
 import type { OpenSaleSummaryViewModel } from '../../features/sell/cashier-transaction.types';
 
 export function OpenSalesPage() {
   const runtime = useRuntime();
   const navigate = useNavigate();
   const { selectedLocationId, recentSaleIds, selectLocation, rememberSale } = useCashierSession();
-  const transactionAdapter = useMemo(() => createCashierTransactionAdapter(runtime), [runtime]);
+  const transactionAdapter = useMemo(
+    () => createCashierTransactionAdapter(runtime.apiBaseUrl),
+    [runtime.apiBaseUrl],
+  );
 
   const locationsQuery = useQuery({
     queryKey: cashierTransactionKeys.locations(),
@@ -64,9 +67,7 @@ export function OpenSalesPage() {
         <div className="flex flex-col gap-3 rounded-[var(--radius-card)] border border-[var(--color-border)] bg-[var(--color-surface)] p-4 shadow-[var(--shadow-panel)] sm:flex-row sm:items-center sm:justify-between">
           <div>
             <h1 className="text-xl font-bold tracking-[-0.03em]">Open Sales</h1>
-            <p className="mt-1 text-sm text-[var(--color-text-muted)]">
-              Continue a transaction from today’s active workspace.
-            </p>
+            <p className="mt-1 text-sm text-[var(--color-text-muted)]">Continue a transaction from today’s active workspace.</p>
           </div>
           <div className="flex gap-2">
             <Button variant="secondary" onClick={() => navigate('/sell')}>
@@ -84,9 +85,7 @@ export function OpenSalesPage() {
             <div className="rounded-[var(--radius-card)] border border-dashed border-[var(--color-border)] bg-[var(--color-surface)] p-10 text-center">
               <ReceiptText className="mx-auto size-6 text-[var(--color-text-muted)]" />
               <p className="mt-4 text-sm font-bold">No OPEN Sales in this Branch view</p>
-              <p className="mt-1 text-xs text-[var(--color-text-muted)]">
-                Start a new one from Sell when you are ready.
-              </p>
+              <p className="mt-1 text-xs text-[var(--color-text-muted)]">Start a new one from Sell when you are ready.</p>
             </div>
           ) : (
             <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
@@ -99,23 +98,16 @@ export function OpenSalesPage() {
                 >
                   <div className="flex items-start justify-between gap-4">
                     <div>
-                      <p className="text-xs font-bold uppercase tracking-[0.12em] text-[var(--color-brand)]">
-                        {sale.locationName} · Open
-                      </p>
+                      <p className="text-xs font-bold uppercase tracking-[0.12em] text-[var(--color-brand)]">{sale.locationName} · Open</p>
                       <h2 className="mt-2 text-base font-bold">Sale {sale.id.slice(0, 8)}</h2>
                     </div>
-                    <p className="text-sm font-bold tabular-nums">
-                      {formatMoney(sale.totalAmount, sale.currency, runtime.locale)}
-                    </p>
+                    <p className="text-sm font-bold tabular-nums">{formatMoney(sale.totalAmount, sale.currency, runtime.locale)}</p>
                   </div>
                   <div className="mt-4 flex items-center justify-between text-xs text-[var(--color-text-muted)]">
                     <span>{sale.activeLineCount} active lines</span>
                     <span className="flex items-center gap-1">
                       <Clock3 className="size-3.5" /> Updated{' '}
-                      {new Intl.DateTimeFormat(runtime.locale, {
-                        hour: '2-digit',
-                        minute: '2-digit',
-                      }).format(new Date(sale.updatedAt))}
+                      {new Intl.DateTimeFormat(runtime.locale, { hour: '2-digit', minute: '2-digit' }).format(new Date(sale.updatedAt))}
                     </span>
                   </div>
                 </button>

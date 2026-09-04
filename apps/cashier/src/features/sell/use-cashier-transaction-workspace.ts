@@ -6,8 +6,8 @@ import { useNavigate } from 'react-router';
 import { useCashierSession } from '../../app/providers/cashier-session-provider';
 import { cashierTransactionErrorMessage } from './cashier-transaction-errors';
 import { cashierTransactionKeys } from './cashier-transaction-keys';
-import { createCashierTransactionAdapter } from './cashier-transaction-adapter-factory';
 import type { CatalogItem, SaleLine } from './cashier-transaction.types';
+import { createCashierTransactionAdapter, isCashierDemoMode } from './cashier-transaction-client';
 import type { VariantPickerState } from './components/variant-picker';
 import { useEmployeeOptions } from './use-employee-options';
 import { useSaleCommandCoordinator } from './use-sale-command-coordinator';
@@ -24,7 +24,11 @@ export function useCashierTransactionWorkspace(routeSaleId?: string) {
   const [lineTaskId, setLineTaskId] = useState<string | null>(null);
   const [isCompletionOpen, setCompletionOpen] = useState(false);
   const [resumedSaleId, setResumedSaleId] = useState<string | null>(null);
-  const transactionAdapter = useMemo(() => createCashierTransactionAdapter(runtime), [runtime]);
+  const transactionAdapter = useMemo(
+    () => createCashierTransactionAdapter(runtime.apiBaseUrl),
+    [runtime.apiBaseUrl],
+  );
+  const effectiveConnectivity = isCashierDemoMode() ? 'ONLINE' : connectivity.state;
 
   const command = useSaleCommandCoordinator({ client: transactionAdapter, rememberSale });
 
@@ -44,7 +48,7 @@ export function useCashierTransactionWorkspace(routeSaleId?: string) {
     ...(activeSaleId === undefined ? {} : { routeSaleId: activeSaleId }),
     selectedLocationId,
     currency: runtime.currency,
-    connectivity: connectivity.state,
+    connectivity: effectiveConnectivity,
     selectLocation,
     rememberSale,
   });
@@ -53,7 +57,7 @@ export function useCashierTransactionWorkspace(routeSaleId?: string) {
     client: transactionAdapter,
     command,
     sale: saleWorkspace.sale,
-    connectivity: connectivity.state,
+    connectivity: effectiveConnectivity,
   });
 
   const lineTask =
@@ -81,13 +85,13 @@ export function useCashierTransactionWorkspace(routeSaleId?: string) {
     }
     const resolvedPrice =
       catalogVariantId === undefined
-        ? (catalog.priceByItemId.get(item.id) ??
+        ? catalog.priceByItemId.get(item.id) ??
           (await transactionAdapter.resolvePrice({
             catalogItemId: item.id,
             sellingLocationId: selectedLocationId,
             currency: runtime.currency,
             effectiveAt: new Date().toISOString(),
-          })))
+          }))
         : await transactionAdapter.resolvePrice({
             catalogItemId: item.id,
             catalogVariantId,
@@ -104,7 +108,27 @@ export function useCashierTransactionWorkspace(routeSaleId?: string) {
     try {
       const variants = await catalog.loadActiveVariants(item);
       if (variants.length > 0) {
-        setVariantPicker({ item, variants });
+        const priceEntries = selectedLocationId
+          ? await Promise.all(
+              variants.map(async (variant) => {
+                const price = await transactionAdapter.resolvePrice({
+                  catalogItemId: item.id,
+                  catalogVariantId: variant.id,
+                  sellingLocationId: selectedLocationId,
+                  currency: runtime.currency,
+                  effectiveAt: new Date().toISOString(),
+                });
+                return [variant.id, price.amount] as const;
+              }),
+            )
+          : [];
+        setVariantPicker({
+          item,
+          variants,
+          pricesByVariantId: Object.fromEntries(priceEntries),
+          locale: runtime.locale,
+          currency: runtime.currency,
+        });
         return;
       }
       await addCatalogItem(item);
