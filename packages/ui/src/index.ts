@@ -10,6 +10,7 @@ export { ConfirmDialog, type ConfirmDialogProps } from './confirm-dialog';
 export { ConnectionError, type ConnectionErrorProps } from './connection-error';
 export { DatePicker, type DatePickerProps } from './date-picker';
 export { DateRangeFilter, type DateRangeFilterProps } from './date-range-filter';
+export { Dialog, type DialogProps, type DialogSize } from './dialog';
 export { Dropdown, DropdownContext, useDropdown, useDropdownClose, type DropdownProps, type DropdownContextValue } from './dropdown';
 export { EmptyState } from './empty-state';
 export { ExportButton, type ExportButtonProps, type ExportFormat } from './export-button';
