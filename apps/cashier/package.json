@@ -15,6 +15,7 @@
     "@digvation/pos-money": "workspace:*",
     "@digvation/pos-runtime": "workspace:*",
     "@digvation/pos-ui": "workspace:*",
+    "@digvation/ui": "file:C:/Users/dicky/Documents/work/digvation/Digvation-Design-System/packages/ui",
     "@tanstack/react-query": "5.102.8",
     "lucide-react": "1.37.0",
     "react": "19.2.8",
