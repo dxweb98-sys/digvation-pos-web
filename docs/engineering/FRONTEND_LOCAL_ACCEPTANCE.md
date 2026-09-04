@@ -23,7 +23,13 @@ pnpm verify
 pnpm test:e2e
 ```
 
-During the normal coding loop, targeted tests and the Vite dev server are allowed. A full clean verification is mandatory before recommending a merge.
+## Verification cadence
+
+During the normal coding loop, use targeted Vitest checks and the relevant Vite dev server when they provide useful feedback. Do not run the full `pnpm verify` and `pnpm test:e2e` sequence after every small edit.
+
+Run the complete sequence once when a completed page, feature, or source/tooling change is ready as a review candidate and before recommending a merge. If relevant source or tooling changes during remediation, rerun the affected targeted checks and run the complete sequence again only at the renewed review-candidate boundary.
+
+For documentation-only changes, validate changed Markdown/static references. Browser/E2E validation is not required unless documentation changes tooling or runtime behavior.
 
 ## Initial dependency lock
 
