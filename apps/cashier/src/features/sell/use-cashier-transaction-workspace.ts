@@ -1,4 +1,3 @@
-import { ApiClient } from '@digvation/pos-api';
 import { useConnectivity, useRuntime } from '@digvation/pos-runtime';
 import { useQuery } from '@tanstack/react-query';
 import { useMemo, useState } from 'react';
@@ -7,7 +6,7 @@ import { useNavigate } from 'react-router';
 import { useCashierSession } from '../../app/providers/cashier-session-provider';
 import { cashierTransactionErrorMessage } from './cashier-transaction-errors';
 import { cashierTransactionKeys } from './cashier-transaction-keys';
-import { HttpCashierTransactionAdapter } from './cashier-transaction.adapter';
+import { createCashierTransactionAdapter } from './cashier-transaction-adapter-factory';
 import type { CatalogItem, SaleLine } from './cashier-transaction.types';
 import type { VariantPickerState } from './components/variant-picker';
 import { useEmployeeOptions } from './use-employee-options';
@@ -25,10 +24,7 @@ export function useCashierTransactionWorkspace(routeSaleId?: string) {
   const [lineTaskId, setLineTaskId] = useState<string | null>(null);
   const [isCompletionOpen, setCompletionOpen] = useState(false);
   const [resumedSaleId, setResumedSaleId] = useState<string | null>(null);
-  const transactionAdapter = useMemo(
-    () => new HttpCashierTransactionAdapter(new ApiClient({ baseUrl: runtime.apiBaseUrl })),
-    [runtime.apiBaseUrl],
-  );
+  const transactionAdapter = useMemo(() => createCashierTransactionAdapter(runtime), [runtime]);
 
   const command = useSaleCommandCoordinator({ client: transactionAdapter, rememberSale });
 
@@ -78,6 +74,31 @@ export function useCashierTransactionWorkspace(routeSaleId?: string) {
     enabled: Boolean(saleWorkspace.sale && lineTask?.allowEmployeeContributionSnapshot),
   });
 
+  const addCatalogItem = async (item: CatalogItem, catalogVariantId?: string) => {
+    if (!selectedLocationId) {
+      saleWorkspace.addItem(item.id, catalogVariantId);
+      return;
+    }
+    const resolvedPrice =
+      catalogVariantId === undefined
+        ? (catalog.priceByItemId.get(item.id) ??
+          (await transactionAdapter.resolvePrice({
+            catalogItemId: item.id,
+            sellingLocationId: selectedLocationId,
+            currency: runtime.currency,
+            effectiveAt: new Date().toISOString(),
+          })))
+        : await transactionAdapter.resolvePrice({
+            catalogItemId: item.id,
+            catalogVariantId,
+            sellingLocationId: selectedLocationId,
+            currency: runtime.currency,
+            effectiveAt: new Date().toISOString(),
+          });
+
+    saleWorkspace.addItem(item.id, catalogVariantId, { catalogItem: item, resolvedPrice });
+  };
+
   const selectItem = async (item: CatalogItem) => {
     command.clearNotice();
     try {
@@ -86,17 +107,21 @@ export function useCashierTransactionWorkspace(routeSaleId?: string) {
         setVariantPicker({ item, variants });
         return;
       }
-      saleWorkspace.addItem(item.id);
+      await addCatalogItem(item);
     } catch (error) {
       command.reportError(error);
     }
   };
 
-  const selectVariant = (catalogVariantId: string | null) => {
+  const selectVariant = async (catalogVariantId: string | null) => {
     if (!variantPicker) return;
     const item = variantPicker.item;
     setVariantPicker(null);
-    saleWorkspace.addItem(item.id, catalogVariantId ?? undefined);
+    try {
+      await addCatalogItem(item, catalogVariantId ?? undefined);
+    } catch (error) {
+      command.reportError(error);
+    }
   };
 
   const newSale = () => {

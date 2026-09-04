@@ -1,4 +1,5 @@
 import { Check, ChevronDown, MoreHorizontal, Search, X } from 'lucide-react';
+import { CurrencyInput, DecimalInput, Input, normalizeDecimalInput } from '@digvation/pos-ui';
 import {
   useEffect,
   useCallback,
@@ -41,32 +42,18 @@ export function PosInput({
   disabled,
   ...props
 }: PosInputProps) {
-  const hasValue = value !== undefined && value !== null && value !== '';
   return (
-    <div className="relative min-w-0">
-      {leftIcon ? (
-        <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[var(--color-text-muted)]">
-          {leftIcon}
-        </span>
-      ) : null}
-      <input
-        {...props}
-        value={value}
-        disabled={disabled}
-        autoComplete="off"
-        className={`${controlBase} ${controlSize[size]} ${leftIcon ? 'pl-9' : ''} ${clearable && hasValue ? 'pr-9' : ''} ${className}`}
-      />
-      {clearable && hasValue && !disabled ? (
-        <button
-          type="button"
-          aria-label="Clear input"
-          onClick={onClear}
-          className="absolute right-2 top-1/2 -translate-y-1/2 rounded-md p-1 text-[var(--color-text-muted)] transition-colors hover:bg-[var(--color-surface-muted)] hover:text-[var(--color-text)]"
-        >
-          <X className="size-3.5" />
-        </button>
-      ) : null}
-    </div>
+    <Input
+      {...props}
+      value={value}
+      disabled={disabled}
+      autoComplete="off"
+      size={size}
+      clearable={clearable}
+      className={className}
+      {...(leftIcon === undefined ? {} : { leftAdornment: leftIcon })}
+      {...(onClear === undefined ? {} : { onClear })}
+    />
   );
 }
 
@@ -77,15 +64,31 @@ function plainNumeric(value: string) {
   return fraction === undefined ? normalizedWhole : `${normalizedWhole}.${fraction}`;
 }
 
-function rupiah(raw: string) {
-  const whole = currencyRaw(raw);
-  if (!whole) return '';
-  return whole.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+function compareDecimalText(left: string, right: string): number {
+  const [leftWhole = '0', leftFraction = ''] = left.split('.');
+  const [rightWhole = '0', rightFraction = ''] = right.split('.');
+  const normalizedLeftWhole = leftWhole.replace(/^0+(?=\d)/, '') || '0';
+  const normalizedRightWhole = rightWhole.replace(/^0+(?=\d)/, '') || '0';
+  if (normalizedLeftWhole.length !== normalizedRightWhole.length)
+    return normalizedLeftWhole.length - normalizedRightWhole.length;
+  if (normalizedLeftWhole !== normalizedRightWhole)
+    return normalizedLeftWhole < normalizedRightWhole ? -1 : 1;
+  const length = Math.max(leftFraction.length, rightFraction.length);
+  const normalizedLeftFraction = leftFraction.padEnd(length, '0');
+  const normalizedRightFraction = rightFraction.padEnd(length, '0');
+  return normalizedLeftFraction === normalizedRightFraction
+    ? 0
+    : normalizedLeftFraction < normalizedRightFraction
+      ? -1
+      : 1;
 }
 
-function currencyRaw(value: string) {
-  const [whole] = value.split('.');
-  return (whole ?? '').replace(/\D/g, '').replace(/^0+(?=\d)/, '');
+function clampNumericText(value: string, min: string, max: string | undefined, integer: boolean) {
+  const normalized = normalizeDecimalInput(value, { integer });
+  if (!normalized || normalized === '0.') return normalized;
+  if (compareDecimalText(normalized, min) < 0) return min;
+  if (max !== undefined && compareDecimalText(normalized, max) > 0) return max;
+  return normalized;
 }
 
 export function PosNumericInput({
@@ -108,15 +111,13 @@ export function PosNumericInput({
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(value);
   const display = editing ? draft : plainNumeric(value);
-  const maxNumber = max === undefined ? undefined : Number(max);
-  const minNumber = Number(min);
   return (
     <div className="relative">
-      <PosInput
+      <DecimalInput
         {...props}
         value={display}
-        inputMode={integer ? 'numeric' : 'decimal'}
         className={`${className} ${suffix ? 'pr-8' : ''}`}
+        integer={integer}
         onFocus={(event) => {
           setDraft(value);
           setEditing(true);
@@ -124,24 +125,14 @@ export function PosNumericInput({
         }}
         onBlur={(event) => {
           setEditing(false);
-          const parsed = Number(draft);
-          if (draft && Number.isFinite(parsed)) {
-            const bounded = Math.min(maxNumber ?? parsed, Math.max(minNumber, parsed));
-            const normalized = integer
-              ? String(Math.trunc(bounded))
-              : plainNumeric(String(bounded));
-            setDraft(normalized);
-            onChange(normalized);
-          }
+          const normalized = clampNumericText(draft, min, max, integer);
+          setDraft(normalized);
+          if (normalized) onChange(normalized);
           props.onBlur?.(event);
         }}
-        onChange={(event) => {
-          const raw = event.target.value.replace(',', '.');
-          const pattern = integer ? /^\d*$/ : /^\d*(\.\d{0,4})?$/;
-          if (pattern.test(raw)) {
-            setDraft(raw);
-            onChange(raw);
-          }
+        onValueChange={(nextValue) => {
+          setDraft(nextValue);
+          onChange(nextValue);
         }}
       />
       {suffix ? (
@@ -163,34 +154,13 @@ export function PosCurrencyInput({
   value: string;
   onChange: (value: string) => void;
 }) {
-  const [focused, setFocused] = useState(false);
-  const [draft, setDraft] = useState(() => currencyRaw(value));
   return (
-    <div className="relative">
-      <span className="pointer-events-none absolute left-3 top-1/2 z-10 -translate-y-1/2 border-r border-[var(--color-border)] pr-2 text-sm font-medium text-[var(--color-text-muted)]">
-        Rp
-      </span>
-      <PosInput
-        {...props}
-        value={focused ? draft : rupiah(value)}
-        inputMode="numeric"
-        className={`${className} pl-10 tabular-nums`}
-        onFocus={(event) => {
-          setDraft(currencyRaw(value));
-          setFocused(true);
-          props.onFocus?.(event);
-        }}
-        onBlur={(event) => {
-          setFocused(false);
-          props.onBlur?.(event);
-        }}
-        onChange={(event) => {
-          const raw = event.target.value.replace(/\D/g, '');
-          setDraft(raw);
-          onChange(raw);
-        }}
-      />
-    </div>
+    <CurrencyInput
+      {...props}
+      value={value}
+      onValueChange={onChange}
+      className={`${className} tabular-nums`}
+    />
   );
 }
 

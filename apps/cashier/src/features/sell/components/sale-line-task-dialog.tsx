@@ -1,5 +1,5 @@
 import { createDecimal, formatMoney } from '@digvation/pos-money';
-import { Button, Checkbox, Dialog, Input, Select } from '@digvation/pos-ui';
+import { Button, Checkbox, DecimalInput, Dialog, Input, Select } from '@digvation/pos-ui';
 import { CheckCircle2, CircleDot, Percent, Play, Square, UserRound, X } from 'lucide-react';
 import { useMemo, useState } from 'react';
 
@@ -441,13 +441,12 @@ export function SaleLineTaskDialog({
                 <option value="PERCENTAGE">Percentage</option>
                 <option value="FIXED_AMOUNT">Fixed amount</option>
               </Select>
-              <Input
+              <DecimalInput
                 aria-label="Line discount value"
                 value={discountValue}
                 disabled={monetaryDisabled}
-                onChange={(event) => setDiscountValue(event.target.value)}
+                onValueChange={setDiscountValue}
                 placeholder={discountType === 'PERCENTAGE' ? '10 (%)' : '50000'}
-                inputMode="decimal"
               />
             </div>
             <Input

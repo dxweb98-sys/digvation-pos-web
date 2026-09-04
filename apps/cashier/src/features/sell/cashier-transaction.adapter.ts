@@ -159,6 +159,9 @@ export interface SaleTransactionClient {
   voidSale(saleId: string, expectedVersion: number, idempotencyKey: string): Promise<Sale>;
 }
 
+export interface SaleTransactionPort
+  extends SellingCatalogQuery, EmployeeQuery, OpenSalesQuery, SaleTransactionClient {}
+
 function pagePath(path: string): string {
   return `${path}?limit=${PAGE_SIZE}&offset=0`;
 }

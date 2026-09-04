@@ -1,5 +1,6 @@
 import { AuthProvider, type AuthPort, type AuthSession } from '@digvation/pos-auth';
 import { ConnectivityProvider, RuntimeProvider, type RuntimeConfig } from '@digvation/pos-runtime';
+import { ToastProvider } from '@digvation/pos-ui';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { RouterProviderProps } from 'react-router';
 import { RouterProvider } from 'react-router/dom';
@@ -32,9 +33,11 @@ export function CashierProviders({ runtime, session, authPort, router }: Cashier
       <ConnectivityProvider>
         <AuthProvider session={session} authPort={authPort}>
           <QueryClientProvider client={queryClient}>
-            <CashierSessionProvider>
-              <RouterProvider router={router} />
-            </CashierSessionProvider>
+            <ToastProvider>
+              <CashierSessionProvider>
+                <RouterProvider router={router} />
+              </CashierSessionProvider>
+            </ToastProvider>
           </QueryClientProvider>
         </AuthProvider>
       </ConnectivityProvider>

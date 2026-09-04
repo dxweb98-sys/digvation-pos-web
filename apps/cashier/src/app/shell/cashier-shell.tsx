@@ -1,5 +1,4 @@
 import { useAuth } from '@digvation/pos-auth';
-import { ApiClient } from '@digvation/pos-api';
 import { useConnectivity, useRuntime } from '@digvation/pos-runtime';
 import { Button, Dialog } from '@digvation/pos-ui';
 import { useQuery } from '@tanstack/react-query';
@@ -17,7 +16,7 @@ import { NavLink, Outlet, useLocation, useNavigate } from 'react-router';
 
 import { useCashierSession } from '../providers/cashier-session-provider';
 import { cashierTransactionKeys } from '../../features/sell/cashier-transaction-keys';
-import { HttpCashierTransactionAdapter } from '../../features/sell/cashier-transaction.adapter';
+import { createCashierTransactionAdapter } from '../../features/sell/cashier-transaction-adapter-factory';
 import { getAppVersion } from '../version/app-version';
 
 const NAVIGATION = [
@@ -49,10 +48,7 @@ export function CashierShell() {
   const navigate = useNavigate();
   const routerLocation = useLocation();
   const version = getAppVersion();
-  const transactionAdapter = useMemo(
-    () => new HttpCashierTransactionAdapter(new ApiClient({ baseUrl: runtime.apiBaseUrl })),
-    [runtime.apiBaseUrl],
-  );
+  const transactionAdapter = useMemo(() => createCashierTransactionAdapter(runtime), [runtime]);
   const locationsQuery = useQuery({
     queryKey: cashierTransactionKeys.locations(),
     queryFn: ({ signal }) => transactionAdapter.listSellingLocations(signal),

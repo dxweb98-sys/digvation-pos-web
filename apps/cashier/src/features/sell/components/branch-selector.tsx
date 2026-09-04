@@ -27,7 +27,7 @@ export function BranchSelector({ locations, value, isLoading, onChange }: Branch
           value={value}
           onChange={(event) => onChange(event.target.value)}
           disabled={isLoading || locations.length === 0}
-          className="h-9 w-full appearance-none bg-[var(--color-surface)] pl-9 pr-4 text-xs font-medium"
+          className="h-9 w-full bg-[var(--color-surface)] pl-9 text-xs font-medium"
         >
           <option value="">Select Branch</option>
           {locations.map((location) => (

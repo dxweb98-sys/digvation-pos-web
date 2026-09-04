@@ -1,3 +1,4 @@
+import { createDecimal } from '@digvation/pos-money';
 import type { ConnectivityState } from '@digvation/pos-runtime';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { useEffect, useRef, useState } from 'react';
@@ -6,7 +7,7 @@ import { useNavigate } from 'react-router';
 import type { SaleTransactionClient } from './cashier-transaction.adapter';
 import { isKnownApiFailure } from './cashier-transaction-errors';
 import { cashierTransactionKeys } from './cashier-transaction-keys';
-import type { SaleLine } from './cashier-transaction.types';
+import type { CatalogItem, ResolvedPrice, SaleLine } from './cashier-transaction.types';
 import { createSaleWorkspaceViewModel } from './sale-workspace-view-model';
 import type { SaleCommandCoordinator } from './use-sale-command-coordinator';
 
@@ -22,6 +23,11 @@ interface AddItemIntent {
   addIdempotencyKey: string;
   saleId?: string;
   expectedVersion?: number;
+}
+
+interface AddItemConfiguration {
+  catalogItem: CatalogItem;
+  resolvedPrice: ResolvedPrice;
 }
 
 interface UseSaleWorkspaceControllerOptions {
@@ -43,6 +49,34 @@ function isPositiveQuantity(value: string): boolean {
   if (!QUANTITY_PATTERN.test(value)) return false;
   const [whole, fraction = ''] = value.split('.');
   return whole !== '0' || /[1-9]/.test(fraction);
+}
+
+function isCompatibleLine(
+  line: SaleLine,
+  catalogVariantId: string | undefined,
+  configuration: AddItemConfiguration,
+): boolean {
+  const service = configuration.catalogItem.serviceDefinition;
+  return (
+    line.removedAt === null &&
+    line.catalogItemId === configuration.catalogItem.id &&
+    line.catalogVariantId === (catalogVariantId ?? null) &&
+    line.catalogPriceId === configuration.resolvedPrice.catalogPriceId &&
+    line.resolvedUnitPrice === configuration.resolvedPrice.amount &&
+    line.effectiveUnitPrice === configuration.resolvedPrice.amount &&
+    line.overrideAmount === null &&
+    line.overrideReason === null &&
+    line.discountType === null &&
+    line.discountValue === null &&
+    line.discountReason === null &&
+    line.fulfillmentBehaviorSnapshot === configuration.catalogItem.fulfillmentBehavior &&
+    line.employeeAssignmentModeSnapshot === (service?.employeeAssignmentMode ?? null) &&
+    line.allowEmployeeContributionSnapshot === (service?.allowEmployeeContribution ?? false) &&
+    line.defaultDurationMinutesSnapshot === (service?.defaultDurationMinutes ?? null) &&
+    (line.fulfillment === null || line.fulfillment.status === 'WAITING') &&
+    !line.participations.some((participation) => participation.assigned) &&
+    line.contributions.length === 0
+  );
 }
 
 export function useSaleWorkspaceController({
@@ -162,7 +196,11 @@ export function useSaleWorkspaceController({
     command.effectiveSynchronization,
   );
 
-  const addItem = (catalogItemId: string, catalogVariantId?: string) => {
+  const addItem = (
+    catalogItemId: string,
+    catalogVariantId?: string,
+    configuration?: AddItemConfiguration,
+  ) => {
     if (!selectedLocationId) {
       command.reportError(new Error('Select a Branch before starting a Sale.'));
       return;
@@ -170,6 +208,13 @@ export function useSaleWorkspaceController({
     if (viewModel.monetaryMutation.state !== 'AVAILABLE') return;
 
     const currentSale = saleQuery.data;
+    const compatibleLine = configuration
+      ? currentSale?.lines.find((line) => isCompatibleLine(line, catalogVariantId, configuration))
+      : undefined;
+    if (compatibleLine) {
+      changeQuantity(compatibleLine, createDecimal(compatibleLine.quantity).plus('1').toFixed(4));
+      return;
+    }
     const intent: AddItemIntent = {
       catalogItemId,
       ...(catalogVariantId ? { catalogVariantId } : {}),

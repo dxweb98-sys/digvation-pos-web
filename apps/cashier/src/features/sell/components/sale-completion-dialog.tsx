@@ -1,5 +1,5 @@
 import { createDecimal, formatMoney } from '@digvation/pos-money';
-import { Button, Dialog, Input, Select } from '@digvation/pos-ui';
+import { Button, CurrencyInput, DecimalInput, Dialog, Input, Select } from '@digvation/pos-ui';
 import {
   BadgeCheck,
   Banknote,
@@ -219,24 +219,22 @@ export function SaleCompletionDialog({
                 </label>
                 <label className="text-xs font-semibold text-[var(--color-text-muted)]">
                   Applied amount
-                  <Input
+                  <CurrencyInput
                     aria-label="Payment applied amount"
                     value={appliedAmount}
                     disabled={paymentDisabled}
-                    onChange={(event) => setAppliedAmount(event.target.value)}
-                    inputMode="decimal"
+                    onValueChange={setAppliedAmount}
                     className="mt-1.5"
                   />
                 </label>
                 {method === 'CASH' ? (
                   <label className="text-xs font-semibold text-[var(--color-text-muted)] sm:col-span-2">
                     Tendered cash
-                    <Input
+                    <CurrencyInput
                       aria-label="Cash tendered amount"
                       value={tenderedAmount}
                       disabled={paymentDisabled}
-                      onChange={(event) => setTenderedAmount(event.target.value)}
-                      inputMode="decimal"
+                      onValueChange={setTenderedAmount}
                       className="mt-1.5"
                     />
                   </label>
@@ -339,13 +337,12 @@ export function SaleCompletionDialog({
                   <option value="PERCENTAGE">Percentage</option>
                   <option value="FIXED_AMOUNT">Fixed amount</option>
                 </Select>
-                <Input
+                <DecimalInput
                   aria-label="Order discount value"
                   value={discountValue}
                   disabled={monetaryDisabled}
-                  onChange={(event) => setDiscountValue(event.target.value)}
+                  onValueChange={setDiscountValue}
                   placeholder={discountType === 'PERCENTAGE' ? '10 (%)' : '50000'}
-                  inputMode="decimal"
                 />
               </div>
               <Input

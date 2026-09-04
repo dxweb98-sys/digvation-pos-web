@@ -1,7 +1,6 @@
 import { createDecimal, formatMoney } from '@digvation/pos-money';
-import { ApiClient } from '@digvation/pos-api';
 import { useRuntime } from '@digvation/pos-runtime';
-import { Button, Dialog, Skeleton } from '@digvation/pos-ui';
+import { Button, Combobox, Dialog, Skeleton } from '@digvation/pos-ui';
 import { useQuery } from '@tanstack/react-query';
 import {
   AlertCircle,
@@ -28,7 +27,7 @@ import {
 import { useMemo, useState, type ReactNode } from 'react';
 
 import { cashierTransactionKeys } from '../cashier-transaction-keys';
-import { HttpCashierTransactionAdapter } from '../cashier-transaction.adapter';
+import { createCashierTransactionAdapter } from '../cashier-transaction-adapter-factory';
 import type {
   CatalogItem,
   Employee,
@@ -39,13 +38,8 @@ import type {
 import type { CatalogItemTypeFilter } from '../use-selling-catalog';
 import type { useCashierTransactionWorkspace } from '../use-cashier-transaction-workspace';
 
-import {
-  PosAutocomplete,
-  PosCurrencyInput,
-  PosInput,
-  PosMenu,
-  PosNumericInput,
-} from './pos-controls';
+import { PosCurrencyInput, PosInput, PosMenu, PosNumericInput } from './pos-controls';
+import { SaleLineTaskDialog } from './sale-line-task-dialog';
 import './replatformed-pos-workspace.css';
 
 type Workspace = ReturnType<typeof useCashierTransactionWorkspace>;
@@ -56,6 +50,12 @@ interface PosCustomer {
   phone: string;
   memberCode?: string;
 }
+
+const localCustomerChoices: readonly PosCustomer[] = [
+  { name: 'Alya Pratama', phone: '0812 3456 7890' },
+  { name: 'Bima Santoso', phone: '0813 4567 8901' },
+  { name: 'Citra Lestari', phone: '0814 5678 9012' },
+];
 
 const statusMeta: Record<
   QueueStatus,
@@ -151,10 +151,7 @@ function workflowIssues(sale: Sale, requiresEmployeeAttribution = true) {
 
 export function ReplatformedPosWorkspace({ workspace }: { workspace: Workspace }) {
   const runtime = useRuntime();
-  const adapter = useMemo(
-    () => new HttpCashierTransactionAdapter(new ApiClient({ baseUrl: runtime.apiBaseUrl })),
-    [runtime.apiBaseUrl],
-  );
+  const adapter = useMemo(() => createCashierTransactionAdapter(runtime), [runtime]);
   const transactionsQuery = useQuery({
     queryKey: cashierTransactionKeys.sales(),
     queryFn: ({ signal }) => adapter.listSales(signal),
@@ -169,6 +166,8 @@ export function ReplatformedPosWorkspace({ workspace }: { workspace: Workspace }
   const [cancelTarget, setCancelTarget] = useState<Sale | null>(null);
   const [cancelReason, setCancelReason] = useState('');
   const [cartOpen, setCartOpen] = useState(false);
+  const [cartCustomer, setCartCustomer] = useState<PosCustomer | null>(null);
+  const [customerPickerOpen, setCustomerPickerOpen] = useState(false);
   const [checkoutOpen, setCheckoutOpen] = useState(false);
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('CASH');
   const [provider, setProvider] = useState('');
@@ -383,14 +382,31 @@ export function ReplatformedPosWorkspace({ workspace }: { workspace: Workspace }
         total={total}
         gross={sale?.grossAmount ?? '0.0000'}
         locale={workspace.locale}
+        customer={cartCustomer}
+        onChooseCustomer={() => setCustomerPickerOpen(true)}
         onQuantity={(line, next) => workspace.changeQuantity(line, next)}
         onRemove={workspace.removeLine}
+        onManageLine={workspace.openLineTask}
         onCheckout={() => {
           setTender(total);
           setPaymentMethod('CASH');
           setProvider('');
           setCartOpen(false);
           setCheckoutOpen(true);
+        }}
+      />
+
+      <ReferenceCustomerDialog
+        open={customerPickerOpen}
+        customer={cartCustomer}
+        onClose={() => setCustomerPickerOpen(false)}
+        onChoose={(customer) => {
+          setCartCustomer(customer);
+          setCustomerPickerOpen(false);
+        }}
+        onUseGeneralCustomer={() => {
+          setCartCustomer(null);
+          setCustomerPickerOpen(false);
         }}
       />
 
@@ -401,6 +417,7 @@ export function ReplatformedPosWorkspace({ workspace }: { workspace: Workspace }
         total={total}
         gross={sale?.grossAmount ?? '0.0000'}
         locale={workspace.locale}
+        customer={cartCustomer}
         method={paymentMethod}
         provider={provider}
         tender={tender}
@@ -420,6 +437,12 @@ export function ReplatformedPosWorkspace({ workspace }: { workspace: Workspace }
         sale={queueDetail}
         locale={workspace.locale}
         onClose={() => setQueueDetail(null)}
+        onPrint={() => window.print()}
+        onNewSale={() => {
+          setQueueDetail(null);
+          setCartCustomer(null);
+          workspace.newSale();
+        }}
       />
       <ReferenceReviewDialog
         sale={reviewTarget}
@@ -434,7 +457,7 @@ export function ReplatformedPosWorkspace({ workspace }: { workspace: Workspace }
           if (reviewTarget) resume(reviewTarget);
           setReviewTarget(null);
         }}
-        onAssign={setAssignmentLine}
+        onAssign={workspace.openLineTask}
         onComplete={complete}
       />
       <ReferenceCancelDialog
@@ -458,6 +481,25 @@ export function ReplatformedPosWorkspace({ workspace }: { workspace: Workspace }
           setAssignmentLine(null);
         }}
       />
+      {workspace.lineTask ? (
+        <SaleLineTaskDialog
+          line={workspace.lineTask}
+          employees={workspace.employees}
+          contributionPreview={workspace.contributionPreview}
+          locale={workspace.locale}
+          monetaryAvailability={workspace.viewModel.monetaryMutation}
+          operationalAvailability={workspace.viewModel.operationalMutation}
+          isBusy={workspace.isCoreMutating}
+          onClose={workspace.closeLineTask}
+          onSetPriceOverride={workspace.setPriceOverride}
+          onClearPriceOverride={workspace.clearPriceOverride}
+          onSetLineDiscount={workspace.setLineDiscount}
+          onClearLineDiscount={workspace.clearLineDiscount}
+          onSetAssignments={workspace.setAssignments}
+          onSetContributions={workspace.setContributions}
+          onTransitionFulfillment={workspace.transitionFulfillment}
+        />
+      ) : null}
     </div>
   );
 }
@@ -840,8 +882,11 @@ function ReferenceFloatingCart({
   total,
   gross,
   locale,
+  customer,
+  onChooseCustomer,
   onQuantity,
   onRemove,
+  onManageLine,
   onCheckout,
 }: {
   open: boolean;
@@ -850,8 +895,11 @@ function ReferenceFloatingCart({
   total: string;
   gross: string;
   locale: string;
+  customer: PosCustomer | null;
+  onChooseCustomer: () => void;
   onQuantity: (line: SaleLine, quantity: string) => void;
   onRemove: (line: SaleLine) => void;
+  onManageLine: (line: SaleLine) => void;
   onCheckout: () => void;
 }) {
   const panel = (
@@ -860,8 +908,11 @@ function ReferenceFloatingCart({
       total={total}
       gross={gross}
       locale={locale}
+      customer={customer}
+      onChooseCustomer={onChooseCustomer}
       onQuantity={onQuantity}
       onRemove={onRemove}
+      onManageLine={onManageLine}
       onCheckout={onCheckout}
     />
   );
@@ -955,16 +1006,22 @@ function ReferenceCartPanel({
   total,
   gross,
   locale,
+  customer,
+  onChooseCustomer,
   onQuantity,
   onRemove,
+  onManageLine,
   onCheckout,
 }: {
   lines: readonly SaleLine[];
   total: string;
   gross: string;
   locale: string;
+  customer: PosCustomer | null;
+  onChooseCustomer: () => void;
   onQuantity: (line: SaleLine, quantity: string) => void;
   onRemove: (line: SaleLine) => void;
+  onManageLine: (line: SaleLine) => void;
   onCheckout: () => void;
 }) {
   const increment = (line: SaleLine, direction: 'up' | 'down') => {
@@ -978,17 +1035,23 @@ function ReferenceCartPanel({
   return (
     <div className="flex min-h-0 flex-1 flex-col bg-[var(--color-background)]">
       <div className="shrink-0 space-y-2.5 border-b border-[var(--color-border)] bg-[var(--color-surface)] px-4 py-3">
-        <div className="flex items-center gap-3 rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface-muted)]/45 px-3 py-3">
+        <button
+          type="button"
+          aria-label="Choose customer"
+          onClick={onChooseCustomer}
+          className="flex w-full items-center gap-3 rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface-muted)]/45 px-3 py-2.5 text-left transition-colors hover:border-[var(--color-brand)]/35 hover:bg-[var(--color-brand)]/5"
+        >
           <div className="grid size-8 place-items-center rounded-xl bg-[var(--color-background)] text-[var(--color-text-muted)]">
             <User className="size-4" />
           </div>
-          <div className="min-w-0">
-            <p className="text-xs font-semibold">Pelanggan umum</p>
-            <p className="mt-0.5 text-[11px] text-[var(--color-text-muted)]">
-              Pemilihan pelanggan belum tersedia pada checkpoint ini.
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-xs font-semibold">{customer?.name ?? 'Pelanggan umum'}</p>
+            <p className="mt-0.5 truncate text-[11px] text-[var(--color-text-muted)]">
+              {customer?.phone ?? 'Pilih pelanggan untuk transaksi ini'}
             </p>
           </div>
-        </div>
+          <ChevronDown className="size-4 shrink-0 text-[var(--color-text-muted)]" />
+        </button>
       </div>
       <div
         className={`min-h-0 border-y border-[var(--color-border)] bg-[var(--color-surface-muted)]/20 ${lines.length ? 'flex-1 overflow-y-auto' : 'shrink-0'}`}
@@ -1054,6 +1117,15 @@ function ReferenceCartPanel({
                     {money(line.totalAmount, locale)}
                   </p>
                 </div>
+                {line.itemTypeSnapshot === 'SERVICE' ? (
+                  <button
+                    type="button"
+                    onClick={() => onManageLine(line)}
+                    className="mt-2 text-xs font-semibold text-[var(--color-brand)] hover:underline"
+                  >
+                    Kelola layanan
+                  </button>
+                ) : null}
               </div>
             ))}
           </div>
@@ -1100,6 +1172,165 @@ function ReferenceCartPanel({
   );
 }
 
+function ReferenceCustomerDialog({
+  open,
+  customer,
+  onClose,
+  onChoose,
+  onUseGeneralCustomer,
+}: {
+  open: boolean;
+  customer: PosCustomer | null;
+  onClose: () => void;
+  onChoose: (customer: PosCustomer) => void;
+  onUseGeneralCustomer: () => void;
+}) {
+  const [query, setQuery] = useState('');
+  const [isQuickAddOpen, setQuickAddOpen] = useState(false);
+  const [name, setName] = useState('');
+  const [phone, setPhone] = useState('');
+  const normalizedQuery = query.trim().toLowerCase();
+  const matches = localCustomerChoices.filter(
+    (choice) =>
+      !normalizedQuery || `${choice.name} ${choice.phone}`.toLowerCase().includes(normalizedQuery),
+  );
+  const addCustomer = () => {
+    const normalizedName = name.trim();
+    const normalizedPhone = phone.trim();
+    if (!normalizedName || !normalizedPhone) return;
+    onChoose({ name: normalizedName, phone: normalizedPhone });
+    setName('');
+    setPhone('');
+    setQuickAddOpen(false);
+  };
+
+  return (
+    <Dialog
+      open={open}
+      onClose={onClose}
+      ariaLabel="Choose customer"
+      closeOnEscape
+      closeOnOverlay
+      className="pos-reference-dialog w-full max-w-md overflow-hidden rounded-t-2xl bg-[var(--color-surface)] shadow-xl sm:rounded-xl"
+    >
+      <div className="flex max-h-[80dvh] min-h-0 flex-col">
+        <header className="flex items-center justify-between border-b border-[var(--color-border)] px-5 py-4">
+          <div>
+            <h2 className="text-base font-bold">Pilih pelanggan</h2>
+            <p className="mt-0.5 text-xs text-[var(--color-text-muted)]">
+              Hanya untuk konteks transaksi ini.
+            </p>
+          </div>
+          <button
+            type="button"
+            aria-label="Close customer picker"
+            onClick={onClose}
+            className="rounded-lg p-2 text-[var(--color-text-muted)] hover:bg-[var(--color-surface-muted)]"
+          >
+            <X className="size-[18px]" />
+          </button>
+        </header>
+        <div className="min-h-0 space-y-3 overflow-y-auto p-4">
+          <PosInput
+            aria-label="Search customers by name or phone"
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder="Cari nama atau nomor telepon"
+            leftIcon={<Search className="size-4" />}
+            clearable={Boolean(query)}
+            onClear={() => setQuery('')}
+            className="h-10 rounded-xl"
+          />
+          <button
+            type="button"
+            onClick={onUseGeneralCustomer}
+            className={`flex w-full items-center gap-3 rounded-xl border px-3 py-3 text-left transition-colors ${customer === null ? 'border-[var(--color-brand)] bg-[var(--color-brand)]/5' : 'border-[var(--color-border)] hover:bg-[var(--color-surface-muted)]'}`}
+          >
+            <div className="grid size-8 place-items-center rounded-lg bg-[var(--color-surface-muted)] text-[var(--color-text-muted)]">
+              <User className="size-4" />
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-semibold">Gunakan pelanggan umum</p>
+              <p className="mt-0.5 text-xs text-[var(--color-text-muted)]">
+                Lanjutkan tanpa memilih pelanggan.
+              </p>
+            </div>
+            {customer === null ? (
+              <CheckCircle2 className="size-4 text-[var(--color-brand)]" />
+            ) : null}
+          </button>
+          <div className="space-y-1.5">
+            {matches.map((choice) => {
+              const selected = customer?.name === choice.name && customer.phone === choice.phone;
+              return (
+                <button
+                  key={`${choice.name}-${choice.phone}`}
+                  type="button"
+                  onClick={() => onChoose(choice)}
+                  className={`flex w-full items-center gap-3 rounded-xl border px-3 py-2.5 text-left transition-colors ${selected ? 'border-[var(--color-brand)] bg-[var(--color-brand)]/5' : 'border-[var(--color-border)] hover:bg-[var(--color-surface-muted)]'}`}
+                >
+                  <div className="grid size-8 place-items-center rounded-lg bg-[var(--color-surface-muted)] text-[var(--color-text-muted)]">
+                    <User className="size-4" />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-semibold">{choice.name}</p>
+                    <p className="mt-0.5 text-xs text-[var(--color-text-muted)]">{choice.phone}</p>
+                  </div>
+                  {selected ? <CheckCircle2 className="size-4 text-[var(--color-brand)]" /> : null}
+                </button>
+              );
+            })}
+            {!matches.length ? (
+              <p className="px-1 py-3 text-center text-xs text-[var(--color-text-muted)]">
+                Pelanggan tidak ditemukan.
+              </p>
+            ) : null}
+          </div>
+          <div className="border-t border-[var(--color-border)] pt-3">
+            {isQuickAddOpen ? (
+              <div className="space-y-2 rounded-xl bg-[var(--color-surface-muted)]/50 p-3">
+                <p className="text-xs font-semibold">Tambah pelanggan cepat</p>
+                <PosInput
+                  aria-label="Customer name"
+                  value={name}
+                  onChange={(event) => setName(event.target.value)}
+                  placeholder="Nama pelanggan"
+                  className="h-9 rounded-lg text-sm"
+                />
+                <PosInput
+                  aria-label="Customer phone"
+                  value={phone}
+                  onChange={(event) => setPhone(event.target.value)}
+                  placeholder="Nomor telepon"
+                  inputMode="tel"
+                  className="h-9 rounded-lg text-sm"
+                />
+                <div className="flex justify-end gap-2 pt-1">
+                  <Button variant="ghost" size="sm" onClick={() => setQuickAddOpen(false)}>
+                    Batal
+                  </Button>
+                  <Button size="sm" disabled={!name.trim() || !phone.trim()} onClick={addCustomer}>
+                    Gunakan pelanggan
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setQuickAddOpen(true)}
+                className="flex w-full items-center justify-center gap-2 rounded-xl border border-dashed border-[var(--color-border)] px-3 py-2.5 text-xs font-semibold text-[var(--color-brand)] transition-colors hover:bg-[var(--color-brand)]/5"
+              >
+                <UserPlus className="size-4" />
+                Tambah pelanggan cepat
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+    </Dialog>
+  );
+}
+
 function ReferencePaymentDialog({
   open,
   onClose,
@@ -1107,6 +1338,7 @@ function ReferencePaymentDialog({
   total,
   gross,
   locale,
+  customer,
   method,
   provider,
   tender,
@@ -1125,6 +1357,7 @@ function ReferencePaymentDialog({
   total: string;
   gross: string;
   locale: string;
+  customer: PosCustomer | null;
   method: PaymentMethod;
   provider: string;
   tender: string;
@@ -1186,7 +1419,9 @@ function ReferencePaymentDialog({
               </div>
               <div className="min-w-0 text-right">
                 <p className="text-xs text-[var(--color-text-muted)]">Pelanggan</p>
-                <p className="max-w-[170px] truncate text-sm font-semibold">Umum</p>
+                <p className="max-w-[170px] truncate text-sm font-semibold">
+                  {customer?.name ?? 'Pelanggan umum'}
+                </p>
                 <p className="text-[11px] text-[var(--color-text-muted)]">{lines.length} item</p>
               </div>
             </div>
@@ -1356,10 +1591,14 @@ function ReferenceTransactionDetail({
   sale,
   locale,
   onClose,
+  onPrint,
+  onNewSale,
 }: {
   sale: Sale | null;
   locale: string;
   onClose: () => void;
+  onPrint: () => void;
+  onNewSale: () => void;
 }) {
   if (!sale) return null;
   const status =
@@ -1501,7 +1740,15 @@ function ReferenceTransactionDetail({
               ))}
           </div>
         </div>
-        <footer className="shrink-0 border-t border-[var(--color-border)] bg-[var(--color-surface-muted)]/30 px-6 py-3 text-right">
+        <footer className="flex shrink-0 justify-end gap-2 border-t border-[var(--color-border)] bg-[var(--color-surface-muted)]/30 px-6 py-3 text-right">
+          {sale.status === 'FINALIZED' ? (
+            <>
+              <Button variant="outline" onClick={onPrint}>
+                Print receipt
+              </Button>
+              <Button onClick={onNewSale}>New Sale</Button>
+            </>
+          ) : null}
           <Button variant="outline" onClick={onClose}>
             Tutup
           </Button>
@@ -1899,7 +2146,7 @@ function ReferenceEmployeeDialog({
                   <label className="col-span-6 text-xs font-medium">
                     Karyawan
                     <div className="mt-1">
-                      <PosAutocomplete
+                      <Combobox
                         ariaLabel={`Employee ${index + 1}`}
                         value={row.employeeId}
                         placeholder="Pilih karyawan"
