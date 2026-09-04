@@ -37,6 +37,12 @@ git diff --cached
 
 For large uncommitted changes, a binary-safe patch is preferred.
 
+## Review-candidate validation
+
+For a completed page, feature, or source/tooling change, run `pnpm verify` and `pnpm test:e2e` once before a merge recommendation. During implementation, use targeted checks and the relevant app dev server instead of repeating the full gate after each edit.
+
+For documentation-only changes, report the Markdown/static-reference validation performed. Do not represent browser or E2E acceptance as completed when it was not required or run.
+
 ## Review decisions
 
 Every handoff returns one merge decision:
