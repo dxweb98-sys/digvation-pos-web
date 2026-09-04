@@ -21,6 +21,7 @@ export interface BaseDropdownProps {
   closeOnEsc?: boolean;
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
+  contentRole?: 'listbox' | 'menu';
 }
 
 /** Port of ui-old BaseDropdown using the current shared package dependencies. */
@@ -34,6 +35,7 @@ export function BaseDropdown({
   closeOnEsc = true,
   open: controlledOpen,
   onOpenChange,
+  contentRole = 'listbox',
 }: BaseDropdownProps) {
   const referenceRef = useRef<HTMLDivElement>(null);
   const floatingRef = useRef<HTMLDivElement>(null);
@@ -99,7 +101,7 @@ export function BaseDropdown({
     <>
       <div
         ref={referenceRef}
-        className="inline-block w-full"
+        className={cn('inline-block', matchWidth && 'w-full')}
         onClick={(event) => {
           if (event.defaultPrevented) return;
           event.stopPropagation();
@@ -113,7 +115,7 @@ export function BaseDropdown({
         ? createPortal(
             <div
               ref={floatingRef}
-              role="listbox"
+              role={contentRole}
               tabIndex={-1}
               style={style}
               onClick={(event) => {

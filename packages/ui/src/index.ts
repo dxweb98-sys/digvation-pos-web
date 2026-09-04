@@ -21,7 +21,7 @@ export {
 } from './input';
 export { Progress, type ProgressProps } from './progress';
 export { LoadingIndicator, LoadingOverlay, SplashScreen, type SplashScreenProps } from './loading';
-export { Select, type SelectProps } from './select';
+export { BaseDropdown, Select, type BaseDropdownProps, type SelectProps } from './select';
 export { Skeleton } from './skeleton';
 export {
   DataTable,

@@ -7,8 +7,6 @@ import { AppBootScreen } from './app/bootstrap/app-boot-screen';
 import { BootstrapTransition } from './app/bootstrap/bootstrap-transition';
 import { bootstrapCashier } from './app/bootstrap/bootstrap-cashier';
 
-const BOOT_SPLASH_MINIMUM_DURATION_MS = 560;
-
 function renderBootstrapFailure(error: unknown) {
   const message = error instanceof Error ? error.message : 'Unknown startup error';
 
@@ -28,7 +26,6 @@ function renderBootstrapFailure(error: unknown) {
 }
 
 const root = ReactDOM.createRoot(document.getElementById('root')!);
-const bootStartedAt = performance.now();
 
 root.render(
   <React.StrictMode>
@@ -38,16 +35,10 @@ root.render(
 
 void bootstrapCashier()
   .then((app) => {
-    const remainingDuration = Math.max(
-      0,
-      BOOT_SPLASH_MINIMUM_DURATION_MS - (performance.now() - bootStartedAt),
+    root.render(
+      <React.StrictMode>
+        <BootstrapTransition>{app}</BootstrapTransition>
+      </React.StrictMode>,
     );
-    window.setTimeout(() => {
-      root.render(
-        <React.StrictMode>
-          <BootstrapTransition>{app}</BootstrapTransition>
-        </React.StrictMode>,
-      );
-    }, remainingDuration);
   })
   .catch(renderBootstrapFailure);

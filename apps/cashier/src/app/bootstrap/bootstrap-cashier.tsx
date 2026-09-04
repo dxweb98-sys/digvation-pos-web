@@ -6,7 +6,7 @@ import { cashierRouter } from '../router/cashier-router';
 
 export async function bootstrapCashier() {
   const runtimePort = new HttpRuntimeConfigAdapter();
-  const authPort = new MockAuthAdapter();
+  const authPort = new MockAuthAdapter({ initiallyAuthenticated: false });
   const runtime = await runtimePort.load();
 
   assertApplicationEnabled(runtime, 'cashier');

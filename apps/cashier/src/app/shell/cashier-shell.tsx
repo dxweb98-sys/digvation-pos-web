@@ -1,17 +1,19 @@
 import { useAuth } from '@digvation/pos-auth';
 import { useConnectivity, useRuntime } from '@digvation/pos-runtime';
-import { Button, Dialog } from '@digvation/pos-ui';
+import { BaseDropdown, Button, Dialog, useToast } from '@digvation/pos-ui';
 import { useQuery } from '@tanstack/react-query';
 import {
   Check,
   ChevronDown,
   CircleUserRound,
   LayoutGrid,
+  LogOut,
   MapPin,
   ReceiptText,
   Rows3,
+  UserRound,
 } from 'lucide-react';
-import { useEffect, useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router';
 
 import { cashierTransactionKeys } from '../../features/sell/cashier-transaction-keys';
@@ -34,10 +36,24 @@ function formatCurrentDate(locale: string): string {
   }).format(new Date());
 }
 
+function identityInitials(displayName: string, initials?: string): string | null {
+  if (initials?.trim()) return initials.trim().slice(0, 2).toUpperCase();
+  const derived = displayName
+    .trim()
+    .split(/\s+/)
+    .slice(0, 2)
+    .map((part) => part[0] ?? '')
+    .join('')
+    .toUpperCase();
+  return derived || null;
+}
+
 export function CashierShell() {
   const runtime = useRuntime();
   const connectivity = useConnectivity();
-  const { session } = useAuth();
+  const { session, logout } = useAuth();
+  const { showToast } = useToast();
+  const [isLoggingOut, setLoggingOut] = useState(false);
   const {
     selectedLocationId,
     selectLocation,
@@ -63,6 +79,7 @@ export function CashierShell() {
   const selectedLocation = locations.find((location) => location.id === selectedLocationId) ?? null;
   const brandSubtitle =
     runtime.branding.businessName ?? runtime.branding.companyName ?? runtime.workspace;
+  const userInitials = identityInitials(session.identity.displayName, session.identity.initials);
 
   useEffect(() => {
     if (!selectedLocationId && locations.length > 0) {
@@ -86,6 +103,21 @@ export function CashierShell() {
 
     selectLocation(locationId);
     closeBranchPicker();
+  };
+
+  const handleLogout = async () => {
+    if (isLoggingOut) return;
+    setLoggingOut(true);
+    try {
+      await logout();
+    } catch {
+      setLoggingOut(false);
+      showToast({
+        title: 'Logout gagal',
+        description: 'Sesi belum dapat diakhiri. Silakan coba lagi.',
+        variant: 'danger',
+      });
+    }
   };
 
   return (
@@ -174,10 +206,69 @@ export function CashierShell() {
               {formatCurrentDate(runtime.locale)}
             </span>
           </div>
-          <div className="min-w-0 text-right">
-            <p className="truncate text-sm font-semibold">{session.identity.displayName}</p>
-            <p className="text-xs text-[var(--color-text-muted)]">{runtime.deploymentProfile}</p>
-          </div>
+          <BaseDropdown
+            placement="bottom-end"
+            contentRole="menu"
+            closeOnItemClick
+            trigger={({ open }) => (
+              <button
+                type="button"
+                disabled={isLoggingOut}
+                aria-label="Open account menu"
+                aria-haspopup="menu"
+                aria-expanded={open}
+                className="flex min-w-0 items-center gap-3 rounded-[var(--radius-control)] py-1 pl-2 pr-1.5 text-right transition-colors hover:bg-[var(--color-surface-muted)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-focus)]/20 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                <span className="hidden min-w-0 sm:block">
+                  <span className="block truncate text-sm font-semibold">
+                    {session.identity.displayName}
+                  </span>
+                  <span className="block truncate text-xs text-[var(--color-text-muted)]">
+                    {session.identity.email ?? runtime.deploymentProfile}
+                  </span>
+                </span>
+                <span className="grid size-9 shrink-0 place-items-center overflow-hidden rounded-full bg-[var(--color-brand)]/10 text-xs font-bold text-[var(--color-brand)] ring-1 ring-[var(--color-brand)]/15">
+                  {session.identity.avatarUrl ? (
+                    <img
+                      src={session.identity.avatarUrl}
+                      alt=""
+                      className="size-full object-cover"
+                    />
+                  ) : (
+                    (userInitials ?? <UserRound className="size-4" aria-label="User account" />)
+                  )}
+                </span>
+                <ChevronDown
+                  className={`hidden size-3.5 shrink-0 text-[var(--color-text-muted)] transition-transform sm:block ${
+                    open ? 'rotate-180' : ''
+                  }`}
+                />
+              </button>
+            )}
+          >
+            <div className="min-w-[240px]">
+              <div className="border-b border-[var(--color-border)] px-3 py-3">
+                <p className="truncate text-sm font-semibold text-[var(--color-text)]">
+                  {session.identity.displayName}
+                </p>
+                <p className="mt-0.5 truncate text-xs text-[var(--color-text-muted)]">
+                  {session.identity.email ?? session.identity.userId}
+                </p>
+              </div>
+              <div className="p-1">
+                <button
+                  type="button"
+                  role="menuitem"
+                  disabled={isLoggingOut}
+                  onClick={handleLogout}
+                  className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm font-medium text-[var(--color-danger)] transition-colors hover:bg-[var(--color-danger)]/10 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  <LogOut className="size-4" />
+                  {isLoggingOut ? 'Mengakhiri sesi...' : 'Logout'}
+                </button>
+              </div>
+            </div>
+          </BaseDropdown>
         </header>
 
         <div className="min-h-0 overflow-y-auto overscroll-contain">
@@ -194,7 +285,9 @@ export function CashierShell() {
         className="w-full max-w-md rounded-t-[var(--radius-panel)] bg-[var(--color-surface)] shadow-2xl sm:rounded-[var(--radius-panel)]"
       >
         <div className="border-b border-[var(--color-border)] px-5 py-4">
-          <p className="text-xs font-bold uppercase tracking-[0.14em] text-[var(--color-brand)]">Workspace</p>
+          <p className="text-xs font-bold uppercase tracking-[0.14em] text-[var(--color-brand)]">
+            Workspace
+          </p>
           <h2 className="mt-1 text-lg font-bold">Choose active branch</h2>
           <p className="mt-1 text-sm text-[var(--color-text-muted)]">
             Sales and catalog pricing use this branch context.
@@ -204,7 +297,9 @@ export function CashierShell() {
           {locationsQuery.isLoading ? (
             <p className="p-3 text-sm text-[var(--color-text-muted)]">Loading branches…</p>
           ) : locations.length === 0 ? (
-            <div className="p-3 text-sm text-[var(--color-text-muted)]">No active branches are available for this workspace.</div>
+            <div className="p-3 text-sm text-[var(--color-text-muted)]">
+              No active branches are available for this workspace.
+            </div>
           ) : (
             <div className="space-y-1">
               {locations.map((location) => {
@@ -222,7 +317,9 @@ export function CashierShell() {
                   >
                     <span className="min-w-0">
                       <span className="block truncate text-sm font-semibold">{location.name}</span>
-                      <span className="mt-0.5 block font-mono text-[10px] text-[var(--color-text-muted)]">{location.code}</span>
+                      <span className="mt-0.5 block font-mono text-[10px] text-[var(--color-text-muted)]">
+                        {location.code}
+                      </span>
                     </span>
                     {isSelected ? <Check className="size-4 shrink-0" /> : null}
                   </button>
@@ -232,7 +329,9 @@ export function CashierShell() {
           )}
         </div>
         <div className="border-t border-[var(--color-border)] p-3">
-          <Button variant="secondary" className="w-full" onClick={closeBranchPicker}>Close</Button>
+          <Button variant="secondary" className="w-full" onClick={closeBranchPicker}>
+            Close
+          </Button>
         </div>
       </Dialog>
     </div>
