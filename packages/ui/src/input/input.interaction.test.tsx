@@ -40,7 +40,7 @@ describe('canonical input interactions', () => {
           aria-label="Customer name"
           clearable
           value={value}
-          onChange={(event) => setValue(event.target.value)}
+          onNativeChange={(event) => setValue(event.target.value)}
         />
       );
     }

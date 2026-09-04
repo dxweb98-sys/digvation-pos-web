@@ -5,7 +5,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { Combobox } from './combobox';
 import { Input } from './input';
 import { Select } from './select';
-import { DataTable, getPaginationPages } from './table';
+import { DataTable, getPaginationPages } from './data-table';
 
 afterEach(cleanup);
 
@@ -19,7 +19,7 @@ describe('shared field controls', () => {
           value={value}
           clearable
           onClear={() => setValue('')}
-          onChange={(event) => setValue(event.target.value)}
+          onNativeChange={(event) => setValue(event.target.value)}
         />
       );
     }

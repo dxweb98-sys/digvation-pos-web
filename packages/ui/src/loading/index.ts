@@ -1,1 +1,1 @@
-export { LoadingIndicator, LoadingOverlay, SplashScreen, type SplashScreenProps } from './loading';
+export { LoadingIndicator, LoadingOverlay } from './loading';

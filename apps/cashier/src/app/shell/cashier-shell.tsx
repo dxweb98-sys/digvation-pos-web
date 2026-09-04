@@ -1,6 +1,6 @@
 import { useAuth } from '@digvation/pos-auth';
 import { useConnectivity, useRuntime } from '@digvation/pos-runtime';
-import { BaseDropdown, Button, Dialog, useToast } from '@digvation/pos-ui';
+import { Button, Dialog, Dropdown, useToast } from '@digvation/pos-ui';
 import { useQuery } from '@tanstack/react-query';
 import {
   Check,
@@ -206,7 +206,7 @@ export function CashierShell() {
               {formatCurrentDate(runtime.locale)}
             </span>
           </div>
-          <BaseDropdown
+          <Dropdown
             placement="bottom-end"
             contentRole="menu"
             closeOnItemClick
@@ -268,7 +268,7 @@ export function CashierShell() {
                 </button>
               </div>
             </div>
-          </BaseDropdown>
+          </Dropdown>
         </header>
 
         <div className="min-h-0 overflow-y-auto overscroll-contain">

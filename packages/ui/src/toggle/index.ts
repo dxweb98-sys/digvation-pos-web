@@ -1,1 +1,1 @@
-export { Radio, Switch, type RadioProps, type SwitchProps } from './toggle';
+export { Toggle, type ToggleProps } from './toggle';

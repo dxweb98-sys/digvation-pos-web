@@ -25,7 +25,10 @@ export function BranchSelector({ locations, value, isLoading, onChange }: Branch
         <Select
           id="branch"
           value={value}
-          onChange={(event) => onChange(event.target.value)}
+          clearable={false}
+          onChange={(locationId) => {
+            if (typeof locationId === 'string') onChange(locationId);
+          }}
           disabled={isLoading || locations.length === 0}
           className="h-9 w-full bg-[var(--color-surface)] pl-9 text-xs font-medium"
         >

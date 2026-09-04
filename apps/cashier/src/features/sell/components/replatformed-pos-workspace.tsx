@@ -1,7 +1,16 @@
 import { useAuth } from '@digvation/pos-auth';
 import { createDecimal, formatMoney } from '@digvation/pos-money';
 import { useRuntime } from '@digvation/pos-runtime';
-import { Badge, Button, Combobox, Dialog, Input, Skeleton } from '@digvation/pos-ui';
+import {
+  Badge,
+  Button,
+  Combobox,
+  Dialog,
+  Dropdown,
+  Input,
+  SearchInput,
+  Skeleton,
+} from '@digvation/pos-ui';
 import { useQuery } from '@tanstack/react-query';
 import {
   AlertCircle,
@@ -12,12 +21,12 @@ import {
   CreditCard,
   Eye,
   Minus,
+  MoreHorizontal,
   PlayCircle,
   Plus,
   Printer,
   QrCode,
   RotateCcw,
-  Search,
   ShoppingBag,
   Trash2,
   User,
@@ -45,7 +54,7 @@ import type {
 import type { CatalogItemTypeFilter } from '../use-selling-catalog';
 import type { useCashierTransactionWorkspace } from '../use-cashier-transaction-workspace';
 
-import { PosCurrencyInput, PosInput, PosMenu, PosNumericInput } from './pos-controls';
+import { PosCurrencyInput, PosNumericInput } from './pos-controls';
 import { SaleLineTaskDialog } from './sale-line-task-dialog';
 import './replatformed-pos-workspace.css';
 
@@ -403,7 +412,13 @@ export function ReplatformedPosWorkspace({ workspace }: { workspace: Workspace }
               />
             </div>
             <div className="shrink-0">
-              <ReferenceSearchInput value={search} onChange={setSearch} />
+              <SearchInput
+                value={search}
+                onChange={setSearch}
+                placeholder="Cari item..."
+                debounceMs={0}
+                expandedWidth="min(280px, calc(100vw - 140px))"
+              />
             </div>
             <div className="hidden h-6 w-px bg-[var(--color-border)] lg:block" aria-hidden="true" />
             <div className="order-3 min-w-0 flex-1 basis-full lg:order-none lg:basis-0">
@@ -615,54 +630,6 @@ function ReferenceTypeButton({
       {icon}
       {label}
     </button>
-  );
-}
-
-function ReferenceSearchInput({
-  value,
-  onChange,
-}: {
-  value: string;
-  onChange: (value: string) => void;
-}) {
-  const [open, setOpen] = useState(Boolean(value));
-  const collapseIfEmpty = () => {
-    if (!value) setOpen(false);
-  };
-  return (
-    <div className="relative">
-      <div
-        className="relative flex items-center justify-end overflow-visible transition-[width] duration-150 ease-out"
-        style={{ width: open ? 'min(280px, calc(100vw - 140px))' : '36px' }}
-      >
-        {open ? (
-          <PosInput
-            autoFocus
-            aria-label="Search catalog"
-            value={value}
-            onChange={(event) => onChange(event.target.value)}
-            onKeyDown={(event) => {
-              if (event.key === 'Escape' && !value) setOpen(false);
-            }}
-            onBlur={collapseIfEmpty}
-            placeholder="Cari item..."
-            leftIcon={<Search className="size-4" />}
-            clearable={Boolean(value)}
-            onClear={() => onChange('')}
-            className="h-9 rounded-xl bg-[var(--color-surface)] text-sm shadow-sm"
-          />
-        ) : (
-          <button
-            type="button"
-            aria-label="Search catalog"
-            onClick={() => setOpen(true)}
-            className="inline-flex size-9 items-center justify-center rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] text-[var(--color-text-muted)] shadow-sm transition-colors hover:bg-[var(--color-surface-muted)] hover:text-[var(--color-text)]"
-          >
-            <Search className="size-4" />
-          </button>
-        )}
-      </div>
-    </div>
   );
 }
 
@@ -953,7 +920,35 @@ function ReferenceQueueCard({
             {money(sale.totalAmount, locale)}
           </p>
         </div>
-        <PosMenu items={actionItems} ariaLabel={`Actions for ${transactionNumber(sale.id)}`} />
+        <Dropdown
+          placement="bottom-end"
+          contentRole="menu"
+          closeOnItemClick
+          contentClassName="min-w-[172px] overflow-hidden p-1"
+          trigger={({ open }) => (
+            <button
+              type="button"
+              aria-label={`Actions for ${transactionNumber(sale.id)}`}
+              aria-expanded={open}
+              className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] px-2.5 text-[11px] font-semibold text-[var(--color-text-muted)] transition-colors hover:bg-[var(--color-surface-muted)] hover:text-[var(--color-text)] focus:outline-none focus:ring-2 focus:ring-[var(--color-brand)]/20"
+            >
+              <MoreHorizontal className="size-4" />
+            </button>
+          )}
+        >
+          {actionItems.map((item) => (
+            <button
+              key={item.label}
+              type="button"
+              role="menuitem"
+              onClick={item.onSelect}
+              className={`flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-left text-xs font-medium transition-colors ${item.destructive ? 'text-[var(--color-danger)] hover:bg-[var(--color-danger)]/10' : 'text-[var(--color-text)] hover:bg-[var(--color-surface-muted)]'}`}
+            >
+              {item.icon ? <span className="shrink-0">{item.icon}</span> : null}
+              {item.label}
+            </button>
+          ))}
+        </Dropdown>
       </div>
       {issues.length ? (
         <div className="mt-3 rounded-xl border border-[var(--color-warning)]/30 bg-[var(--color-warning)]/10 px-3 py-2 text-xs">
@@ -1413,15 +1408,22 @@ function ReferenceCustomerDialog({
                   }}
                   placeholder="Cari nama atau nomor telepon"
                   idleMessage="Ketik nama, nomor telepon, atau kode member untuk mencari."
-                  emptyMessage="Member tidak ditemukan."
-                  renderOption={(option) => (
-                    <span className="min-w-0">
-                      <span className="block truncate">{option.label}</span>
-                      <span className="mt-0.5 block truncate text-xs font-normal text-[var(--color-text-muted)]">
-                        {option.detail}
+                  renderEmpty={() => 'Member tidak ditemukan.'}
+                  renderOption={(option) => {
+                    const member = memberResults.find(
+                      (result) => result.customerId === String(option.value),
+                    );
+                    return (
+                      <span className="min-w-0">
+                        <span className="block truncate">{option.label}</span>
+                        {member ? (
+                          <span className="mt-0.5 block truncate text-xs font-normal text-[var(--color-text-muted)]">
+                            {member.phone} · {member.membership.memberCode}
+                          </span>
+                        ) : null}
                       </span>
-                    </span>
-                  )}
+                    );
+                  }}
                 />
                 <Button
                   fullWidth
@@ -1437,14 +1439,14 @@ function ReferenceCustomerDialog({
                   aria-label="Customer name"
                   label="Nama"
                   value={name}
-                  onChange={(event) => setName(event.target.value)}
+                  onChange={setName}
                   placeholder="Nama pelanggan"
                 />
                 <Input
                   aria-label="Customer phone"
                   label="Nomor telepon"
                   value={phone}
-                  onChange={(event) => setPhone(event.target.value)}
+                  onChange={setPhone}
                   placeholder="Nomor telepon"
                   inputMode="tel"
                 />
@@ -2216,11 +2218,11 @@ function ReferenceCancelDialog({
         </div>
         <label className="mt-5 block text-sm font-medium">
           Alasan pembatalan
-          <PosInput
+          <Input
             className="mt-1.5 h-10 rounded-lg"
             autoFocus
             value={reason}
-            onChange={(event) => onReasonChange(event.target.value)}
+            onChange={onReasonChange}
             placeholder="Contoh: Permintaan pelanggan"
           />
         </label>
@@ -2369,6 +2371,7 @@ function ReferenceEmployeeDialog({
                           label: employee.displayName,
                         }))}
                         onChange={(employeeId) => {
+                          if (typeof employeeId !== 'string') return;
                           const next = [...activeRows];
                           next[index] = { ...next[index]!, employeeId };
                           setRows(next);

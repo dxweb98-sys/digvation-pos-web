@@ -10,8 +10,9 @@ import {
 import { createPortal } from 'react-dom';
 
 import { cn } from '../cn';
+import { DropdownContext } from './dropdown-context';
 
-export interface BaseDropdownProps {
+export interface DropdownProps {
   trigger: (context: { open: boolean }) => ReactNode;
   children: ReactNode;
   placement?: 'bottom-start' | 'bottom-end' | 'top-start' | 'top-end';
@@ -21,11 +22,14 @@ export interface BaseDropdownProps {
   closeOnEsc?: boolean;
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
-  contentRole?: 'listbox' | 'menu';
+  contentRole?: 'listbox' | 'menu' | 'dialog';
+  className?: string;
+  contentClassName?: string;
+  offset?: number;
+  minWidth?: number;
 }
 
-/** Port of ui-old BaseDropdown using the current shared package dependencies. */
-export function BaseDropdown({
+export function Dropdown({
   trigger,
   children,
   placement = 'bottom-start',
@@ -35,8 +39,12 @@ export function BaseDropdown({
   closeOnEsc = true,
   open: controlledOpen,
   onOpenChange,
-  contentRole = 'listbox',
-}: BaseDropdownProps) {
+  contentRole = 'menu',
+  className,
+  contentClassName,
+  offset = 6,
+  minWidth = 140,
+}: DropdownProps) {
   const referenceRef = useRef<HTMLDivElement>(null);
   const floatingRef = useRef<HTMLDivElement>(null);
   const [uncontrolledOpen, setUncontrolledOpen] = useState(false);
@@ -53,32 +61,47 @@ export function BaseDropdown({
   );
 
   const close = useCallback(() => {
+    if (!open) return;
     setOpen(false);
     onClose?.();
-  }, [onClose, setOpen]);
+  }, [onClose, open, setOpen]);
 
   const updatePosition = useCallback(() => {
     const reference = referenceRef.current;
+    const floating = floatingRef.current;
     if (!reference) return;
+
     const rect = reference.getBoundingClientRect();
-    const isTop = placement.startsWith('top');
-    const isEnd = placement.endsWith('end');
+    const floatingHeight = floating?.offsetHeight ?? 0;
+    const floatingWidth = floating?.offsetWidth ?? (matchWidth ? rect.width : minWidth);
+    const viewportPadding = 8;
+    const preferredTop = placement.startsWith('top');
+    const preferredEnd = placement.endsWith('end');
+    const roomBelow = window.innerHeight - rect.bottom - viewportPadding;
+    const roomAbove = rect.top - viewportPadding;
+    const placeTop = preferredTop ? roomAbove >= floatingHeight || roomAbove > roomBelow : roomBelow < floatingHeight && roomAbove > roomBelow;
+
+    let left = preferredEnd ? rect.right - floatingWidth : rect.left;
+    left = Math.max(viewportPadding, Math.min(left, window.innerWidth - floatingWidth - viewportPadding));
+
     setStyle({
       position: 'fixed',
       zIndex: 9999,
-      ...(matchWidth ? { width: reference.offsetWidth } : {}),
-      ...(isEnd ? { right: window.innerWidth - rect.right } : { left: rect.left }),
-      ...(isTop ? { bottom: window.innerHeight - rect.top + 6 } : { top: rect.bottom + 6 }),
+      minWidth,
+      ...(matchWidth ? { width: rect.width } : {}),
+      left,
+      ...(placeTop
+        ? { bottom: Math.max(viewportPadding, window.innerHeight - rect.top + offset) }
+        : { top: Math.min(window.innerHeight - viewportPadding, rect.bottom + offset) }),
     });
-  }, [matchWidth, placement]);
+  }, [matchWidth, minWidth, offset, placement]);
 
   useEffect(() => {
     if (!open) return;
-    updatePosition();
+    const frame = requestAnimationFrame(updatePosition);
     const outside = (event: MouseEvent) => {
       const target = event.target as Node;
-      if (!referenceRef.current?.contains(target) && !floatingRef.current?.contains(target))
-        close();
+      if (!referenceRef.current?.contains(target) && !floatingRef.current?.contains(target)) close();
     };
     const escape = (event: KeyboardEvent) => {
       if (closeOnEsc && event.key === 'Escape') close();
@@ -88,6 +111,7 @@ export function BaseDropdown({
     window.addEventListener('resize', updatePosition);
     window.addEventListener('scroll', updatePosition, true);
     return () => {
+      cancelAnimationFrame(frame);
       document.removeEventListener('mousedown', outside);
       document.removeEventListener('keydown', escape);
       window.removeEventListener('resize', updatePosition);
@@ -95,21 +119,32 @@ export function BaseDropdown({
     };
   }, [close, closeOnEsc, open, updatePosition]);
 
-  const context = useMemo(() => ({ open }), [open]);
+  const context = useMemo(() => ({ close, open }), [close, open]);
 
   return (
-    <>
+    <DropdownContext.Provider value={context}>
       <div
         ref={referenceRef}
-        className={cn('inline-block', matchWidth && 'w-full')}
+        className={cn('inline-block', matchWidth && 'w-full', className)}
         onClick={(event) => {
           if (event.defaultPrevented) return;
           event.stopPropagation();
           setOpen((value) => !value);
           requestAnimationFrame(updatePosition);
         }}
+        onKeyDown={(event) => {
+          if (event.defaultPrevented) return;
+          if (event.key === 'Enter' || event.key === ' ') {
+            const target = event.target as HTMLElement;
+            if (target.tagName === 'BUTTON' || target.tagName === 'INPUT') return;
+            event.preventDefault();
+            event.stopPropagation();
+            setOpen((value) => !value);
+            requestAnimationFrame(updatePosition);
+          }
+        }}
       >
-        {trigger(context)}
+        {trigger({ open })}
       </div>
       {open
         ? createPortal(
@@ -120,10 +155,12 @@ export function BaseDropdown({
               style={style}
               onClick={(event) => {
                 if (!closeOnItemClick) return;
-                if ((event.target as HTMLElement).closest("button, [role='option'], a")) close();
+                const target = event.target as HTMLElement;
+                if (target.closest("button, [role='option'], [role='menuitem'], a")) close();
               }}
               className={cn(
                 'z-[9999] min-w-[140px] animate-[dropdown-in_150ms_ease-out] rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] py-1 shadow-xl',
+                contentClassName,
               )}
             >
               {children}
@@ -131,6 +168,7 @@ export function BaseDropdown({
             document.body,
           )
         : null}
-    </>
+    </DropdownContext.Provider>
   );
 }
+

@@ -1,1 +1,1 @@
-export { Skeleton } from './skeleton';
+export { Skeleton, TableSkeleton, CardSkeleton, FormSkeleton, type SkeletonProps, type SkeletonRounded } from './skeleton';

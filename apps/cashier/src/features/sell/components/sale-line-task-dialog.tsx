@@ -296,10 +296,10 @@ export function SaleLineTaskDialog({
                             aria-label={`${employee.displayName} contribution share`}
                             value={contributionShares[employee.id] ?? ''}
                             disabled={operationalDisabled}
-                            onChange={(event) =>
+                            onChange={(value) =>
                               setContributionShares((current) => ({
                                 ...current,
-                                [employee.id]: event.target.value,
+                                [employee.id]: value,
                               }))
                             }
                             placeholder="auto"
@@ -391,7 +391,7 @@ export function SaleLineTaskDialog({
                 aria-label="Price override amount"
                 value={overrideAmount}
                 disabled={monetaryDisabled}
-                onChange={(event) => setOverrideAmount(event.target.value)}
+                onChange={setOverrideAmount}
                 inputMode="decimal"
                 className="mt-1.5"
               />
@@ -402,7 +402,7 @@ export function SaleLineTaskDialog({
                 aria-label="Price override reason"
                 value={overrideReason}
                 disabled={monetaryDisabled}
-                onChange={(event) => setOverrideReason(event.target.value)}
+                onChange={setOverrideReason}
                 className="mt-1.5"
               />
             </label>
@@ -432,8 +432,10 @@ export function SaleLineTaskDialog({
                 aria-label="Line discount type"
                 value={discountType}
                 disabled={monetaryDisabled}
-                onChange={(event) => {
-                  const next = event.target.value as DiscountType;
+                clearable={false}
+                onChange={(value) => {
+                  if (typeof value !== 'string') return;
+                  const next = value as DiscountType;
                   setDiscountType(next);
                   setDiscountValue('');
                 }}
@@ -453,7 +455,7 @@ export function SaleLineTaskDialog({
               aria-label="Line discount reason"
               value={discountReason}
               disabled={monetaryDisabled}
-              onChange={(event) => setDiscountReason(event.target.value)}
+              onChange={setDiscountReason}
               placeholder="Reason"
               className="mt-2"
             />

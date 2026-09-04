@@ -208,7 +208,10 @@ export function SaleCompletionDialog({
                     aria-label="Payment method"
                     value={method}
                     disabled={paymentDisabled}
-                    onChange={(event) => setMethod(event.target.value as PaymentMethod)}
+                    clearable={false}
+                    onChange={(value) => {
+                      if (typeof value === 'string') setMethod(value as PaymentMethod);
+                    }}
                     className="mt-1.5"
                   >
                     <option value="CASH">Cash</option>
@@ -245,7 +248,7 @@ export function SaleCompletionDialog({
                       aria-label="Payment provider reference"
                       value={providerReference}
                       disabled={paymentDisabled}
-                      onChange={(event) => setProviderReference(event.target.value)}
+                      onChange={setProviderReference}
                       className="mt-1.5"
                     />
                   </label>
@@ -329,8 +332,10 @@ export function SaleCompletionDialog({
                   aria-label="Order discount type"
                   value={discountType}
                   disabled={monetaryDisabled}
-                  onChange={(event) => {
-                    setDiscountType(event.target.value as DiscountType);
+                  clearable={false}
+                  onChange={(value) => {
+                    if (typeof value !== 'string') return;
+                    setDiscountType(value as DiscountType);
                     setDiscountValue('');
                   }}
                 >
@@ -349,7 +354,7 @@ export function SaleCompletionDialog({
                 aria-label="Order discount reason"
                 value={discountReason}
                 disabled={monetaryDisabled}
-                onChange={(event) => setDiscountReason(event.target.value)}
+                onChange={setDiscountReason}
                 placeholder="Reason"
                 className="mt-2"
               />

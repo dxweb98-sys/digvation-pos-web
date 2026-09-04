@@ -69,7 +69,7 @@ export function SellingCatalogPane({
           <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-[var(--color-text-muted)]" />
           <Input
             value={search}
-            onChange={(event) => onSearchChange(event.target.value)}
+            onChange={onSearchChange}
             placeholder="Search items"
             className="h-9 bg-[var(--color-background)] pl-9 pr-3 text-xs"
           />

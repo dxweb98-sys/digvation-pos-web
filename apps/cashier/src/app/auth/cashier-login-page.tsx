@@ -103,7 +103,7 @@ export function CashierLoginPage({ authPort, onAuthenticated }: CashierLoginPage
               label="ID pengguna"
               value={identifier}
               disabled={isSubmitting}
-              onChange={(event) => setIdentifier(event.target.value)}
+              onChange={setIdentifier}
               placeholder="Username atau email"
               autoComplete="username"
               autoCapitalize="none"
@@ -116,7 +116,7 @@ export function CashierLoginPage({ authPort, onAuthenticated }: CashierLoginPage
               type="password"
               value={password}
               disabled={isSubmitting}
-              onChange={(event) => setPassword(event.target.value)}
+              onChange={setPassword}
               placeholder="Masukkan kata sandi"
               autoComplete="current-password"
             />
