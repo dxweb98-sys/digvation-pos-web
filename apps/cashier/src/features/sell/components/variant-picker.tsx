@@ -33,6 +33,8 @@ export function VariantPicker({
       ariaLabelledBy="variant-picker-title"
       closeOnEscape
       closeOnOverlay
+      showClose={false}
+      noPadding
       overlayClassName="grid place-items-end bg-slate-950/25 backdrop-blur-[2px] sm:place-items-center sm:p-6"
       className="animate-[pos-dialog-in_170ms_ease-out] w-full rounded-t-3xl border border-[var(--color-border)] bg-[var(--color-surface)] p-4 shadow-2xl sm:max-w-md sm:rounded-3xl"
     >
