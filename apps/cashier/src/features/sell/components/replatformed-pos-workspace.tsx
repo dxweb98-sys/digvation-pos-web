@@ -57,6 +57,7 @@ import type { useCashierTransactionWorkspace } from '../use-cashier-transaction-
 import { PosCurrencyInput, PosNumericInput } from './pos-controls';
 import { SaleLineTaskDialog } from './sale-line-task-dialog';
 import './replatformed-pos-workspace.css';
+import { DButton, DCombobox, DDialog, DInput } from '@digvation/ui';
 
 type Workspace = ReturnType<typeof useCashierTransactionWorkspace>;
 type QueueStatus = 'DRAFT' | 'PROGRESS' | 'COMPLETED' | 'CANCELED';
@@ -259,12 +260,8 @@ export function ReplatformedPosWorkspace({ workspace }: { workspace: Workspace }
     if (sale?.id) writeStoredCustomer(saleCustomerKey(sale.id), cartCustomer);
   }, [cartCustomer, sale?.id]);
 
-  useEffect(() => {
-    if (!receiptSaleId || sale?.id !== receiptSaleId || sale.status !== 'FINALIZED') return;
-    setQueueDetail(sale);
-    setReceiptSaleId(null);
-    setCartOpen(false);
-  }, [receiptSaleId, sale]);
+  const displayedQueueDetail =
+    receiptSaleId && sale?.id === receiptSaleId && sale.status === 'FINALIZED' ? sale : queueDetail;
   const categories = useMemo(
     () => [
       ...new Set(
@@ -313,6 +310,7 @@ export function ReplatformedPosWorkspace({ workspace }: { workspace: Workspace }
     const currentReview = sale?.id === reviewTarget?.id ? sale : reviewTarget;
     if (!currentReview || workflowIssues(currentReview).length) return;
     setReceiptSaleId(currentReview.id);
+    setCartOpen(false);
     workspace.finalizeSale();
     setReviewTarget(null);
   };
@@ -533,15 +531,19 @@ export function ReplatformedPosWorkspace({ workspace }: { workspace: Workspace }
         onPay={pay}
       />
       <ReferenceTransactionDetail
-        sale={queueDetail}
+        sale={displayedQueueDetail}
         locale={workspace.locale}
         employees={workspace.employees}
         businessName={runtime.branding.businessName ?? runtime.branding.productName}
         branchName="Main Branch"
         cashierName={session.identity.displayName}
-        onClose={() => setQueueDetail(null)}
+        onClose={() => {
+          setQueueDetail(null);
+          setReceiptSaleId(null);
+        }}
         onNewSale={() => {
           setQueueDetail(null);
+          setReceiptSaleId(null);
           setCartCustomer(null);
           writeStoredCustomer(CURRENT_CUSTOMER_KEY, null);
           setCartOpen(false);
@@ -1324,7 +1326,9 @@ function ReferenceCustomerDialog({
   };
 
   return (
-    <Dialog
+    <DDialog
+      title="Pilih pelanggan"
+      description="Hanya untuk konteks transaksi ini."
       open={open}
       onClose={onClose}
       ariaLabel="Choose customer"
@@ -1332,137 +1336,113 @@ function ReferenceCustomerDialog({
       closeOnOverlay
       className="pos-reference-dialog w-full max-w-md overflow-hidden rounded-t-2xl bg-[var(--color-surface)] shadow-xl sm:rounded-xl"
     >
-      <div className="flex max-h-[80dvh] min-h-0 flex-col">
-        <header className="flex items-center justify-between border-b border-[var(--color-border)] px-5 py-4">
-          <div>
-            <h2 className="text-base font-bold">Pilih pelanggan</h2>
+      <div className="min-h-0 space-y-3 overflow-y-auto">
+        <button
+          type="button"
+          onClick={onUseGeneralCustomer}
+          className={`flex w-full items-center gap-3 rounded-xl border px-3 py-3 text-left transition-colors ${customer === null ? 'border-[var(--color-brand)] bg-[var(--color-brand)]/5' : 'border-[var(--color-border)] hover:bg-[var(--color-surface-muted)]'}`}
+        >
+          <div className="grid size-8 place-items-center rounded-lg bg-[var(--color-surface-muted)] text-[var(--color-text-muted)]">
+            <User className="size-4" />
+          </div>
+          <div className="min-w-0 flex-1">
+            <p className="text-sm font-semibold">Gunakan pelanggan umum</p>
             <p className="mt-0.5 text-xs text-[var(--color-text-muted)]">
-              Hanya untuk konteks transaksi ini.
+              Lanjutkan tanpa memilih pelanggan.
             </p>
           </div>
-          <button
-            type="button"
-            aria-label="Close customer picker"
-            onClick={onClose}
-            className="rounded-lg p-2 text-[var(--color-text-muted)] hover:bg-[var(--color-surface-muted)]"
-          >
-            <X className="size-[18px]" />
-          </button>
-        </header>
-        <div className="min-h-0 space-y-3 overflow-y-auto p-4">
-          <button
-            type="button"
-            onClick={onUseGeneralCustomer}
-            className={`flex w-full items-center gap-3 rounded-xl border px-3 py-3 text-left transition-colors ${customer === null ? 'border-[var(--color-brand)] bg-[var(--color-brand)]/5' : 'border-[var(--color-border)] hover:bg-[var(--color-surface-muted)]'}`}
-          >
-            <div className="grid size-8 place-items-center rounded-lg bg-[var(--color-surface-muted)] text-[var(--color-text-muted)]">
-              <User className="size-4" />
-            </div>
-            <div className="min-w-0 flex-1">
-              <p className="text-sm font-semibold">Gunakan pelanggan umum</p>
-              <p className="mt-0.5 text-xs text-[var(--color-text-muted)]">
-                Lanjutkan tanpa memilih pelanggan.
-              </p>
-            </div>
-            {customer === null ? (
-              <CheckCircle2 className="size-4 text-[var(--color-brand)]" />
-            ) : null}
-          </button>
-          <div className="border-t border-[var(--color-border)] pt-3">
-            <div className="flex gap-2" aria-label="Customer type">
-              <Button
-                size="sm"
-                variant={mode === 'MEMBER' ? 'primary' : 'secondary'}
-                onClick={() => changeMode('MEMBER')}
-              >
-                Member
-              </Button>
-              <Button
-                size="sm"
-                variant={mode === 'NON_MEMBER' ? 'primary' : 'secondary'}
-                onClick={() => changeMode('NON_MEMBER')}
-              >
-                Non-member
-              </Button>
-            </div>
-
-            {mode === 'MEMBER' ? (
-              <div className="mt-3 space-y-3">
-                <Combobox
-                  key="member-search"
-                  ariaLabel="Search members by name or phone"
-                  value={selectedMember?.customerId ?? ''}
-                  options={memberResults.map((member) => ({
-                    value: member.customerId,
-                    label: member.name,
-                    detail: `${member.phone} · ${member.membership.memberCode}`,
-                  }))}
-                  onChange={(customerId) => {
-                    setSelectedMember(
-                      memberResults.find((member) => member.customerId === customerId) ?? null,
-                    );
-                  }}
-                  onSearchChange={(query) => {
-                    setMemberSearch(query);
-                    setSelectedMember(null);
-                  }}
-                  placeholder="Cari nama atau nomor telepon"
-                  idleMessage="Ketik nama, nomor telepon, atau kode member untuk mencari."
-                  renderEmpty={() => 'Member tidak ditemukan.'}
-                  renderOption={(option) => {
-                    const member = memberResults.find(
-                      (result) => result.customerId === String(option.value),
-                    );
-                    return (
-                      <span className="min-w-0">
-                        <span className="block truncate">{option.label}</span>
-                        {member ? (
-                          <span className="mt-0.5 block truncate text-xs font-normal text-[var(--color-text-muted)]">
-                            {member.phone} · {member.membership.memberCode}
-                          </span>
-                        ) : null}
-                      </span>
-                    );
-                  }}
-                />
-                <Button
-                  fullWidth
-                  disabled={!selectedMember}
-                  onClick={() => selectedMember && onChoose(selectedMember)}
-                >
-                  Gunakan pelanggan
-                </Button>
-              </div>
-            ) : (
-              <div className="mt-3 space-y-3">
-                <Input
-                  aria-label="Customer name"
-                  label="Nama"
-                  value={name}
-                  onChange={setName}
-                  placeholder="Nama pelanggan"
-                />
-                <Input
-                  aria-label="Customer phone"
-                  label="Nomor telepon"
-                  value={phone}
-                  onChange={setPhone}
-                  placeholder="Nomor telepon"
-                  inputMode="tel"
-                />
-                <Button
-                  fullWidth
-                  disabled={!name.trim() || !phone.trim()}
-                  onClick={chooseNonMember}
-                >
-                  Gunakan pelanggan
-                </Button>
-              </div>
-            )}
+          {customer === null ? <CheckCircle2 className="size-4 text-[var(--color-brand)]" /> : null}
+        </button>
+        <div className="border-t border-[var(--color-border)] pt-3">
+          <div className="flex gap-2" aria-label="Customer type">
+            <Button
+              size="sm"
+              variant={mode === 'MEMBER' ? 'primary' : 'secondary'}
+              onClick={() => changeMode('MEMBER')}
+            >
+              Member
+            </Button>
+            <Button
+              size="sm"
+              variant={mode === 'NON_MEMBER' ? 'primary' : 'secondary'}
+              onClick={() => changeMode('NON_MEMBER')}
+            >
+              Non-member
+            </Button>
           </div>
+
+          {mode === 'MEMBER' ? (
+            <div className="mt-3 space-y-3">
+              <DCombobox
+                key="member-search"
+                ariaLabel="Search members by name or phone"
+                value={selectedMember?.customerId ?? ''}
+                options={memberResults.map((member) => ({
+                  value: member.customerId,
+                  label: member.name,
+                  detail: `${member.phone} · ${member.membership.memberCode}`,
+                }))}
+                onChange={(customerId) => {
+                  setSelectedMember(
+                    memberResults.find((member) => member.customerId === customerId) ?? null,
+                  );
+                }}
+                onSearchChange={(query) => {
+                  setMemberSearch(query);
+                  setSelectedMember(null);
+                }}
+                placeholder="Cari nama atau nomor telepon"
+                idleMessage="Ketik nama, nomor telepon, atau kode member untuk mencari."
+                renderEmpty={() => 'Member tidak ditemukan.'}
+                renderOption={(option) => {
+                  const member = memberResults.find(
+                    (result) => result.customerId === String(option.value),
+                  );
+                  return (
+                    <span className="min-w-0">
+                      <span className="block truncate">{option.label}</span>
+                      {member ? (
+                        <span className="mt-0.5 block truncate text-xs font-normal text-[var(--color-text-muted)]">
+                          {member.phone} · {member.membership.memberCode}
+                        </span>
+                      ) : null}
+                    </span>
+                  );
+                }}
+              />
+              <Button
+                fullWidth
+                disabled={!selectedMember}
+                onClick={() => selectedMember && onChoose(selectedMember)}
+              >
+                Gunakan pelanggan
+              </Button>
+            </div>
+          ) : (
+            <div className="mt-3 space-y-3">
+              <DInput
+                aria-label="Customer name"
+                label="Nama"
+                value={name}
+                onChange={setName}
+                placeholder="Nama pelanggan"
+              />
+              <DInput
+                aria-label="Customer phone"
+                label="Nomor telepon"
+                value={phone}
+                onChange={setPhone}
+                placeholder="Nomor telepon"
+                inputMode="tel"
+              />
+              <Button fullWidth disabled={!name.trim() || !phone.trim()} onClick={chooseNonMember}>
+                Gunakan pelanggan
+              </Button>
+            </div>
+          )}
         </div>
       </div>
-    </Dialog>
+    </DDialog>
   );
 }
 
@@ -1519,7 +1499,9 @@ function ReferencePaymentDialog({
       ? ['BCA', 'Mandiri', 'BRI', 'BNI']
       : ['DANA', 'GoPay', 'OVO', 'ShopeePay'];
   return (
-    <Dialog
+    <DDialog
+      title="Checkout pembayaran"
+      description="Review pesanan sebelum simpan draft atau bayar langsung."
       open={open}
       onClose={onClose}
       ariaLabel="Checkout payment"
@@ -1703,22 +1685,22 @@ function ReferencePaymentDialog({
           )}
         </div>
         <footer className="flex shrink-0 flex-col-reverse justify-end gap-2 border-t border-[var(--color-border)] bg-[var(--color-surface-muted)]/30 px-6 py-3 sm:flex-row">
-          <Button variant="ghost" onClick={onClose}>
+          <DButton variant="ghost" onClick={onClose}>
             Batal
-          </Button>
-          <Button variant="outline" disabled={!lines.length} onClick={onSaveDraft}>
+          </DButton>
+          <DButton variant="outline" disabled={!lines.length} onClick={onSaveDraft}>
             Simpan Draft
-          </Button>
-          <Button
+          </DButton>
+          <DButton
             disabled={!canPay}
             onClick={onPay}
             leftIcon={<CheckCircle2 className="size-3.5" />}
           >
             {method === 'QRIS' ? 'Bayar QRIS' : 'Bayar Langsung'}
-          </Button>
+          </DButton>
         </footer>
       </div>
-    </Dialog>
+    </DDialog>
   );
 }
 
