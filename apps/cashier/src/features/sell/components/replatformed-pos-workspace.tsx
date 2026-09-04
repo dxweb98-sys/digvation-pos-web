@@ -751,6 +751,11 @@ function ReferenceQueueCard({
             onSelect: () => onResume(sale),
           },
           {
+            label: 'Review & Selesaikan',
+            icon: <CheckCircle2 className="size-3.5" />,
+            onSelect: () => onComplete(sale),
+          },
+          {
             label: 'Batalkan',
             icon: <XCircle className="size-3.5" />,
             destructive: true,
@@ -1372,7 +1377,9 @@ function ReferenceTransactionDetail({
       <div className="flex max-h-[85dvh] min-h-0 flex-col">
         <header className="flex items-center justify-between border-b border-[var(--color-border)] px-6 py-4">
           <div>
-            <h2 className="text-lg font-semibold">Detail Transaksi POS</h2>
+            <h2 className="text-lg font-semibold">
+              {sale.status === 'FINALIZED' ? 'Preview Receipt' : 'Detail Transaksi POS'}
+            </h2>
             <p className="mt-0.5 font-mono text-sm text-[var(--color-text-muted)]">
               {transactionNumber(sale.id)}
             </p>
