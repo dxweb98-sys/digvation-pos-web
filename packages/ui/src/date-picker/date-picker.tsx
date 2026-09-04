@@ -126,7 +126,7 @@ export function DatePicker({
           {clearable && value && !disabled ? <button type="button" aria-label="Clear date" onMouseDown={(event) => event.preventDefault()} onClick={(event) => { event.preventDefault(); event.stopPropagation(); onChange?.(''); onClear?.(); }} className="absolute right-2 top-1/2 -translate-y-1/2 rounded-md p-1 text-[var(--color-text-muted)] hover:bg-[var(--color-surface-muted)]"><ClearIcon /></button> : null}
         </div>
       )}>
-        <DatePickerContent value={value} onChange={onChange} minDate={minDate} maxDate={maxDate} />
+        <DatePickerContent {...(value === undefined ? {} : { value })} {...(onChange === undefined ? {} : { onChange })} {...(minDate === undefined ? {} : { minDate })} {...(maxDate === undefined ? {} : { maxDate })} />
       </Dropdown>
       {error ? <p className="text-xs text-[var(--color-danger)]">{error}</p> : null}
       {!error && hint ? <p className="text-xs text-[var(--color-text-muted)]">{hint}</p> : null}

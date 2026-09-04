@@ -88,7 +88,7 @@ function RangeDropdownContent({ value, onChange }: { value?: DateRangeValue; onC
     const range = quickRange(type); setQuickType(type); setTempStart(range.start); setTempEnd(range.end); setLeftMonth(startOfMonth(range.start || today));
   };
   const apply = () => {
-    if (quickType === 'all_time') { onChange?.({ start: undefined, end: undefined }); close?.(); return; }
+    if (quickType === 'all_time') { onChange?.({}); close?.(); return; }
     if (!tempStart || !tempEnd) return;
     onChange?.({ start: formatDate(tempStart), end: formatDate(tempEnd) }); close?.();
   };
@@ -129,8 +129,8 @@ export function RangeDatePicker({ label, placeholder = 'Pilih periode', value, s
     {label ? <label htmlFor={id} className={cn(s.label, 'inline-block w-fit font-medium text-[var(--color-text)]')}>{label}</label> : null}
     <Dropdown placement="bottom-end" contentRole="dialog" trigger={({ open }) => <div className="relative">
       <button id={id} type="button" disabled={disabled} className={cn('flex w-full items-center gap-2 rounded-lg border bg-[var(--color-surface)] pr-10 text-left focus:border-[var(--color-brand)] focus:outline-none focus:ring-2 focus:ring-[var(--color-brand)]/20 disabled:cursor-not-allowed disabled:bg-[var(--color-surface-muted)] disabled:opacity-50', s.input, error ? 'border-[var(--color-danger)]' : 'border-[var(--color-border)]', displayValue ? 'text-[var(--color-text)]' : 'text-[var(--color-text-muted)]/60')}><span className="shrink-0 text-[var(--color-text-muted)]"><CalendarIcon /></span><span className="min-w-0 flex-1 truncate">{displayValue || placeholder}</span></button>
-      <div className={cn('absolute top-1/2 flex -translate-y-1/2 items-center gap-1 text-[var(--color-text-muted)]', s.iconRight)}>{clearable && displayValue && !disabled ? <button type="button" aria-label="Clear date range" onMouseDown={(event) => event.preventDefault()} onClick={(event) => { event.preventDefault(); event.stopPropagation(); onChange?.({ start: undefined, end: undefined }); }} className="rounded-md p-1 hover:bg-[var(--color-surface-muted)]"><ClearIcon /></button> : null}{!disabled ? <ChevronDownIcon open={open} /> : null}</div>
-    </div>}><RangeDropdownContent value={value} onChange={onChange} /></Dropdown>
+      <div className={cn('absolute top-1/2 flex -translate-y-1/2 items-center gap-1 text-[var(--color-text-muted)]', s.iconRight)}>{clearable && displayValue && !disabled ? <button type="button" aria-label="Clear date range" onMouseDown={(event) => event.preventDefault()} onClick={(event) => { event.preventDefault(); event.stopPropagation(); onChange?.({}); }} className="rounded-md p-1 hover:bg-[var(--color-surface-muted)]"><ClearIcon /></button> : null}{!disabled ? <ChevronDownIcon open={open} /> : null}</div>
+    </div>}><RangeDropdownContent {...(value === undefined ? {} : { value })} {...(onChange === undefined ? {} : { onChange })} /></Dropdown>
     {error ? <p className="text-xs text-[var(--color-danger)]">{error}</p> : null}{!error && hint ? <p className="text-xs text-[var(--color-text-muted)]">{hint}</p> : null}
   </div>;
 }

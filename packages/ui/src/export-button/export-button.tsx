@@ -32,5 +32,5 @@ function ExportContent({ onExport, filename, onSuccess, onError, onProcessing, s
 }
 export function ExportButton({ filename = 'export', disabled, ...props }: ExportButtonProps) {
   const [loading, setLoading] = useState(false);
-  return <Dropdown placement="bottom-end" trigger={() => <Button variant="outline" size="sm" leftIcon={<DownloadIcon />} loading={loading} disabled={disabled}>Export</Button>}><ExportContent {...props} filename={filename} disabled={disabled} setLoading={setLoading} /></Dropdown>;
+  return <Dropdown placement="bottom-end" trigger={() => <Button variant="outline" size="sm" leftIcon={<DownloadIcon />} loading={loading} disabled={disabled}>Export</Button>}><ExportContent {...props} filename={filename} {...(disabled === undefined ? {} : { disabled })} setLoading={setLoading} /></Dropdown>;
 }
