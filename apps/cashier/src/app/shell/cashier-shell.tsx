@@ -282,6 +282,8 @@ export function CashierShell() {
         ariaLabel="Choose active branch"
         closeOnEscape
         closeOnOverlay
+        showClose={false}
+        noPadding
         className="w-full max-w-md rounded-t-[var(--radius-panel)] bg-[var(--color-surface)] shadow-2xl sm:rounded-[var(--radius-panel)]"
       >
         <div className="border-b border-[var(--color-border)] px-5 py-4">
