@@ -1,11 +1,10 @@
 import { useAuth } from '@digvation/pos-auth';
 import { useConnectivity, useRuntime } from '@digvation/pos-runtime';
-import { Button, Dialog, Dropdown, useToast } from '@digvation/pos-ui';
+import { DAvatar, DButton, DDialog, useToast } from '@digvation/ui';
 import { useQuery } from '@tanstack/react-query';
 import {
   Check,
   ChevronDown,
-  CircleUserRound,
   LayoutGrid,
   LogOut,
   MapPin,
@@ -24,7 +23,6 @@ import { getAppVersion } from '../version/app-version';
 const NAVIGATION = [
   { to: '/sell', label: 'Sell', icon: LayoutGrid },
   { to: '/open-sales', label: 'Open Sales', icon: Rows3 },
-  { to: '/account', label: 'Account', icon: CircleUserRound },
 ] as const;
 
 function formatCurrentDate(locale: string): string {
@@ -51,9 +49,11 @@ function identityInitials(displayName: string, initials?: string): string | null
 export function CashierShell() {
   const runtime = useRuntime();
   const connectivity = useConnectivity();
-  const { session, logout } = useAuth();
+  const { session, authPort, logout } = useAuth();
   const { showToast } = useToast();
   const [isLoggingOut, setLoggingOut] = useState(false);
+  const [isAccountDialogOpen, setAccountDialogOpen] = useState(false);
+  const [isRequestingPasswordChange, setRequestingPasswordChange] = useState(false);
   const {
     selectedLocationId,
     selectLocation,
@@ -120,6 +120,37 @@ export function CashierShell() {
     }
   };
 
+  const requestPasswordChange = async () => {
+    if (isRequestingPasswordChange) return;
+    const email = session.identity.email;
+    if (!email) {
+      showToast({
+        title: 'Email tidak tersedia',
+        description: 'Hubungi administrator untuk meminta perubahan kata sandi.',
+        variant: 'warning',
+      });
+      return;
+    }
+
+    setRequestingPasswordChange(true);
+    try {
+      await authPort.requestPasswordChange({ email });
+      showToast({
+        title: 'Permintaan diterima',
+        description: 'Instruksi perubahan kata sandi akan dikirim ke email akun Anda.',
+        variant: 'success',
+      });
+    } catch {
+      showToast({
+        title: 'Permintaan belum dapat diproses',
+        description: 'Silakan coba lagi atau hubungi administrator.',
+        variant: 'danger',
+      });
+    } finally {
+      setRequestingPasswordChange(false);
+    }
+  };
+
   return (
     <div className="flex h-screen flex-col overflow-hidden bg-[var(--color-background)] lg:grid lg:grid-cols-[256px_minmax(0,1fr)]">
       <aside className="shrink-0 border-b border-[var(--color-border)] bg-[var(--color-surface)] lg:flex lg:h-screen lg:flex-col lg:border-b-0 lg:border-r">
@@ -144,25 +175,22 @@ export function CashierShell() {
         </div>
 
         <div className="px-3 pt-3">
-          <button
-            type="button"
+          <div
             onClick={openBranchPicker}
-            aria-haspopup="dialog"
-            aria-expanded={isBranchPickerOpen}
-            className="flex w-full items-center gap-2 rounded-[var(--radius-control)] border border-[var(--color-border)] bg-[var(--color-surface-muted)] px-3 py-2.5 text-left transition-colors hover:bg-[var(--color-background)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-focus)]"
+            className="flex min-w-0 w-full items-center gap-2.5 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-muted)]/55 px-3 py-2.5 text-left transition-[background-color,border-color,box-shadow,transform] duration-200 ease-out hover:-translate-y-px hover:border-[var(--color-brand)]/30 hover:bg-[var(--color-surface-muted)] hover:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-focus)]"
           >
-            <MapPin className="size-4 shrink-0 text-[var(--color-brand)]" />
+            <MapPin className="size-3.5 shrink-0 text-[var(--color-brand)]" />
             <span className="min-w-0 flex-1">
-              <span className="block text-[10px] font-bold uppercase tracking-[0.12em] text-[var(--color-text-muted)]">
+              <span className="block text-[9px] font-bold uppercase tracking-[0.12em] text-[var(--color-text-muted)]">
                 Active branch
               </span>
-              <span className="mt-0.5 block truncate text-sm font-semibold">
+              <span className="mt-0.5 block truncate text-sm font-semibold text-[var(--color-text)]">
                 {selectedLocation?.name ??
                   (locationsQuery.isLoading ? 'Loading branch' : 'Choose branch')}
               </span>
             </span>
-            <ChevronDown className="size-4 shrink-0 text-[var(--color-text-muted)]" />
-          </button>
+            <ChevronDown className="size-3.5 shrink-0 self-center text-[var(--color-text-muted)]" />
+          </div>
         </div>
 
         <nav className="mt-3 flex gap-1 px-3 lg:flex-col">
@@ -172,21 +200,37 @@ export function CashierShell() {
               to={to}
               className={({ isActive }) =>
                 [
-                  'flex min-h-10 items-center gap-3 rounded-lg px-3 text-sm font-medium transition-colors duration-150',
+                  'flex min-h-10 items-center justify-start gap-2.5 rounded-lg px-3 text-sm font-medium transition-colors duration-150',
                   isActive
                     ? 'bg-[var(--color-brand)]/10 text-[var(--color-brand)]'
                     : 'text-[var(--color-text-muted)] hover:bg-[var(--color-surface-muted)] hover:text-[var(--color-text)]',
                 ].join(' ')
               }
             >
-              <Icon className="size-4.5" />
+              <Icon className="size-[18px] shrink-0" />
               {label}
             </NavLink>
           ))}
         </nav>
 
-        <div className="mx-5 mt-auto hidden border-t border-[var(--color-border)] py-3 text-xs text-[var(--color-text-muted)] lg:block">
-          v{version.version} · {version.revision}
+        <div className="mt-auto hidden border-t border-[var(--color-border)] lg:block">
+          <div className="px-5 py-3 text-xs text-[var(--color-text-muted)]">
+            v{version.version}
+            {' \u00b7 '}
+            {version.revision}
+          </div>
+          <div className="px-3 pb-3">
+            <DButton
+              variant="ghost"
+              type="button"
+              rightIcon={<LogOut className="size-[18px] shrink-0" />}
+              loading={isLoggingOut}
+              onClick={() => void handleLogout()}
+              className="flex h-10 w-full items-center justify-start gap-2.5 px-3 text-[var(--color-danger)] hover:bg-[var(--color-danger)]/10 hover:text-[var(--color-danger)]"
+            >
+              Logout
+            </DButton>
+          </div>
         </div>
       </aside>
 
@@ -206,69 +250,31 @@ export function CashierShell() {
               {formatCurrentDate(runtime.locale)}
             </span>
           </div>
-          <Dropdown
-            placement="bottom-end"
-            contentRole="menu"
-            closeOnItemClick
-            trigger={({ open }) => (
-              <button
-                type="button"
-                disabled={isLoggingOut}
-                aria-label="Open account menu"
-                aria-haspopup="menu"
-                aria-expanded={open}
-                className="flex min-w-0 items-center gap-3 rounded-[var(--radius-control)] py-1 pl-2 pr-1.5 text-right transition-colors hover:bg-[var(--color-surface-muted)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-focus)]/20 disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                <span className="hidden min-w-0 sm:block">
-                  <span className="block truncate text-sm font-semibold">
-                    {session.identity.displayName}
-                  </span>
-                  <span className="block truncate text-xs text-[var(--color-text-muted)]">
-                    {session.identity.email ?? runtime.deploymentProfile}
-                  </span>
-                </span>
-                <span className="grid size-9 shrink-0 place-items-center overflow-hidden rounded-full bg-[var(--color-brand)]/10 text-xs font-bold text-[var(--color-brand)] ring-1 ring-[var(--color-brand)]/15">
-                  {session.identity.avatarUrl ? (
-                    <img
-                      src={session.identity.avatarUrl}
-                      alt=""
-                      className="size-full object-cover"
-                    />
-                  ) : (
-                    (userInitials ?? <UserRound className="size-4" aria-label="User account" />)
-                  )}
-                </span>
-                <ChevronDown
-                  className={`hidden size-3.5 shrink-0 text-[var(--color-text-muted)] transition-transform sm:block ${
-                    open ? 'rotate-180' : ''
-                  }`}
-                />
-              </button>
-            )}
+          <button
+            type="button"
+            onClick={() => setAccountDialogOpen(true)}
+            aria-label="Open account information"
+            aria-haspopup="dialog"
+            aria-expanded={isAccountDialogOpen}
+            className="flex h-[50px] min-w-0 max-w-[min(50vw,340px)] items-center gap-3 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-muted)]/45 px-3 text-left transition-colors duration-150 hover:bg-[var(--color-surface-muted)] hover:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-focus)]/20"
           >
-            <div className="min-w-[240px]">
-              <div className="border-b border-[var(--color-border)] px-3 py-3">
-                <p className="truncate text-sm font-semibold text-[var(--color-text)]">
-                  {session.identity.displayName}
-                </p>
-                <p className="mt-0.5 truncate text-xs text-[var(--color-text-muted)]">
-                  {session.identity.email ?? session.identity.userId}
-                </p>
-              </div>
-              <div className="p-1">
-                <button
-                  type="button"
-                  role="menuitem"
-                  disabled={isLoggingOut}
-                  onClick={handleLogout}
-                  className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm font-medium text-[var(--color-danger)] transition-colors hover:bg-[var(--color-danger)]/10 disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  <LogOut className="size-4" />
-                  {isLoggingOut ? 'Mengakhiri sesi...' : 'Logout'}
-                </button>
-              </div>
-            </div>
-          </Dropdown>
+            <span className="hidden min-w-0 flex-1 flex-col justify-center gap-0.5 sm:flex">
+              <span className="truncate text-sm font-semibold leading-5 text-[var(--color-text)]">
+                {session.identity.displayName}
+              </span>
+              <span className="truncate text-xs leading-4 text-[var(--color-text-muted)]">
+                {session.identity.email ?? runtime.deploymentProfile}
+              </span>
+            </span>
+            <DAvatar
+              {...(session.identity.avatarUrl ? { src: session.identity.avatarUrl } : {})}
+              alt=""
+              name={session.identity.displayName}
+              fallback={userInitials ?? <UserRound className="size-4" aria-label="User account" />}
+              size="md"
+              className="shrink-0 bg-[var(--color-brand)]/10 text-xs font-bold text-[var(--color-brand)] ring-1 ring-[var(--color-brand)]/15"
+            />
+          </button>
         </header>
 
         <div className="min-h-0 overflow-y-auto overscroll-contain">
@@ -276,7 +282,7 @@ export function CashierShell() {
         </div>
       </main>
 
-      <Dialog
+      <DDialog
         open={isBranchPickerOpen}
         onClose={closeBranchPicker}
         ariaLabel="Choose active branch"
@@ -297,7 +303,7 @@ export function CashierShell() {
         </div>
         <div className="max-h-[min(420px,60vh)] overflow-y-auto p-3">
           {locationsQuery.isLoading ? (
-            <p className="p-3 text-sm text-[var(--color-text-muted)]">Loading branches…</p>
+            <p className="p-3 text-sm text-[var(--color-text-muted)]">Loading branches...</p>
           ) : locations.length === 0 ? (
             <div className="p-3 text-sm text-[var(--color-text-muted)]">
               No active branches are available for this workspace.
@@ -307,7 +313,8 @@ export function CashierShell() {
               {locations.map((location) => {
                 const isSelected = location.id === selectedLocationId;
                 return (
-                  <button
+                  <DButton
+                    variant="ghost"
                     key={location.id}
                     type="button"
                     onClick={() => handleLocationSelect(location.id)}
@@ -324,18 +331,74 @@ export function CashierShell() {
                       </span>
                     </span>
                     {isSelected ? <Check className="size-4 shrink-0" /> : null}
-                  </button>
+                  </DButton>
                 );
               })}
             </div>
           )}
         </div>
         <div className="border-t border-[var(--color-border)] p-3">
-          <Button variant="secondary" className="w-full" onClick={closeBranchPicker}>
+          <DButton variant="secondary" className="w-full" onClick={closeBranchPicker}>
             Close
-          </Button>
+          </DButton>
         </div>
-      </Dialog>
+      </DDialog>
+
+      <DDialog
+        open={isAccountDialogOpen}
+        onClose={() => setAccountDialogOpen(false)}
+        title="Account"
+        description="Informasi akun Cashier yang sedang aktif."
+        ariaLabel="Account information"
+        closeOnEscape
+        closeOnOverlay
+        className="w-full max-w-md rounded-[var(--radius-panel)] bg-[var(--color-surface)]"
+        footer={
+          <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+            <DButton variant="secondary" onClick={() => setAccountDialogOpen(false)}>
+              Close
+            </DButton>
+            <DButton
+              loading={isRequestingPasswordChange}
+              onClick={() => void requestPasswordChange()}
+            >
+              Request change password
+            </DButton>
+          </div>
+        }
+      >
+        <div>
+          <div className="flex min-w-0 items-center gap-3.5">
+            <DAvatar
+              {...(session.identity.avatarUrl ? { src: session.identity.avatarUrl } : {})}
+              alt=""
+              name={session.identity.displayName}
+              fallback={userInitials ?? <UserRound className="size-4" aria-label="User account" />}
+              size="lg"
+              className="shrink-0 bg-[var(--color-brand)]/10 font-bold text-[var(--color-brand)]"
+            />
+            <div className="min-w-0">
+              <p className="truncate text-base font-bold text-[var(--color-text)]">
+                {session.identity.displayName}
+              </p>
+              <p className="mt-1 truncate text-sm text-[var(--color-text-muted)]">
+                {session.identity.email ?? session.identity.userId}
+              </p>
+            </div>
+          </div>
+
+          {selectedLocation ? (
+            <div className="mt-5 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-muted)]/45 px-3 py-2.5">
+              <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-[var(--color-text-muted)]">
+                Active branch
+              </p>
+              <p className="mt-1 truncate text-sm font-semibold text-[var(--color-text)]">
+                {selectedLocation.name}
+              </p>
+            </div>
+          ) : null}
+        </div>
+      </DDialog>
     </div>
   );
 }

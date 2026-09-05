@@ -18,8 +18,13 @@ export interface AuthLoginInput {
   rememberMe?: boolean;
 }
 
+export interface AuthPasswordChangeRequestInput {
+  email: string;
+}
+
 export interface AuthPort {
   me(): Promise<AuthSession | null>;
   login(input: AuthLoginInput): Promise<AuthSession>;
   logout(): Promise<void>;
+  requestPasswordChange(input: AuthPasswordChangeRequestInput): Promise<void>;
 }

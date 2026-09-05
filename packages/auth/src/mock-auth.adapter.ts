@@ -1,7 +1,13 @@
-import type { AuthLoginInput, AuthPort, AuthSession } from './auth.types';
+import type {
+  AuthLoginInput,
+  AuthPasswordChangeRequestInput,
+  AuthPort,
+  AuthSession,
+} from './auth.types';
 
 const SESSION_STORAGE_KEY = 'digvation.pos.auth.mock-session.v1';
 const MOCK_LOGIN_LATENCY_MS = 850;
+const MOCK_SECURITY_LATENCY_MS = 500;
 
 const DEVELOPMENT_SESSION: AuthSession = {
   identity: {
@@ -64,6 +70,10 @@ function waitForMockLogin() {
   return new Promise<void>((resolve) => window.setTimeout(resolve, MOCK_LOGIN_LATENCY_MS));
 }
 
+function waitForMockSecurityAction() {
+  return new Promise<void>((resolve) => window.setTimeout(resolve, MOCK_SECURITY_LATENCY_MS));
+}
+
 export class MockAuthAdapter implements AuthPort {
   private session: AuthSession | null;
 
@@ -91,5 +101,10 @@ export class MockAuthAdapter implements AuthPort {
   public async logout(): Promise<void> {
     this.session = null;
     persistSession(null);
+  }
+
+  public async requestPasswordChange(input: AuthPasswordChangeRequestInput): Promise<void> {
+    if (!input.email.trim()) throw new Error('INVALID_PASSWORD_CHANGE_EMAIL');
+    await waitForMockSecurityAction();
   }
 }
