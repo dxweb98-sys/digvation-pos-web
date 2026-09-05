@@ -154,6 +154,9 @@ importers:
 
   packages/auth:
     dependencies:
+      '@digvation/pos-api':
+        specifier: workspace:*
+        version: link:../api
       react:
         specifier: ^19.2.0
         version: 19.2.8

@@ -7,7 +7,7 @@ export function useEmployeeOptions(query: EmployeeQuery) {
   const employeesQuery = useQuery({
     queryKey: cashierTransactionKeys.employees(),
     queryFn: ({ signal }) => query.listEmployees(signal),
-    staleTime: 30_000,
+    staleTime: 180_000,
   });
 
   return {

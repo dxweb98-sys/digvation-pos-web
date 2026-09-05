@@ -1,13 +1,18 @@
 import { useConnectivity, useRuntime } from '@digvation/pos-runtime';
-import { useQuery } from '@tanstack/react-query';
+import { useAuth } from '@digvation/pos-auth';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router';
 
 import { useCashierSession } from '../../app/providers/cashier-session-provider';
 import { cashierTransactionErrorMessage } from './cashier-transaction-errors';
 import { cashierTransactionKeys } from './cashier-transaction-keys';
+import { fetchResolvedPrice } from './resolved-price-query';
 import type { CatalogItem, Sale, SaleLine } from './cashier-transaction.types';
-import { createCashierTransactionAdapter, isCashierDemoMode } from './cashier-transaction-client';
+import {
+  createCashierTransactionAdapter,
+  isLocalCashierDemoEnabled,
+} from './cashier-transaction-adapter-factory';
 import type { VariantPickerContext, VariantPickerState } from './components/variant-picker';
 import { useEmployeeOptions } from './use-employee-options';
 import { useSaleCommandCoordinator } from './use-sale-command-coordinator';
@@ -17,6 +22,8 @@ import { useSellingCatalog } from './use-selling-catalog';
 
 export function useCashierTransactionWorkspace(routeSaleId?: string) {
   const runtime = useRuntime();
+  const { authPort } = useAuth();
+  const queryClient = useQueryClient();
   const connectivity = useConnectivity();
   const navigate = useNavigate();
   const { selectedLocationId, selectLocation, rememberSale } = useCashierSession();
@@ -25,17 +32,15 @@ export function useCashierTransactionWorkspace(routeSaleId?: string) {
   const [isCompletionOpen, setCompletionOpen] = useState(false);
   const [resumedSaleId, setResumedSaleId] = useState<string | null>(null);
   const transactionAdapter = useMemo(
-    () => createCashierTransactionAdapter(runtime.apiBaseUrl),
-    [runtime.apiBaseUrl],
+    () => createCashierTransactionAdapter(runtime, authPort.getAccessToken.bind(authPort)),
+    [authPort, runtime],
   );
-  const effectiveConnectivity = isCashierDemoMode() ? 'ONLINE' : connectivity.state;
+  const effectiveConnectivity = isLocalCashierDemoEnabled() ? 'ONLINE' : connectivity.state;
 
   const command = useSaleCommandCoordinator({ client: transactionAdapter, rememberSale });
 
   const catalog = useSellingCatalog({
     query: transactionAdapter,
-    selectedLocationId,
-    currency: runtime.currency,
     locale: runtime.locale,
   });
 
@@ -97,22 +102,12 @@ export function useCashierTransactionWorkspace(routeSaleId?: string) {
       saleWorkspace.addItem(item.id, catalogVariantId);
       return;
     }
-    const resolvedPrice =
-      catalogVariantId === undefined
-        ? (catalog.priceByItemId.get(item.id) ??
-          (await transactionAdapter.resolvePrice({
-            catalogItemId: item.id,
-            sellingLocationId: selectedLocationId,
-            currency: runtime.currency,
-            effectiveAt: new Date().toISOString(),
-          })))
-        : await transactionAdapter.resolvePrice({
-            catalogItemId: item.id,
-            catalogVariantId,
-            sellingLocationId: selectedLocationId,
-            currency: runtime.currency,
-            effectiveAt: new Date().toISOString(),
-          });
+    const resolvedPrice = await fetchResolvedPrice(queryClient, transactionAdapter, {
+      catalogItemId: item.id,
+      ...(catalogVariantId ? { catalogVariantId } : {}),
+      sellingLocationId: selectedLocationId,
+      currency: runtime.currency,
+    });
 
     saleWorkspace.addItem(item.id, catalogVariantId, { catalogItem: item, resolvedPrice });
   };
@@ -130,12 +125,11 @@ export function useCashierTransactionWorkspace(routeSaleId?: string) {
         const priceEntries = selectedLocationId
           ? await Promise.all(
               variants.map(async (variant) => {
-                const price = await transactionAdapter.resolvePrice({
+                const price = await fetchResolvedPrice(queryClient, transactionAdapter, {
                   catalogItemId: item.id,
                   catalogVariantId: variant.id,
                   sellingLocationId: selectedLocationId,
                   currency: runtime.currency,
-                  effectiveAt: new Date().toISOString(),
                 });
                 return [variant.id, price.amount] as const;
               }),
@@ -283,7 +277,6 @@ export function useCashierTransactionWorkspace(routeSaleId?: string) {
     locale: runtime.locale,
     currency: runtime.currency,
     items: catalog.items,
-    priceByItemId: catalog.priceByItemId,
     employees: employeeOptions.employees,
     selectedLocationId: selectedLocationId ?? '',
     search: catalog.search,

@@ -1,5 +1,6 @@
 export { AuthProvider, useAuth } from './auth-context';
 export { MockAuthAdapter } from './mock-auth.adapter';
+export { HttpAuthAdapter } from './http-auth.adapter';
 export type {
   AuthIdentity,
   AuthLoginInput,

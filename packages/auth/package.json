@@ -6,6 +6,9 @@
   "exports": {
     ".": "./src/index.ts"
   },
+  "dependencies": {
+    "@digvation/pos-api": "workspace:*"
+  },
   "peerDependencies": {
     "react": "^19.2.0"
   },

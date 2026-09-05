@@ -1,10 +1,10 @@
 {
   "apiBaseUrl": "http://127.0.0.1:4003",
-  "workspace": "local-development",
+  "workspace": "local",
   "locale": "id-ID",
   "currency": "IDR",
   "defaultCountry": "ID",
-  "deploymentProfile": "SHARED",
+  "deploymentProfile": "DEDICATED",
   "applications": {
     "cashier": true,
     "backoffice": true

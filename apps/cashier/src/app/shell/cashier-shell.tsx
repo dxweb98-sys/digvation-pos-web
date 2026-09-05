@@ -15,7 +15,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router';
 
 import { cashierTransactionKeys } from '../../features/sell/cashier-transaction-keys';
-import { createCashierTransactionAdapter } from '../../features/sell/cashier-transaction-client';
+import { createCashierTransactionAdapter } from '../../features/sell/cashier-transaction-adapter-factory';
 import { useCashierSession } from '../providers/cashier-session-provider';
 import { getAppVersion } from '../version/app-version';
 
@@ -61,12 +61,13 @@ export function CashierShell() {
   const routerLocation = useLocation();
   const version = getAppVersion();
   const transactionAdapter = useMemo(
-    () => createCashierTransactionAdapter(runtime.apiBaseUrl),
-    [runtime.apiBaseUrl],
+    () => createCashierTransactionAdapter(runtime, authPort.getAccessToken.bind(authPort)),
+    [authPort, runtime],
   );
   const locationsQuery = useQuery({
     queryKey: cashierTransactionKeys.locations(),
     queryFn: ({ signal }) => transactionAdapter.listSellingLocations(signal),
+    staleTime: 600_000,
   });
   const locations = useMemo(
     () => (locationsQuery.data?.items ?? []).filter((location) => location.status === 'ACTIVE'),

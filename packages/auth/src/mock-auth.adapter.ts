@@ -107,4 +107,8 @@ export class MockAuthAdapter implements AuthPort {
     if (!input.email.trim()) throw new Error('INVALID_PASSWORD_CHANGE_EMAIL');
     await waitForMockSecurityAction();
   }
+
+  public async getAccessToken(): Promise<string | null> {
+    return null;
+  }
 }

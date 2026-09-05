@@ -48,7 +48,10 @@ import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 
 import { cashierTransactionKeys } from '../cashier-transaction-keys';
-import { createCashierTransactionAdapter } from '../cashier-transaction-client';
+import {
+  createCashierTransactionAdapter,
+  isLocalCashierDemoEnabled,
+} from '../cashier-transaction-adapter-factory';
 import {
   customerMemberLookup,
   type MemberCustomerLookupResult,
@@ -347,7 +350,7 @@ function employeeWorkSummary(line: SaleLine, employees: readonly Employee[]): st
     .join(' · ');
 }
 
-function queueStatus(sale: Sale): QueueStatus {
+function queueStatus(sale: Sale, includeOpenSales = false): QueueStatus | null {
   if (sale.status === 'FINALIZED') return 'COMPLETED';
   if (sale.status === 'VOIDED') return 'CANCELED';
   if (
@@ -359,7 +362,17 @@ function queueStatus(sale: Sale): QueueStatus {
   ) {
     return 'PROGRESS';
   }
-  return 'QUEUED';
+  if (
+    includeOpenSales ||
+    sale.lines.some(
+      (line) =>
+        line.fulfillmentBehaviorSnapshot === 'TRACKED' &&
+        line.fulfillment?.status === 'WAITING',
+    )
+  ) {
+    return 'QUEUED';
+  }
+  return null;
 }
 
 function isPositiveDecimal(value: string) {
@@ -501,29 +514,31 @@ function hasSuccessfulPayment(sale: Sale): boolean {
 
 export function ReplatformedPosWorkspace({ workspace }: { workspace: Workspace }) {
   const runtime = useRuntime();
-  const { session } = useAuth();
+  const { session, authPort } = useAuth();
   const { showToast } = useToast();
+  const isLocalDemo = isLocalCashierDemoEnabled();
   const adapter = useMemo(
-    () => createCashierTransactionAdapter(runtime.apiBaseUrl),
-    [runtime.apiBaseUrl],
+    () => createCashierTransactionAdapter(runtime, authPort.getAccessToken.bind(authPort)),
+    [authPort, runtime],
   );
   const transactionsQuery = useQuery({
     queryKey: cashierTransactionKeys.sales(),
     queryFn: ({ signal }) => adapter.listSales(signal),
-    refetchInterval: 1_500,
   });
   const [search, setSearch] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('');
   const [queueTab, setQueueTab] = useState<QueueStatus>('QUEUED');
-  const [queuedSaleEntries, setQueuedSaleEntries] =
-    useState<QueuedSaleEntry[]>(readQueuedSaleEntries);
+  const [queuedSaleEntries, setQueuedSaleEntries] = useState<QueuedSaleEntry[]>(() =>
+    isLocalDemo ? readQueuedSaleEntries() : [],
+  );
   const [queueIssues, setQueueIssues] = useState<Record<string, string[]>>({});
   const [queueOpen, setQueueOpen] = useState(false);
   const [queueDetail, setQueueDetail] = useState<Sale | null>(null);
   const [cancelTarget, setCancelTarget] = useState<Sale | null>(null);
   const [cancelReason, setCancelReason] = useState('');
-  const [cancellationReasons, setCancellationReasons] =
-    useState<Record<string, string>>(readCancellationReasons);
+  const [cancellationReasons, setCancellationReasons] = useState<Record<string, string>>(() =>
+    isLocalDemo ? readCancellationReasons() : {},
+  );
   const [adjustmentTarget, setAdjustmentTarget] = useState<Sale | null>(null);
   const [queuePaymentTarget, setQueuePaymentTarget] = useState<Sale | null>(null);
   const [cartOpen, setCartOpen] = useState(false);
@@ -557,10 +572,8 @@ export function ReplatformedPosWorkspace({ workspace }: { workspace: Workspace }
 
   useEffect(() => {
     writeStoredCustomer(CURRENT_CUSTOMER_KEY, cartCustomer);
-    if (sale?.id && !queuedSaleEntries.some((entry) => entry.saleId === sale.id)) {
-      writeStoredCustomer(saleCustomerKey(sale.id), cartCustomer);
-    }
-  }, [cartCustomer, queuedSaleEntries, sale?.id]);
+    if (sale?.id) writeStoredCustomer(saleCustomerKey(sale.id), cartCustomer);
+  }, [cartCustomer, sale?.id]);
 
   const displayedQueueDetail =
     receiptSaleId && sale?.id === receiptSaleId && hasSuccessfulPayment(sale) ? sale : queueDetail;
@@ -588,21 +601,23 @@ export function ReplatformedPosWorkspace({ workspace }: { workspace: Workspace }
     );
   }, [search, selectedCategory, workspace.items]);
   const groups = useMemo(() => {
-    const committedQueueEntries = queuedSaleEntries.filter(
-      (entry) => entry.sellingLocationId === workspace.selectedLocationId,
+    const locationRecords = (transactionsQuery.data?.items ?? []).filter(
+      (record) => record.sellingLocationId === workspace.selectedLocationId,
     );
-    const records = (transactionsQuery.data?.items ?? []).filter((record) =>
-      committedQueueEntries.some(
-        (entry) => entry.saleId === record.id && entry.saleCreatedAt === record.createdAt,
-      ),
-    );
+    const records = isLocalDemo
+      ? locationRecords.filter((record) =>
+          queuedSaleEntries.some(
+            (entry) => entry.saleId === record.id && entry.saleCreatedAt === record.createdAt,
+          ),
+        )
+      : locationRecords;
     return {
-      QUEUED: records.filter((record) => queueStatus(record) === 'QUEUED'),
-      PROGRESS: records.filter((record) => queueStatus(record) === 'PROGRESS'),
-      COMPLETED: records.filter((record) => queueStatus(record) === 'COMPLETED'),
-      CANCELED: records.filter((record) => queueStatus(record) === 'CANCELED'),
+      QUEUED: records.filter((record) => queueStatus(record, isLocalDemo) === 'QUEUED'),
+      PROGRESS: records.filter((record) => queueStatus(record, isLocalDemo) === 'PROGRESS'),
+      COMPLETED: records.filter((record) => queueStatus(record, isLocalDemo) === 'COMPLETED'),
+      CANCELED: records.filter((record) => queueStatus(record, isLocalDemo) === 'CANCELED'),
     };
-  }, [queuedSaleEntries, transactionsQuery.data, workspace.selectedLocationId]);
+  }, [isLocalDemo, queuedSaleEntries, transactionsQuery.data, workspace.selectedLocationId]);
 
   const selectType = (type: CatalogItemTypeFilter) => {
     workspace.setItemType(type);
@@ -636,25 +651,26 @@ export function ReplatformedPosWorkspace({ workspace }: { workspace: Workspace }
     wasPaid: boolean,
     destination: FulfillmentDestination,
   ) => {
-    const committedEntry: QueuedSaleEntry = {
-      saleId: completedSale.id,
-      sellingLocationId: completedSale.sellingLocationId,
-      saleCreatedAt: completedSale.createdAt,
-    };
-    const nextQueuedSaleEntries = queuedSaleEntries.some(
-      (entry) =>
-        entry.saleId === committedEntry.saleId &&
-        entry.saleCreatedAt === committedEntry.saleCreatedAt,
-    )
-      ? queuedSaleEntries
-      : [
-          ...queuedSaleEntries.filter((entry) => entry.saleId !== committedEntry.saleId),
-          committedEntry,
-        ];
-
     writeStoredCustomer(saleCustomerKey(completedSale.id), cartCustomer);
-    writeQueuedSaleEntries(nextQueuedSaleEntries);
-    setQueuedSaleEntries(nextQueuedSaleEntries);
+    if (isLocalDemo) {
+      const committedEntry: QueuedSaleEntry = {
+        saleId: completedSale.id,
+        sellingLocationId: completedSale.sellingLocationId,
+        saleCreatedAt: completedSale.createdAt,
+      };
+      const nextQueuedSaleEntries = queuedSaleEntries.some(
+        (entry) =>
+          entry.saleId === committedEntry.saleId &&
+          entry.saleCreatedAt === committedEntry.saleCreatedAt,
+      )
+        ? queuedSaleEntries
+        : [
+            ...queuedSaleEntries.filter((entry) => entry.saleId !== committedEntry.saleId),
+            committedEntry,
+          ];
+      writeQueuedSaleEntries(nextQueuedSaleEntries);
+      setQueuedSaleEntries(nextQueuedSaleEntries);
+    }
     setQueueTab('QUEUED');
     setQueueOpen(true);
     setCartOpen(false);
@@ -845,8 +861,13 @@ export function ReplatformedPosWorkspace({ workspace }: { workspace: Workspace }
     }
     try {
       const canceledSale = await workspace.voidSale();
-      writeCancellationReason(canceledSale.id, cancelReason.trim());
-      setCancellationReasons((current) => ({ ...current, [canceledSale.id]: cancelReason.trim() }));
+      if (isLocalDemo) {
+        writeCancellationReason(canceledSale.id, cancelReason.trim());
+        setCancellationReasons((current) => ({
+          ...current,
+          [canceledSale.id]: cancelReason.trim(),
+        }));
+      }
       setQueueDetail(canceledSale);
       setCancelTarget(null);
       setCancelReason('');
@@ -1058,8 +1079,6 @@ export function ReplatformedPosWorkspace({ workspace }: { workspace: Workspace }
                 <ReferenceCatalogCard
                   key={item.id}
                   item={item}
-                  price={workspace.priceByItemId.get(item.id)?.amount ?? '0.0000'}
-                  locale={workspace.locale}
                   disabled={workspace.viewModel.monetaryMutation.state !== 'AVAILABLE'}
                   onAdd={() => void workspace.selectItem(item)}
                 />
@@ -1134,6 +1153,7 @@ export function ReplatformedPosWorkspace({ workspace }: { workspace: Workspace }
         businessName={runtime.branding.businessName ?? runtime.branding.productName}
         branchName="Main Branch"
         cashierName={session.identity.displayName}
+        isLocalDemo={isLocalDemo}
         {...(displayedQueueDetail && cancellationReasons[displayedQueueDetail.id]
           ? { cancellationReason: cancellationReasons[displayedQueueDetail.id] }
           : {})}
@@ -1349,14 +1369,10 @@ function ReferenceTypeButton({
 
 function ReferenceCatalogCard({
   item,
-  price,
-  locale,
   disabled,
   onAdd,
 }: {
   item: CatalogItem;
-  price: string;
-  locale: string;
   disabled: boolean;
   onAdd: () => void;
 }) {
@@ -1377,7 +1393,7 @@ function ReferenceCatalogCard({
       <p className="truncate font-mono text-[10px] text-[var(--color-text-muted)]">{item.code}</p>
       <p className="mt-1 line-clamp-2 min-h-10 text-sm font-semibold leading-tight">{item.name}</p>
       <div className="mt-2 flex items-center justify-between gap-2">
-        <p className="text-sm font-bold text-[var(--color-brand)]">{money(price, locale)}</p>
+        <p className="text-xs font-semibold text-[var(--color-text-muted)]">Harga saat dipilih</p>
         <span
           className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${isService ? 'bg-cyan-500/10 text-cyan-700' : 'bg-[var(--color-brand)]/10 text-[var(--color-brand)]'}`}
         >
@@ -2477,6 +2493,7 @@ function ReferenceTransactionDetail({
   businessName,
   branchName,
   cashierName,
+  isLocalDemo,
   cancellationReason,
   showPaymentReceipt,
   onClose,
@@ -2493,6 +2510,7 @@ function ReferenceTransactionDetail({
   businessName: string;
   branchName: string;
   cashierName: string;
+  isLocalDemo: boolean;
   cancellationReason?: string;
   showPaymentReceipt: boolean;
   onClose: () => void;
@@ -2506,7 +2524,7 @@ function ReferenceTransactionDetail({
 }) {
   const [receiptPaper, setReceiptPaper] = useState<'58' | '80'>('80');
   if (!sale) return null;
-  const status = queueStatus(sale);
+  const status = queueStatus(sale, isLocalDemo);
   const customerContext = readStoredCustomer(saleCustomerKey(sale.id));
   const customer = customerContext ?? saleCustomer(sale.id);
   const activeLines = sale.lines.filter((line) => !line.removedAt);
@@ -2627,9 +2645,9 @@ function ReferenceTransactionDetail({
                   </p>
                   <div className="mt-3 flex flex-wrap gap-1">
                     <span
-                      className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-medium ${statusMeta[status].tone}`}
+                      className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-medium ${status ? statusMeta[status].tone : 'bg-[var(--color-surface-muted)] text-[var(--color-text-muted)]'}`}
                     >
-                      {statusMeta[status].label}
+                      {status ? statusMeta[status].label : 'Terbuka'}
                     </span>
                     <span
                       className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-medium ${hasSuccessfulCheckout(sale) ? 'bg-[var(--color-success)]/10 text-[var(--color-success)]' : receiptAvailable ? 'bg-[var(--color-warning)]/10 text-[var(--color-warning)]' : 'bg-[var(--color-surface-muted)] text-[var(--color-text-muted)]'}`}
