@@ -2,15 +2,19 @@ import { useAuth } from '@digvation/pos-auth';
 import { createDecimal, formatMoney } from '@digvation/pos-money';
 import { useRuntime } from '@digvation/pos-runtime';
 import {
-  Badge,
-  Button,
-  Combobox,
-  Dialog,
-  Dropdown,
-  Input,
-  SearchInput,
-  Skeleton,
-} from '@digvation/pos-ui';
+  DBadge as Badge,
+  DButton,
+  DButton as Button,
+  DCombobox,
+  DCombobox as Combobox,
+  DDialog,
+  DDialog as Dialog,
+  DDropdown as Dropdown,
+  DInput,
+  DInput as Input,
+  DSearchInput as SearchInput,
+  DSkeleton as Skeleton,
+} from '@digvation/ui';
 import { useQuery } from '@tanstack/react-query';
 import {
   AlertCircle,
@@ -57,7 +61,6 @@ import type { useCashierTransactionWorkspace } from '../use-cashier-transaction-
 import { PosCurrencyInput, PosNumericInput } from './pos-controls';
 import { SaleLineTaskDialog } from './sale-line-task-dialog';
 import './replatformed-pos-workspace.css';
-import { DButton, DCombobox, DDialog, DInput } from '@digvation/ui';
 
 type Workspace = ReturnType<typeof useCashierTransactionWorkspace>;
 type QueueStatus = 'DRAFT' | 'PROGRESS' | 'COMPLETED' | 'CANCELED';
