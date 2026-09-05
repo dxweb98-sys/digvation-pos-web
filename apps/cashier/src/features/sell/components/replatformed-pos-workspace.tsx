@@ -8,15 +8,17 @@ import {
   DCheckbox,
   DCombobox,
   DCombobox as Combobox,
+  DConfirmDialog,
   DDialog,
   DDialog as Dialog,
   DDropdown as Dropdown,
   DInput,
   DInput as Input,
   DSearchInput as SearchInput,
+  DSelect as Select,
   DSkeleton as Skeleton,
   useToast,
-} from '@digvation/ui';
+} from '@digvation-labs/ui';
 import { useQuery } from '@tanstack/react-query';
 import {
   AlertCircle,
@@ -62,6 +64,7 @@ import type { useCashierTransactionWorkspace } from '../use-cashier-transaction-
 
 import { PosCurrencyInput, PosNumericInput } from './pos-controls';
 import { SaleLineTaskDialog } from './sale-line-task-dialog';
+import type { VariantPickerState } from './variant-picker';
 import './replatformed-pos-workspace.css';
 
 type Workspace = ReturnType<typeof useCashierTransactionWorkspace>;
@@ -70,12 +73,25 @@ type FulfillmentDestination = 'QUEUE' | 'START_PROCESS';
 interface QueuedSaleEntry {
   saleId: string;
   sellingLocationId: string;
+  saleCreatedAt: string;
 }
 
 type PosCustomer = TransactionCustomer;
+interface ServiceWorkContributor {
+  employeeId: string;
+  shareRate: string;
+}
+
+interface ServiceWorkUnit {
+  index: number;
+  contributors: readonly ServiceWorkContributor[];
+}
+
+type ServiceWorkUnitsByLine = Readonly<Record<string, readonly ServiceWorkUnit[]>>;
 
 const CURRENT_CUSTOMER_KEY = 'digvation-pos-demo-current-customer';
 const QUEUED_SALE_IDS_KEY = 'digvation-pos-demo-queued-sale-ids';
+const CANCELED_SALE_REASONS_KEY = 'digvation-pos-demo-canceled-sale-reasons';
 const saleCustomerKey = (saleId: string) => `digvation-pos-demo-customer:${saleId}`;
 
 function readStoredCustomer(key: string): PosCustomer | null {
@@ -106,7 +122,8 @@ function readQueuedSaleEntries(): QueuedSaleEntry[] {
             typeof value === 'object' &&
             value !== null &&
             typeof value.saleId === 'string' &&
-            typeof value.sellingLocationId === 'string',
+            typeof value.sellingLocationId === 'string' &&
+            typeof value.saleCreatedAt === 'string',
         )
       : [];
   } catch {
@@ -119,6 +136,33 @@ function writeQueuedSaleEntries(entries: readonly QueuedSaleEntry[]): void {
     window.sessionStorage.setItem(QUEUED_SALE_IDS_KEY, JSON.stringify(entries));
   } catch {
     // Queue presentation state remains available for the current session when storage is unavailable.
+  }
+}
+
+function readCancellationReasons(): Record<string, string> {
+  try {
+    const raw = window.sessionStorage.getItem(CANCELED_SALE_REASONS_KEY);
+    const parsed = raw ? JSON.parse(raw) : {};
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed)
+      ? Object.fromEntries(
+          Object.entries(parsed).filter(
+            (entry): entry is [string, string] => typeof entry[1] === 'string',
+          ),
+        )
+      : {};
+  } catch {
+    return {};
+  }
+}
+
+function writeCancellationReason(saleId: string, reason: string): void {
+  try {
+    window.sessionStorage.setItem(
+      CANCELED_SALE_REASONS_KEY,
+      JSON.stringify({ ...readCancellationReasons(), [saleId]: reason }),
+    );
+  } catch {
+    // This local/demo presentation metadata is optional when session storage is unavailable.
   }
 }
 
@@ -193,10 +237,109 @@ function employeeSummary(line: SaleLine, employees: readonly Employee[]): string
     .join(' · ');
 }
 
+function serviceWorkKey(line: SaleLine): string {
+  return `${line.saleId}:${line.id}`;
+}
+
+function serviceWorkUnitCount(line: SaleLine): number {
+  try {
+    const quantity = createDecimal(line.quantity);
+    if (!quantity.isInteger() || quantity.lessThanOrEqualTo(createDecimal('1'))) return 1;
+    const count = quantity.toNumber();
+    return Number.isSafeInteger(count) ? count : 1;
+  } catch {
+    return 1;
+  }
+}
+
+function defaultWorkContributors(line: SaleLine): ServiceWorkContributor[] {
+  return line.participations
+    .filter((participation) => participation.assigned)
+    .map((participation) => ({
+      employeeId: participation.employeeId,
+      shareRate: participation.shareRate ?? '0.0000',
+    }));
+}
+
+function serviceWorkUnitsFor(
+  line: SaleLine,
+  storedUnits: readonly ServiceWorkUnit[] | undefined,
+): ServiceWorkUnit[] {
+  const count = serviceWorkUnitCount(line);
+  const storedByIndex = new Map(storedUnits?.map((unit) => [unit.index, unit]));
+  const fallbackContributors = defaultWorkContributors(line);
+
+  return Array.from({ length: count }, (_, index) => {
+    const stored = storedByIndex.get(index);
+    return {
+      index,
+      contributors: stored?.contributors ?? fallbackContributors,
+    };
+  });
+}
+
+function contributionTotal(contributors: readonly ServiceWorkContributor[]) {
+  return contributors.reduce(
+    (total, contributor) => total.plus(createDecimal(contributor.shareRate || '0')),
+    createDecimal('0'),
+  );
+}
+
+function hasValidWorkAssignment(line: SaleLine, unit: ServiceWorkUnit): boolean {
+  if (
+    line.employeeAssignmentModeSnapshot === 'REQUIRED' &&
+    !unit.contributors.some((contributor) => contributor.employeeId)
+  ) {
+    return false;
+  }
+  if (line.allowEmployeeContributionSnapshot) {
+    return (
+      unit.contributors.length > 0 &&
+      unit.contributors.every((contributor) => Boolean(contributor.employeeId)) &&
+      contributionTotal(unit.contributors).equals(createDecimal('1'))
+    );
+  }
+  return true;
+}
+
+function serviceWorkAssignmentSummary(
+  units: readonly ServiceWorkUnit[],
+  employees: readonly Employee[],
+): string {
+  const assignments = units.map((unit) =>
+    unit.contributors
+      .filter((contributor) => contributor.employeeId)
+      .map((contributor) => `${contributor.employeeId}:${contributor.shareRate}`)
+      .join('|'),
+  );
+  const firstAssignment = assignments[0] ?? '';
+  if (!firstAssignment) return 'Belum ada karyawan';
+  if (assignments.some((assignment) => assignment !== firstAssignment)) {
+    return 'Atur per pengerjaan';
+  }
+
+  const names = (units[0]?.contributors ?? [])
+    .filter((contributor) => contributor.employeeId)
+    .map(
+      (contributor) =>
+        employees.find((employee) => employee.id === contributor.employeeId)?.displayName ??
+        contributor.employeeId,
+    );
+  return `${names.join(' · ')} untuk semua`;
+}
+
 function queueStatus(sale: Sale): QueueStatus {
   if (sale.status === 'FINALIZED') return 'COMPLETED';
   if (sale.status === 'VOIDED') return 'CANCELED';
-  if (sale.lines.some((line) => line.fulfillment?.status === 'IN_PROGRESS')) return 'PROGRESS';
+  if (
+    sale.lines.some(
+      (line) =>
+        line.fulfillmentBehaviorSnapshot === 'TRACKED' &&
+        (line.fulfillment?.status === 'IN_PROGRESS' || line.fulfillment?.startedAt !== null),
+    )
+  ) {
+    return 'PROGRESS';
+  }
   return 'QUEUED';
 }
 
@@ -208,7 +351,30 @@ function isPositiveDecimal(value: string) {
   }
 }
 
-function workflowIssues(sale: Sale, requiresEmployeeAttribution = true) {
+function employeeAssignmentIssues(line: SaleLine): string[] {
+  const issues: string[] = [];
+  if (
+    line.employeeAssignmentModeSnapshot === 'REQUIRED' &&
+    !line.participations.some((participation) => participation.assigned)
+  ) {
+    issues.push(`${line.itemNameSnapshot}: pilih karyawan.`);
+  }
+  if (line.allowEmployeeContributionSnapshot) {
+    const shares = line.participations.filter(
+      (participation) => participation.assigned && participation.shareRate !== null,
+    );
+    const total = shares.reduce(
+      (sum, participation) => sum.plus(createDecimal(participation.shareRate ?? '0')),
+      createDecimal('0'),
+    );
+    if (!shares.length || !total.equals(createDecimal('1'))) {
+      issues.push(`${line.itemNameSnapshot}: kontribusi karyawan harus tepat 100%.`);
+    }
+  }
+  return issues;
+}
+
+function workflowIssues(sale: Sale, serviceWorkUnits: ServiceWorkUnitsByLine = {}) {
   const issues: string[] = [];
   const active = sale.lines.filter((line) => line.removedAt === null);
   if (!active.length) issues.push('Tambahkan setidaknya satu item.');
@@ -228,31 +394,48 @@ function workflowIssues(sale: Sale, requiresEmployeeAttribution = true) {
       issues.push(`${line.itemNameSnapshot}: qty harus lebih dari 0.`);
     if (!isPositiveDecimal(line.effectiveUnitPrice))
       issues.push(`${line.itemNameSnapshot}: harga harus valid.`);
-    if (
-      line.fulfillmentBehaviorSnapshot === 'TRACKED' &&
-      line.fulfillment?.status !== 'COMPLETED'
-    ) {
-      issues.push(`${line.itemNameSnapshot}: pekerjaan belum selesai.`);
-    }
-    if (
-      requiresEmployeeAttribution &&
-      line.employeeAssignmentModeSnapshot === 'REQUIRED' &&
-      !line.participations.some((p) => p.assigned)
-    ) {
-      issues.push(`${line.itemNameSnapshot}: pilih karyawan.`);
-    }
-    if (requiresEmployeeAttribution && line.allowEmployeeContributionSnapshot) {
-      const shares = line.participations.filter((p) => p.assigned && p.shareRate !== null);
-      const total = shares.reduce(
-        (sum, p) => sum.plus(createDecimal(p.shareRate ?? '0')),
-        createDecimal('0'),
-      );
-      if (!shares.length || !total.equals(createDecimal('1'))) {
-        issues.push(`${line.itemNameSnapshot}: kontribusi karyawan harus tepat 100%.`);
+    const requiresTrackedServiceAssignment =
+      line.itemTypeSnapshot === 'SERVICE' && line.fulfillmentBehaviorSnapshot === 'TRACKED';
+    if (!requiresTrackedServiceAssignment) continue;
+
+    const units = serviceWorkUnitsFor(line, serviceWorkUnits[serviceWorkKey(line)]);
+    if (units.length > 1) {
+      if (units.some((unit) => !hasValidWorkAssignment(line, unit))) {
+        issues.push(
+          `${line.itemNameSnapshot}: setiap pengerjaan membutuhkan karyawan dengan kontribusi tepat 100%.`,
+        );
       }
+      continue;
     }
+
+    issues.push(...employeeAssignmentIssues(line));
   }
   return issues;
+}
+
+interface WorkflowIssueGroup {
+  id: string;
+  label: string;
+  issues: string[];
+}
+
+function groupWorkflowIssues(sale: Sale, issues: readonly string[]): WorkflowIssueGroup[] {
+  const activeLines = sale.lines.filter((line) => line.removedAt === null);
+  const groups = new Map<string, WorkflowIssueGroup>();
+
+  for (const issue of issues) {
+    const line = activeLines.find((candidate) =>
+      issue.startsWith(`${candidate.itemNameSnapshot}:`),
+    );
+    const id = line?.id ?? 'transaction';
+    const label = line?.itemNameSnapshot ?? 'Transaksi';
+    const detail = line ? issue.slice(`${line.itemNameSnapshot}:`.length).trim() : issue;
+    const group = groups.get(id) ?? { id, label, issues: [] };
+    group.issues.push(detail);
+    groups.set(id, group);
+  }
+
+  return [...groups.values()];
 }
 
 function processIssues(sale: Sale | null, lines: readonly SaleLine[]): string[] {
@@ -277,13 +460,24 @@ function hasSuccessfulCheckout(sale: Sale): boolean {
   return settledAmount.equals(createDecimal(sale.totalAmount));
 }
 
-function requiresAssignmentHandoff(line: SaleLine): boolean {
-  return (
-    line.removedAt === null &&
-    line.itemTypeSnapshot === 'SERVICE' &&
-    line.fulfillmentBehaviorSnapshot === 'TRACKED' &&
-    line.employeeAssignmentModeSnapshot === 'REQUIRED'
+function successfulPayments(sale: Sale) {
+  return sale.payments.filter((payment) => payment.status === 'SUCCEEDED');
+}
+
+function financialSummary(sale: Sale) {
+  const totalPaid = successfulPayments(sale).reduce(
+    (sum, payment) => sum.plus(createDecimal(payment.appliedAmount)),
+    createDecimal('0'),
   );
+  const balance = createDecimal(sale.totalAmount).minus(totalPaid);
+  return {
+    totalPaid: totalPaid.toFixed(4),
+    balanceDue: balance.greaterThan(createDecimal('0')) ? balance.toFixed(4) : '0.0000',
+  };
+}
+
+function hasSuccessfulPayment(sale: Sale): boolean {
+  return successfulPayments(sale).length > 0;
 }
 
 export function ReplatformedPosWorkspace({ workspace }: { workspace: Workspace }) {
@@ -309,6 +503,10 @@ export function ReplatformedPosWorkspace({ workspace }: { workspace: Workspace }
   const [queueDetail, setQueueDetail] = useState<Sale | null>(null);
   const [cancelTarget, setCancelTarget] = useState<Sale | null>(null);
   const [cancelReason, setCancelReason] = useState('');
+  const [cancellationReasons, setCancellationReasons] =
+    useState<Record<string, string>>(readCancellationReasons);
+  const [adjustmentTarget, setAdjustmentTarget] = useState<Sale | null>(null);
+  const [queuePaymentTarget, setQueuePaymentTarget] = useState<Sale | null>(null);
   const [cartOpen, setCartOpen] = useState(false);
   const [cartCustomer, setCartCustomer] = useState<PosCustomer | null>(() =>
     readStoredCustomer(CURRENT_CUSTOMER_KEY),
@@ -319,12 +517,19 @@ export function ReplatformedPosWorkspace({ workspace }: { workspace: Workspace }
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('CASH');
   const [provider, setProvider] = useState('');
   const [tender, setTender] = useState('');
-  const [reviewTarget, setReviewTarget] = useState<Sale | null>(null);
+  const [completionConfirmationTarget, setCompletionConfirmationTarget] = useState<Sale | null>(
+    null,
+  );
   const [assignmentLine, setAssignmentLine] = useState<SaleLine | null>(null);
-  const [startProcessHandoff, setStartProcessHandoff] = useState<{
-    saleId: string;
-    lineId: string;
+  const [queueAssignmentTarget, setQueueAssignmentTarget] = useState<{
+    sale: Sale;
+    line: SaleLine;
   } | null>(null);
+  const [serviceWorkTarget, setServiceWorkTarget] = useState<{
+    sale: Sale;
+    line: SaleLine;
+  } | null>(null);
+  const [serviceWorkUnits, setServiceWorkUnits] = useState<ServiceWorkUnitsByLine>({});
   const [receiptSaleId, setReceiptSaleId] = useState<string | null>(null);
 
   const sale = workspace.viewModel.sale;
@@ -339,20 +544,12 @@ export function ReplatformedPosWorkspace({ workspace }: { workspace: Workspace }
   }, [cartCustomer, queuedSaleEntries, sale?.id]);
 
   const displayedQueueDetail =
-    receiptSaleId && sale?.id === receiptSaleId && hasSuccessfulCheckout(sale) ? sale : queueDetail;
+    receiptSaleId && sale?.id === receiptSaleId && hasSuccessfulPayment(sale) ? sale : queueDetail;
+  const displayedAdjustmentTarget =
+    adjustmentTarget && sale?.id === adjustmentTarget.id ? sale : adjustmentTarget;
+  const displayedQueuePaymentTarget =
+    queuePaymentTarget && sale?.id === queuePaymentTarget.id ? sale : queuePaymentTarget;
 
-  useEffect(() => {
-    if (!startProcessHandoff || assignmentLine || sale?.id !== startProcessHandoff.saleId) return;
-
-    const line = sale.lines.find((candidate) => candidate.id === startProcessHandoff.lineId);
-    if (line) {
-      setAssignmentLine(line);
-      return;
-    }
-
-    setStartProcessHandoff(null);
-    workspace.clearProcessedDraft();
-  }, [assignmentLine, sale, startProcessHandoff, workspace]);
   const categories = useMemo(
     () => [
       ...new Set(
@@ -372,13 +569,13 @@ export function ReplatformedPosWorkspace({ workspace }: { workspace: Workspace }
     );
   }, [search, selectedCategory, workspace.items]);
   const groups = useMemo(() => {
-    const queuedSaleIds = new Set(
-      queuedSaleEntries
-        .filter((entry) => entry.sellingLocationId === workspace.selectedLocationId)
-        .map((entry) => entry.saleId),
+    const committedQueueEntries = queuedSaleEntries.filter(
+      (entry) => entry.sellingLocationId === workspace.selectedLocationId,
     );
     const records = (transactionsQuery.data?.items ?? []).filter((record) =>
-      queuedSaleIds.has(record.id),
+      committedQueueEntries.some(
+        (entry) => entry.saleId === record.id && entry.saleCreatedAt === record.createdAt,
+      ),
     );
     return {
       QUEUED: records.filter((record) => queueStatus(record) === 'QUEUED'),
@@ -420,13 +617,20 @@ export function ReplatformedPosWorkspace({ workspace }: { workspace: Workspace }
     wasPaid: boolean,
     destination: FulfillmentDestination,
   ) => {
+    const committedEntry: QueuedSaleEntry = {
+      saleId: completedSale.id,
+      sellingLocationId: completedSale.sellingLocationId,
+      saleCreatedAt: completedSale.createdAt,
+    };
     const nextQueuedSaleEntries = queuedSaleEntries.some(
-      (entry) => entry.saleId === completedSale.id,
+      (entry) =>
+        entry.saleId === committedEntry.saleId &&
+        entry.saleCreatedAt === committedEntry.saleCreatedAt,
     )
       ? queuedSaleEntries
       : [
-          ...queuedSaleEntries,
-          { saleId: completedSale.id, sellingLocationId: completedSale.sellingLocationId },
+          ...queuedSaleEntries.filter((entry) => entry.saleId !== committedEntry.saleId),
+          committedEntry,
         ];
 
     writeStoredCustomer(saleCustomerKey(completedSale.id), cartCustomer);
@@ -438,27 +642,21 @@ export function ReplatformedPosWorkspace({ workspace }: { workspace: Workspace }
     setCartCustomer(null);
     setCheckoutOpen(false);
 
-    const assignmentLine =
-      destination === 'START_PROCESS'
-        ? completedSale.lines.find(requiresAssignmentHandoff)
-        : undefined;
-    if (assignmentLine) {
-      setStartProcessHandoff({ saleId: completedSale.id, lineId: assignmentLine.id });
-      workspace.resumeSale(completedSale.id);
-    } else {
-      workspace.clearProcessedDraft();
-    }
+    workspace.clearProcessedDraft();
 
-    if (wasPaid && destination === 'QUEUE') {
+    if (hasSuccessfulPayment(completedSale) && destination === 'QUEUE') {
       setReceiptSaleId(completedSale.id);
       setQueueDetail(completedSale);
+    } else {
+      setReceiptSaleId(null);
+      setQueueDetail(null);
     }
 
     showToast({
       title: wasPaid ? 'Pembayaran berhasil' : 'Transaksi berhasil dibuat',
       description:
-        destination === 'START_PROCESS' && assignmentLine
-          ? `${transactionNumber(completedSale.id)} masuk antrian. Lengkapi penugasan layanan sebelum memulai proses.`
+        destination === 'START_PROCESS'
+          ? `${transactionNumber(completedSale.id)} masuk antrian dan siap dimulai.`
           : wasPaid
             ? `${transactionNumber(completedSale.id)} lunas dan masuk antrian.`
             : `${transactionNumber(completedSale.id)} masuk antrian. Pembayaran masih belum diterima.`,
@@ -473,33 +671,247 @@ export function ReplatformedPosWorkspace({ workspace }: { workspace: Workspace }
     setQueueIssues((current) => ({ ...current, [transaction.id]: [] }));
     setCartOpen(true);
   };
-  const requestReview = (transaction: Sale) => {
+  const startQueuedWork = async (transaction: Sale) => {
+    const line = transaction.lines.find(
+      (candidate) =>
+        candidate.removedAt === null &&
+        candidate.fulfillmentBehaviorSnapshot === 'TRACKED' &&
+        candidate.fulfillment?.status === 'WAITING',
+    );
+    if (!line) {
+      showToast({
+        title: 'Tidak ada pekerjaan yang dapat dimulai',
+        description: 'Transaksi ini tidak memiliki layanan yang menunggu proses operasional.',
+        variant: 'warning',
+      });
+      return false;
+    }
+    try {
+      await workspace.startQueuedFulfillment(transaction, line);
+      setQueueTab('PROGRESS');
+      showToast({
+        title: 'Pekerjaan dimulai',
+        description: `${transactionNumber(transaction.id)} sekarang sedang dikerjakan.`,
+        variant: 'success',
+      });
+      return true;
+    } catch {
+      showToast({
+        title: 'Gagal memulai pekerjaan',
+        description: 'Transaksi tetap berada dalam antrian.',
+        variant: 'danger',
+      });
+      return false;
+    }
+  };
+  const completeQueuedWorkLine = async (transaction: Sale, line: SaleLine) => {
+    const employeeIssues = employeeAssignmentIssues(line);
+    if (employeeIssues.length) {
+      showToast({
+        title: 'Lengkapi karyawan terlebih dahulu',
+        description: employeeIssues.join(' '),
+        variant: 'warning',
+      });
+      return;
+    }
+    try {
+      const updated = await workspace.transitionQueuedFulfillment(transaction, line, 'COMPLETED');
+      setQueueDetail(updated);
+      showToast({
+        title: 'Pekerjaan selesai',
+        description: `${line.itemNameSnapshot} telah ditandai selesai.`,
+        variant: 'success',
+      });
+    } catch {
+      showToast({
+        title: 'Gagal memperbarui pekerjaan',
+        description: 'Status pekerjaan belum berubah.',
+        variant: 'danger',
+      });
+    }
+  };
+  const saveServiceWorkUnits = async (
+    target: { sale: Sale; line: SaleLine },
+    units: readonly ServiceWorkUnit[],
+  ) => {
+    if (units.some((unit) => !hasValidWorkAssignment(target.line, unit))) {
+      showToast({
+        title: 'Lengkapi karyawan terlebih dahulu',
+        description: 'Setiap pengerjaan layanan harus memiliki kontribusi tepat 100%.',
+        variant: 'warning',
+      });
+      return;
+    }
+
+    const representative = units[0];
+    if (!representative) return;
+    try {
+      const updated = await workspace.setQueuedAssignments(
+        target.sale,
+        target.line,
+        representative.contributors.map((contributor) => contributor.employeeId),
+        representative.contributors.map((contributor) => ({
+          employeeId: contributor.employeeId,
+          shareRate: contributor.shareRate,
+        })),
+      );
+      setServiceWorkUnits((current) => ({ ...current, [serviceWorkKey(target.line)]: units }));
+      setQueueDetail(updated);
+      setServiceWorkTarget(null);
+      showToast({
+        title: 'Pengerjaan diperbarui',
+        description: 'Pengaturan karyawan tersimpan untuk setiap pengerjaan layanan.',
+        variant: 'success',
+      });
+    } catch {
+      showToast({
+        title: 'Gagal memperbarui pengerjaan',
+        description: 'Pengaturan karyawan belum berubah. Coba lagi.',
+        variant: 'danger',
+      });
+    }
+  };
+  const completeServiceWorkUnit = async (transaction: Sale, line: SaleLine, index: number) => {
+    const currentUnits = serviceWorkUnitsFor(line, serviceWorkUnits[serviceWorkKey(line)]);
+    const currentUnit = currentUnits[index];
+    if (!currentUnit || currentUnit.status === 'COMPLETED') return;
+    if (!hasValidWorkAssignment(line, currentUnit)) {
+      showToast({
+        title: 'Lengkapi karyawan terlebih dahulu',
+        description: `Pengerjaan #${index + 1} membutuhkan kontribusi karyawan tepat 100%.`,
+        variant: 'warning',
+      });
+      return;
+    }
+
+    const nextUnits = currentUnits.map((unit) =>
+      unit.index === index ? { ...unit, status: 'COMPLETED' as const } : unit,
+    );
+    const allCompleted = nextUnits.every((unit) => unit.status === 'COMPLETED');
+    try {
+      if (allCompleted) {
+        const updated = await workspace.transitionQueuedFulfillment(transaction, line, 'COMPLETED');
+        setQueueDetail(updated);
+      }
+      setServiceWorkUnits((current) => ({ ...current, [serviceWorkKey(line)]: nextUnits }));
+      showToast({
+        title: allCompleted ? 'Layanan selesai' : 'Pengerjaan selesai',
+        description: allCompleted
+          ? `${line.itemNameSnapshot} telah diselesaikan.`
+          : `Pengerjaan #${index + 1} telah ditandai selesai.`,
+        variant: 'success',
+      });
+    } catch {
+      showToast({
+        title: 'Gagal memperbarui pengerjaan',
+        description: 'Status pengerjaan belum berubah.',
+        variant: 'danger',
+      });
+    }
+  };
+  const completeQueuedTransaction = (transaction: Sale) => {
+    const issues = workflowIssues(transaction);
+    if (issues.length) return;
+    setCompletionConfirmationTarget(transaction);
+  };
+  const confirmQueuedCompletion = async () => {
+    if (!completionConfirmationTarget || workflowIssues(completionConfirmationTarget).length) {
+      return;
+    }
+    try {
+      const finalized = await workspace.finalizeQueuedSale(completionConfirmationTarget);
+      setQueueDetail(finalized);
+      setQueueTab('COMPLETED');
+      setReceiptSaleId(hasSuccessfulPayment(finalized) ? finalized.id : null);
+      setCompletionConfirmationTarget(null);
+      showToast({
+        title: 'Transaksi selesai',
+        description: `${transactionNumber(finalized.id)} telah diselesaikan.`,
+        variant: 'success',
+      });
+    } catch {
+      showToast({
+        title: 'Gagal menyelesaikan transaksi',
+        description: 'Periksa kembali status transaksi dan coba lagi.',
+        variant: 'danger',
+      });
+    }
+  };
+  const openAdjustment = (transaction: Sale) => {
+    if (transaction.status !== 'OPEN') return;
+    setQueueDetail(null);
+    setAdjustmentTarget(transaction);
     workspace.resumeSale(transaction.id);
-    setReviewTarget(transaction);
   };
-  const complete = () => {
-    const currentReview = sale?.id === reviewTarget?.id ? sale : reviewTarget;
-    if (!currentReview || workflowIssues(currentReview).length) return;
-    setReceiptSaleId(currentReview.id);
-    setCartOpen(false);
-    workspace.finalizeSale();
-    setReviewTarget(null);
+  const openQueuePayment = (transaction: Sale) => {
+    if (
+      transaction.status !== 'OPEN' ||
+      !isPositiveDecimal(financialSummary(transaction).balanceDue)
+    ) {
+      return;
+    }
+    setQueueDetail(null);
+    setPaymentMethod('CASH');
+    setProvider('');
+    setTender(financialSummary(transaction).balanceDue);
+    setQueuePaymentTarget(transaction);
+    workspace.resumeSale(transaction.id);
   };
-  const confirmCancel = () => {
+  const requestCancel = (transaction: Sale) => {
+    if (hasSuccessfulPayment(transaction)) {
+      showToast({
+        title: 'Refund diperlukan',
+        description:
+          'Transaksi yang sudah menerima pembayaran tidak dapat dibatalkan tanpa proses refund.',
+        variant: 'warning',
+      });
+      return;
+    }
+    setCancelTarget(transaction);
+    setCancelReason('');
+    workspace.resumeSale(transaction.id);
+  };
+  const confirmCancel = async () => {
     if (!cancelTarget || !cancelReason.trim()) return;
+    if (hasSuccessfulPayment(cancelTarget)) {
+      showToast({
+        title: 'Refund diperlukan',
+        description: 'Batalkan pembayaran terlebih dahulu melalui proses refund yang sesuai.',
+        variant: 'warning',
+      });
+      return;
+    }
     if (sale?.id !== cancelTarget.id) {
       workspace.resumeSale(cancelTarget.id);
       return;
     }
-    workspace.voidSale();
-    setCancelTarget(null);
-    setCancelReason('');
+    try {
+      const canceledSale = await workspace.voidSale();
+      writeCancellationReason(canceledSale.id, cancelReason.trim());
+      setCancellationReasons((current) => ({ ...current, [canceledSale.id]: cancelReason.trim() }));
+      setQueueDetail(canceledSale);
+      setCancelTarget(null);
+      setCancelReason('');
+      workspace.clearProcessedDraft();
+      showToast({
+        title: 'Transaksi dibatalkan',
+        description: 'Alasan pembatalan telah dicatat.',
+        variant: 'success',
+      });
+    } catch {
+      showToast({
+        title: 'Pembatalan gagal',
+        description: 'Transaksi tetap tidak berubah. Periksa kembali status pembayaran.',
+        variant: 'danger',
+      });
+    }
   };
   const completeCheckout = async (destination: FulfillmentDestination) => {
     if (!sale || !lines.length) return;
 
     if (!payNow) {
       commitCheckoutToQueue(sale, false, destination);
+      if (destination === 'START_PROCESS') await startQueuedWork(sale);
       return;
     }
 
@@ -523,10 +935,45 @@ export function ReplatformedPosWorkspace({ workspace }: { workspace: Workspace }
         return;
       }
       commitCheckoutToQueue(completedSale, true, destination);
+      if (destination === 'START_PROCESS') await startQueuedWork(completedSale);
     } catch {
       showToast({
         title: 'Checkout gagal',
         description: 'Pembayaran belum berhasil diproses. Cart tidak diubah.',
+        variant: 'danger',
+      });
+    }
+  };
+  const payQueueBalance = async () => {
+    const transaction = displayedQueuePaymentTarget;
+    if (!transaction || sale?.id !== transaction.id) return;
+    const due = financialSummary(sale).balanceDue;
+    const applied = paymentMethod === 'CASH' ? tender || due : due;
+    if (!isPositiveDecimal(applied)) return;
+    if (paymentMethod === 'CASH' && createDecimal(applied).lessThan(createDecimal(due))) return;
+    if ((paymentMethod === 'BANK_TRANSFER' || paymentMethod === 'WALLET') && !provider) return;
+    try {
+      const updatedSale = await workspace.createPayment(
+        paymentMethod,
+        due,
+        paymentMethod === 'CASH' ? applied : undefined,
+        provider || undefined,
+      );
+      setQueuePaymentTarget(null);
+      setQueueDetail(updatedSale);
+      setReceiptSaleId(updatedSale.id);
+      workspace.clearProcessedDraft();
+      showToast({
+        title: hasSuccessfulCheckout(updatedSale)
+          ? 'Pembayaran lunas'
+          : 'Pembayaran berhasil dicatat',
+        description: 'Status operasional transaksi tidak berubah.',
+        variant: 'success',
+      });
+    } catch {
+      showToast({
+        title: 'Pembayaran gagal',
+        description: 'Saldo transaksi tidak berubah dan antrian tetap dipertahankan.',
         variant: 'danger',
       });
     }
@@ -575,13 +1022,15 @@ export function ReplatformedPosWorkspace({ workspace }: { workspace: Workspace }
         groups={groups}
         issues={queueIssues}
         locale={workspace.locale}
-        onResume={resume}
-        onComplete={requestReview}
-        onCancel={(transaction) => {
-          setCancelTarget(transaction);
-          setCancelReason('Permintaan pelanggan');
-        }}
+        onStartWork={(transaction) => void startQueuedWork(transaction)}
+        onAdjust={openAdjustment}
+        onPay={openQueuePayment}
+        onCancel={requestCancel}
         onView={setQueueDetail}
+        onViewReceipt={(transaction) => {
+          setQueueDetail(transaction);
+          setReceiptSaleId(transaction.id);
+        }}
       />
 
       <section className="flex min-h-0 flex-1 flex-col overflow-hidden">
@@ -727,6 +1176,10 @@ export function ReplatformedPosWorkspace({ workspace }: { workspace: Workspace }
         businessName={runtime.branding.businessName ?? runtime.branding.productName}
         branchName="Main Branch"
         cashierName={session.identity.displayName}
+        {...(displayedQueueDetail && cancellationReasons[displayedQueueDetail.id]
+          ? { cancellationReason: cancellationReasons[displayedQueueDetail.id] }
+          : {})}
+        showPaymentReceipt={Boolean(receiptSaleId && displayedQueueDetail?.id === receiptSaleId)}
         onClose={() => {
           setQueueDetail(null);
           setReceiptSaleId(null);
@@ -739,23 +1192,80 @@ export function ReplatformedPosWorkspace({ workspace }: { workspace: Workspace }
           setCartOpen(false);
           workspace.newSale();
         }}
-      />
-      <ReferenceReviewDialog
-        sale={reviewTarget && sale?.id === reviewTarget.id ? sale : reviewTarget}
-        activeSale={workspace.viewModel.sale}
-        locale={workspace.locale}
-        employees={workspace.employees}
-        issues={
-          reviewTarget ? workflowIssues(sale?.id === reviewTarget.id ? sale : reviewTarget) : []
-        }
-        onClose={() => setReviewTarget(null)}
-        onFix={() => {
-          if (reviewTarget) resume(reviewTarget);
-          setReviewTarget(null);
+        onViewReceipt={(transaction) => {
+          setQueueDetail(transaction);
+          setReceiptSaleId(transaction.id);
         }}
-        onAssign={setAssignmentLine}
-        onFulfillment={(line, status) => workspace.transitionFulfillment(line, status)}
-        onComplete={complete}
+        onAssign={(line) => {
+          if (!displayedQueueDetail) return;
+          setQueueAssignmentTarget({ sale: displayedQueueDetail, line });
+        }}
+        onCompleteLine={(line) => {
+          if (displayedQueueDetail) void completeQueuedWorkLine(displayedQueueDetail, line);
+        }}
+        serviceWorkUnits={serviceWorkUnits}
+        onManageServiceWork={(line) => {
+          if (!displayedQueueDetail) return;
+          setServiceWorkTarget({ sale: displayedQueueDetail, line });
+        }}
+        onComplete={() => {
+          if (displayedQueueDetail) void completeQueuedTransaction(displayedQueueDetail);
+        }}
+        isMutating={workspace.isCoreMutating}
+      />
+      <ReferenceOrderAdjustmentDialog
+        sale={displayedAdjustmentTarget}
+        items={workspace.items}
+        locale={workspace.locale}
+        isMutating={workspace.isCoreMutating}
+        variantPicker={
+          workspace.variantPicker?.context === 'TRANSACTION_ADJUSTMENT'
+            ? workspace.variantPicker
+            : null
+        }
+        onClose={() => {
+          workspace.closeVariantPicker();
+          setAdjustmentTarget(null);
+          workspace.clearProcessedDraft();
+        }}
+        onAdd={(item) => void workspace.selectItem(item, 'TRANSACTION_ADJUSTMENT')}
+        onAddVariant={(variantId) => void workspace.selectVariant(variantId)}
+        onQuantity={(line, next) => workspace.changeQuantity(line, next)}
+        onRemove={workspace.removeLine}
+      />
+      <ReferenceBalancePaymentDialog
+        sale={displayedQueuePaymentTarget}
+        locale={workspace.locale}
+        method={paymentMethod}
+        provider={provider}
+        tender={tender}
+        isMutating={workspace.isCoreMutating}
+        onClose={() => {
+          setQueuePaymentTarget(null);
+          workspace.clearProcessedDraft();
+        }}
+        onMethod={(next) => {
+          setPaymentMethod(next);
+          setProvider('');
+        }}
+        onProvider={setProvider}
+        onTender={setTender}
+        onPay={() => void payQueueBalance()}
+      />
+      <DConfirmDialog
+        open={Boolean(completionConfirmationTarget)}
+        onClose={() => setCompletionConfirmationTarget(null)}
+        onConfirm={() => void confirmQueuedCompletion()}
+        title="Selesaikan transaksi"
+        message={
+          completionConfirmationTarget
+            ? `Selesaikan transaksi ${transactionNumber(completionConfirmationTarget.id)}? Tindakan ini menutup pekerjaan yang sudah selesai.`
+            : undefined
+        }
+        confirmLabel="Selesaikan"
+        cancelLabel="Batal"
+        variant="primary"
+        loading={workspace.isCoreMutating}
       />
       <ReferenceCancelDialog
         sale={cancelTarget}
@@ -771,10 +1281,6 @@ export function ReplatformedPosWorkspace({ workspace }: { workspace: Workspace }
         locale={workspace.locale}
         onClose={() => {
           setAssignmentLine(null);
-          if (startProcessHandoff) {
-            setStartProcessHandoff(null);
-            workspace.clearProcessedDraft();
-          }
         }}
         onSave={(employeeIds, contributors) => {
           if (!assignmentLine) return;
@@ -782,10 +1288,67 @@ export function ReplatformedPosWorkspace({ workspace }: { workspace: Workspace }
           if (assignmentLine.allowEmployeeContributionSnapshot)
             workspace.setContributions(assignmentLine, contributors);
           setAssignmentLine(null);
-          if (startProcessHandoff) {
-            setStartProcessHandoff(null);
-            workspace.clearProcessedDraft();
+        }}
+      />
+      <ReferenceServiceWorkDialog
+        key={
+          serviceWorkTarget
+            ? `${serviceWorkTarget.sale.id}:${serviceWorkTarget.line.id}`
+            : 'service-work-closed'
+        }
+        line={serviceWorkTarget?.line ?? null}
+        employees={workspace.employees}
+        locale={workspace.locale}
+        units={
+          serviceWorkTarget
+            ? serviceWorkUnitsFor(
+                serviceWorkTarget.line,
+                serviceWorkUnits[serviceWorkKey(serviceWorkTarget.line)],
+              )
+            : []
+        }
+        isMutating={workspace.isCoreMutating}
+        onClose={() => setServiceWorkTarget(null)}
+        onSave={(units) => {
+          if (serviceWorkTarget) void saveServiceWorkUnits(serviceWorkTarget, units);
+        }}
+        onCompleteUnit={(index) => {
+          if (serviceWorkTarget) {
+            void completeServiceWorkUnit(serviceWorkTarget.sale, serviceWorkTarget.line, index);
           }
+        }}
+      />
+      <ReferenceEmployeeDialog
+        key={
+          queueAssignmentTarget
+            ? `${queueAssignmentTarget.sale.id}:${queueAssignmentTarget.line.id}`
+            : 'queue-assignment-closed'
+        }
+        line={queueAssignmentTarget?.line ?? null}
+        employees={workspace.employees}
+        locale={workspace.locale}
+        onClose={() => setQueueAssignmentTarget(null)}
+        onSave={(employeeIds, contributors) => {
+          const target = queueAssignmentTarget;
+          if (!target) return;
+          void workspace
+            .setQueuedAssignments(target.sale, target.line, employeeIds, contributors)
+            .then((updated) => {
+              setQueueDetail(updated);
+              setQueueAssignmentTarget(null);
+              showToast({
+                title: 'Karyawan diperbarui',
+                description: 'Penugasan layanan tersimpan pada transaksi yang sedang dikerjakan.',
+                variant: 'success',
+              });
+            })
+            .catch(() => {
+              showToast({
+                title: 'Gagal memperbarui karyawan',
+                description: 'Penugasan belum berubah. Coba lagi.',
+                variant: 'danger',
+              });
+            });
         }}
       />
       {workspace.lineTask ? (
@@ -884,10 +1447,12 @@ function ReferenceQueueBoard({
   groups,
   issues,
   locale,
-  onResume,
-  onComplete,
+  onStartWork,
+  onAdjust,
+  onPay,
   onCancel,
   onView,
+  onViewReceipt,
 }: {
   open: boolean;
   onOpenChange: (value: boolean) => void;
@@ -896,14 +1461,17 @@ function ReferenceQueueBoard({
   groups: Record<QueueStatus, Sale[]>;
   issues: Record<string, string[]>;
   locale: string;
-  onResume: (sale: Sale) => void;
-  onComplete: (sale: Sale) => void;
+  onStartWork: (sale: Sale) => void;
+  onAdjust: (sale: Sale) => void;
+  onPay: (sale: Sale) => void;
   onCancel: (sale: Sale) => void;
   onView: (sale: Sale) => void;
+  onViewReceipt: (sale: Sale) => void;
 }) {
   const statuses = Object.keys(statusMeta) as QueueStatus[];
-  const count = statuses.reduce((sum, status) => sum + groups[status].length, 0);
+  const count = groups.QUEUED.length + groups.PROGRESS.length;
   const list = groups[active];
+  const contentKey = `${active}:${list.map((sale) => `${sale.id}:${sale.version}`).join('|')}`;
   return (
     <div className="mb-4 shrink-0">
       <div className="overflow-hidden rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] shadow-sm">
@@ -957,7 +1525,10 @@ function ReferenceQueueBoard({
           className={`grid transition-all duration-300 ease-out ${open ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'}`}
         >
           <div className="overflow-hidden">
-            <div className="space-y-3 border-t border-[var(--color-border)] p-3">
+            <div
+              key={contentKey}
+              className="pos-queue-content-enter space-y-3 border-t border-[var(--color-border)] p-3"
+            >
               <div className="no-scrollbar flex items-center gap-2 overflow-x-auto">
                 {statuses.map((status) => {
                   const meta = statusMeta[status];
@@ -994,10 +1565,12 @@ function ReferenceQueueBoard({
                         status={active}
                         locale={locale}
                         issues={issues[sale.id] ?? []}
-                        onResume={onResume}
-                        onComplete={onComplete}
+                        onStartWork={onStartWork}
+                        onAdjust={onAdjust}
+                        onPay={onPay}
                         onCancel={onCancel}
                         onView={onView}
+                        onViewReceipt={onViewReceipt}
                       />
                     ))}
                   </div>
@@ -1025,37 +1598,61 @@ function ReferenceQueueCard({
   status,
   locale,
   issues,
-  onResume,
-  onComplete,
+  onStartWork,
+  onAdjust,
+  onPay,
   onCancel,
   onView,
+  onViewReceipt,
 }: {
   sale: Sale;
   status: QueueStatus;
   locale: string;
   issues: string[];
-  onResume: (sale: Sale) => void;
-  onComplete: (sale: Sale) => void;
+  onStartWork: (sale: Sale) => void;
+  onAdjust: (sale: Sale) => void;
+  onPay: (sale: Sale) => void;
   onCancel: (sale: Sale) => void;
   onView: (sale: Sale) => void;
+  onViewReceipt: (sale: Sale) => void;
 }) {
   const meta = statusMeta[status];
-  const paid = sale.payments.some((payment) => payment.status === 'SUCCEEDED');
+  const { balanceDue } = financialSummary(sale);
+  const hasPayment = hasSuccessfulPayment(sale);
+  const paid = hasSuccessfulCheckout(sale);
   const customer = saleCustomer(sale.id);
   const actionItems = [
-    { label: 'Detail', icon: <Eye className="size-3.5" />, onSelect: () => onView(sale) },
+    { label: 'Preview / Detail', icon: <Eye className="size-3.5" />, onSelect: () => onView(sale) },
+    ...(hasPayment
+      ? [
+          {
+            label: 'Lihat Struk',
+            icon: <Printer className="size-3.5" />,
+            onSelect: () => onViewReceipt(sale),
+          },
+        ]
+      : []),
     ...(status === 'QUEUED'
       ? [
           {
-            label: 'Lanjutkan',
+            label: 'Mulai Pekerjaan',
             icon: <PlayCircle className="size-3.5" />,
-            onSelect: () => onResume(sale),
+            onSelect: () => onStartWork(sale),
           },
           {
-            label: 'Review & Selesaikan',
-            icon: <CheckCircle2 className="size-3.5" />,
-            onSelect: () => onComplete(sale),
+            label: 'Sesuaikan Pesanan',
+            icon: <ShoppingBag className="size-3.5" />,
+            onSelect: () => onAdjust(sale),
           },
+          ...(isPositiveDecimal(balanceDue)
+            ? [
+                {
+                  label: hasPayment ? 'Bayar Sisa' : 'Bayar',
+                  icon: <CreditCard className="size-3.5" />,
+                  onSelect: () => onPay(sale),
+                },
+              ]
+            : []),
           {
             label: 'Batalkan',
             icon: <XCircle className="size-3.5" />,
@@ -1066,16 +1663,15 @@ function ReferenceQueueCard({
       : []),
     ...(status === 'PROGRESS'
       ? [
-          {
-            label: 'Lanjutkan',
-            icon: <PlayCircle className="size-3.5" />,
-            onSelect: () => onResume(sale),
-          },
-          {
-            label: 'Review & Selesaikan',
-            icon: <CheckCircle2 className="size-3.5" />,
-            onSelect: () => onComplete(sale),
-          },
+          ...(isPositiveDecimal(balanceDue)
+            ? [
+                {
+                  label: hasPayment ? 'Bayar Sisa' : 'Bayar',
+                  icon: <CreditCard className="size-3.5" />,
+                  onSelect: () => onPay(sale),
+                },
+              ]
+            : []),
           {
             label: 'Batalkan',
             icon: <XCircle className="size-3.5" />,
@@ -1100,7 +1696,7 @@ function ReferenceQueueCard({
           <span
             className={`inline-flex items-center rounded-full px-2 py-1 text-[10px] font-bold ${paid ? 'bg-[var(--color-success)]/10 text-[var(--color-success)]' : 'bg-[var(--color-warning)]/10 text-[var(--color-warning)]'}`}
           >
-            {paid ? 'Lunas' : 'Belum Bayar'}
+            {paid ? 'Lunas' : hasPayment ? 'Bayar Sebagian' : 'Belum Bayar'}
           </span>
           <span
             className={`inline-flex items-center gap-1 rounded-full px-2 py-1 text-[10px] font-bold ${meta.tone}`}
@@ -1312,8 +1908,8 @@ function ReferenceCartPanel({
       direction === 'up'
         ? createDecimal(line.quantity).plus(createDecimal('1'))
         : createDecimal(line.quantity).minus(createDecimal('1'));
-    if (next.lessThanOrEqualTo(createDecimal('0'))) onRemove(line);
-    else onQuantity(line, next.toFixed(4));
+    if (next.lessThan(createDecimal('1'))) return;
+    onQuantity(line, next.toFixed(4));
   };
   return (
     <div className="flex min-h-0 flex-1 flex-col bg-[var(--color-background)]">
@@ -1379,19 +1975,17 @@ function ReferenceCartPanel({
                       type="button"
                       aria-label={`Decrease ${line.itemNameSnapshot} quantity`}
                       onClick={() => increment(line, 'down')}
-                      className="flex h-9 items-center justify-center border-r border-[var(--color-border)] text-[var(--color-text-muted)] transition-colors hover:bg-[var(--color-surface-muted)] hover:text-[var(--color-text)] active:bg-[var(--color-surface-muted)]"
+                      disabled={createDecimal(line.quantity).lessThanOrEqualTo(createDecimal('1'))}
+                      className="flex h-9 items-center justify-center border-r border-[var(--color-border)] text-[var(--color-text-muted)] transition-colors hover:bg-[var(--color-surface-muted)] hover:text-[var(--color-text)] active:bg-[var(--color-surface-muted)] disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-[var(--color-text-muted)]"
                     >
                       <Minus className="size-3.5" />
                     </button>
-                    <PosNumericInput
+                    <output
                       aria-label={`Quantity for ${line.itemNameSnapshot}`}
-                      value={quantity(line.quantity)}
-                      min="1"
-                      onChange={(value) => {
-                        if (value) onQuantity(line, value);
-                      }}
-                      className="h-9 w-12 rounded-none border-0 bg-transparent px-0 text-center text-xs font-bold tabular-nums focus:ring-0"
-                    />
+                      className="flex h-9 w-12 items-center justify-center text-xs font-bold tabular-nums text-[var(--color-text)]"
+                    >
+                      {quantity(line.quantity)}
+                    </output>
                     <button
                       type="button"
                       aria-label={`Increase ${line.itemNameSnapshot} quantity`}
@@ -1796,17 +2390,19 @@ function ReferencePaymentDialog({
             ))}
           </div>
         </div>
-        <label className="flex cursor-pointer items-start gap-3 rounded-2xl border border-[var(--color-border)] bg-[var(--color-background)] p-4">
-          <DCheckbox
-            checked={payNow}
-            onChange={(event) => onPayNowChange(event.target.checked)}
-            className="mt-0.5"
-          />
-          <span>
+        <label className="flex cursor-pointer items-start gap-2.5 px-1 py-1.5">
+          <span className="mt-0.5 shrink-0">
+            <DCheckbox
+              checked={payNow}
+              onChange={(event) => onPayNowChange(event.target.checked)}
+            />
+          </span>
+          <span className="min-w-0">
             <span className="block text-sm font-semibold">Bayar sekarang</span>
-            <span className="mt-1 block text-xs leading-5 text-[var(--color-text-muted)]">
-              Aktifkan untuk mencatat pembayaran sebelum transaksi diteruskan. Nonaktifkan untuk
-              menyimpan transaksi dengan pembayaran belum diterima.
+            <span className="mt-0.5 block text-xs leading-4 text-[var(--color-text-muted)]">
+              {payNow
+                ? 'Pilih metode pembayaran sebelum transaksi diteruskan.'
+                : 'Pembayaran dicatat setelah transaksi dibuat.'}
             </span>
           </span>
         </label>
@@ -1919,16 +2515,7 @@ function ReferencePaymentDialog({
               </div>
             )}
           </>
-        ) : (
-          <div className="rounded-2xl border border-[var(--color-warning)]/25 bg-[var(--color-warning)]/10 p-3">
-            <p className="text-sm font-bold text-[var(--color-warning)]">
-              Pembayaran belum diterima
-            </p>
-            <p className="mt-1 text-xs text-[var(--color-text-muted)]">
-              Transaksi akan masuk antrian tanpa pembayaran. Receipt pembayaran belum tersedia.
-            </p>
-          </div>
-        )}
+        ) : null}
       </div>
     </DDialog>
   );
@@ -1941,8 +2528,16 @@ function ReferenceTransactionDetail({
   businessName,
   branchName,
   cashierName,
+  cancellationReason,
+  showPaymentReceipt,
   onClose,
-  onNewSale,
+  onViewReceipt,
+  onAssign,
+  onCompleteLine,
+  serviceWorkUnits,
+  onManageServiceWork,
+  onComplete,
+  isMutating,
 }: {
   sale: Sale | null;
   locale: string;
@@ -1950,17 +2545,31 @@ function ReferenceTransactionDetail({
   businessName: string;
   branchName: string;
   cashierName: string;
+  cancellationReason?: string;
+  showPaymentReceipt: boolean;
   onClose: () => void;
   onNewSale: () => void;
+  onViewReceipt: (sale: Sale) => void;
+  onAssign: (line: SaleLine) => void;
+  onCompleteLine: (line: SaleLine) => void;
+  serviceWorkUnits: ServiceWorkUnitsByLine;
+  onManageServiceWork: (line: SaleLine) => void;
+  onComplete: () => void;
+  isMutating: boolean;
 }) {
   if (!sale) return null;
-  const status =
-    sale.status === 'FINALIZED' ? 'COMPLETED' : sale.status === 'VOIDED' ? 'CANCELED' : 'QUEUED';
-  const customer = saleCustomer(sale.id);
+  const status = queueStatus(sale);
+  const customerContext = readStoredCustomer(saleCustomerKey(sale.id));
+  const customer = customerContext ?? saleCustomer(sale.id);
   const activeLines = sale.lines.filter((line) => !line.removedAt);
-  const payment = sale.payments.find((candidate) => candidate.status === 'SUCCEEDED') ?? null;
+  const payments = successfulPayments(sale);
+  const payment = payments[payments.length - 1] ?? null;
   const finalized = sale.status === 'FINALIZED';
-  const receiptAvailable = hasSuccessfulCheckout(sale);
+  const receiptAvailable = payments.length > 0;
+  const showReceipt = showPaymentReceipt && receiptAvailable;
+  const { totalPaid, balanceDue } = financialSummary(sale);
+  const completionIssues = status === 'PROGRESS' ? workflowIssues(sale) : [];
+  const completionIssueGroups = groupWorkflowIssues(sale, completionIssues);
   const transactionDate = new Intl.DateTimeFormat(locale, {
     dateStyle: 'medium',
     timeStyle: 'short',
@@ -1970,14 +2579,53 @@ function ReferenceTransactionDetail({
     <Dialog
       open
       onClose={onClose}
-      ariaLabel={receiptAvailable ? 'Receipt preview' : 'Transaction detail'}
+      title={showReceipt ? 'Preview struk pembayaran' : 'Detail transaksi'}
+      description={transactionNumber(sale.id)}
+      ariaLabel={showReceipt ? 'Receipt preview' : 'Transaction detail'}
       closeOnEscape
       closeOnOverlay
-      className={`pos-reference-dialog w-full overflow-hidden rounded-t-2xl bg-[var(--color-surface)] shadow-xl sm:rounded-xl ${receiptAvailable ? 'max-w-md' : 'max-w-lg'}`}
+      noPadding
+      className={`pos-reference-dialog max-h-[92dvh] w-full overflow-hidden rounded-t-2xl bg-[var(--color-surface)] shadow-xl sm:rounded-xl ${showReceipt ? 'max-w-md' : 'max-w-lg'}`}
+      footer={
+        <div className="flex shrink-0 flex-col-reverse justify-end gap-2 sm:flex-row">
+          <DButton variant="ghost" onClick={onClose}>
+            Tutup
+          </DButton>
+          {!showReceipt && receiptAvailable ? (
+            <DButton
+              rightIcon={<Printer className="size-3.5" />}
+              variant="outline"
+              onClick={() => onViewReceipt(sale)}
+            >
+              Lihat Struk
+            </DButton>
+          ) : null}
+          {!showReceipt && status === 'PROGRESS' ? (
+            <DButton
+              variant="primary"
+              disabled={completionIssues.length > 0}
+              loading={isMutating}
+              leftIcon={<CheckCircle2 className="size-3.5" />}
+              onClick={onComplete}
+            >
+              Selesaikan
+            </DButton>
+          ) : null}
+          {showReceipt ? (
+            <DButton
+              rightIcon={<Printer className="size-3.5" />}
+              variant="outline"
+              onClick={() => window.print()}
+            >
+              Cetak
+            </DButton>
+          ) : null}
+        </div>
+      }
     >
-      {receiptAvailable ? (
-        <div className="flex max-h-[92dvh] min-h-0 flex-col">
-          <div className="pos-receipt-print min-h-0 flex-1 overflow-y-auto bg-white px-6 py-6 text-slate-950">
+      {showReceipt ? (
+        <div className="flex max-h-[92dvh] min-h-0 flex-col px-5 py-4 sm:px-6">
+          <div className="pos-receipt-print min-h-0 flex-1 overflow-y-auto bg-white text-slate-950">
             <header className="text-center">
               <h2 className="text-lg font-black tracking-tight">{businessName}</h2>
               <p className="mt-1 text-xs text-slate-500">{branchName}</p>
@@ -2051,9 +2699,19 @@ function ReferenceTransactionDetail({
                 <span className="font-semibold">{payment?.method.replace('_', ' ') ?? '-'}</span>
               </div>
               <div className="flex justify-between gap-3">
-                <span className="text-slate-500">Dibayar</span>
+                <span className="text-slate-500">Pembayaran ini</span>
                 <span>{payment ? money(payment.appliedAmount, locale) : '-'}</span>
               </div>
+              <div className="flex justify-between gap-3">
+                <span className="text-slate-500">Total dibayar</span>
+                <span>{money(totalPaid, locale)}</span>
+              </div>
+              {isPositiveDecimal(balanceDue) ? (
+                <div className="flex justify-between gap-3 font-semibold">
+                  <span className="text-slate-500">Sisa pembayaran</span>
+                  <span>{money(balanceDue, locale)}</span>
+                </div>
+              ) : null}
               {payment?.method === 'CASH' ? (
                 <>
                   <div className="flex justify-between gap-3">
@@ -2070,99 +2728,675 @@ function ReferenceTransactionDetail({
 
             <div className="my-4 border-t border-dashed border-slate-300" />
             <p className="text-center text-xs font-bold">
-              {finalized ? 'LUNAS · FINALIZED' : 'LUNAS · PEMBAYARAN BERHASIL'}
+              {hasSuccessfulCheckout(sale)
+                ? finalized
+                  ? 'LUNAS · FINALIZED'
+                  : 'LUNAS · PEMBAYARAN BERHASIL'
+                : 'PEMBAYARAN BERHASIL · SISA MASIH ADA'}
             </p>
             <p className="mt-2 text-center text-[11px] text-slate-500">
               Terima kasih telah bertransaksi.
             </p>
           </div>
-
-          <footer className="pos-receipt-actions flex shrink-0 gap-2 border-t border-[var(--color-border)] bg-[var(--color-surface)] px-4 py-3">
-            <Button variant="outline" className="flex-1" onClick={onClose}>
-              Tutup
-            </Button>
-            <Button variant="outline" className="flex-1" onClick={() => window.print()}>
-              <Printer className="mr-2 size-4" /> Cetak
-            </Button>
-            <Button className="flex-1" onClick={onNewSale}>
-              Transaksi Baru
-            </Button>
-          </footer>
         </div>
       ) : (
-        <div className="flex max-h-[85dvh] min-h-0 flex-col">
-          <header className="flex items-center justify-between border-b border-[var(--color-border)] px-6 py-4">
-            <div>
-              <h2 className="text-lg font-semibold">Detail Transaksi POS</h2>
-              <p className="mt-0.5 font-mono text-sm text-[var(--color-text-muted)]">
-                {transactionNumber(sale.id)}
-              </p>
-            </div>
-            <button
-              type="button"
-              onClick={onClose}
-              className="rounded-lg p-2 text-[var(--color-text-muted)] hover:bg-[var(--color-surface-muted)]"
-            >
-              <X className="size-[18px]" />
-            </button>
-          </header>
-          <div className="min-h-0 flex-1 space-y-4 overflow-y-auto bg-[var(--color-surface-muted)]/30 px-4 py-4">
+        <div className="flex min-h-0 flex-1 flex-col">
+          <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-5 py-4 sm:px-6">
             <div className="overflow-hidden rounded-2xl border border-[var(--color-border)] bg-[var(--color-background)]">
               <div className="bg-gradient-to-br from-[var(--color-brand)]/5 to-transparent px-5 py-4">
                 <p className="font-mono text-xs text-[var(--color-text-muted)]">
                   {transactionNumber(sale.id)}
                 </p>
-                <p className="mt-3 text-xs text-[var(--color-text-muted)]">Total Transaksi</p>
-                <h3 className="mt-0.5 text-3xl font-bold tracking-tight">
-                  {money(sale.totalAmount, locale)}
-                </h3>
-                <span
-                  className={`mt-3 inline-flex rounded-full px-2.5 py-0.5 text-xs font-medium ${statusMeta[status].tone}`}
-                >
-                  {statusMeta[status].label}
-                </span>
+                <div className="mt-3 flex flex-wrap gap-1">
+                  <span
+                    className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-medium ${statusMeta[status].tone}`}
+                  >
+                    {statusMeta[status].label}
+                  </span>
+                  <span
+                    className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-medium ${hasSuccessfulCheckout(sale) ? 'bg-[var(--color-success)]/10 text-[var(--color-success)]' : receiptAvailable ? 'bg-[var(--color-warning)]/10 text-[var(--color-warning)]' : 'bg-[var(--color-surface-muted)] text-[var(--color-text-muted)]'}`}
+                  >
+                    {hasSuccessfulCheckout(sale)
+                      ? 'Lunas'
+                      : receiptAvailable
+                        ? 'Bayar sebagian'
+                        : 'Belum dibayar'}
+                  </span>
+                </div>
+                <p className="mt-3 text-xs text-[var(--color-text-muted)]">{transactionDate}</p>
+                <div className="mt-3 flex items-center gap-2 text-sm">
+                  <span className="truncate font-semibold">{customer.name}</span>
+                  <Badge
+                    variant={customerStatus(customerContext).variant}
+                    className="shrink-0 text-[10px]"
+                  >
+                    {customerStatus(customerContext).label}
+                  </Badge>
+                </div>
+                {customer.membership ? (
+                  <p className="mt-1 text-xs text-[var(--color-text-muted)]">
+                    {customer.membership.memberCode} · {customer.membership.status}
+                  </p>
+                ) : customer.phone ? (
+                  <p className="mt-1 text-xs text-[var(--color-text-muted)]">{customer.phone}</p>
+                ) : null}
               </div>
             </div>
-            <ReferenceInfoTile
-              icon={<User className="size-4" />}
-              label="Pelanggan"
-              value={customer.name}
-              sub={customer.phone || undefined}
-            />
-            <ReferenceInfoTile
-              icon={<CreditCard className="size-4" />}
-              label="Pembayaran"
-              value={receiptAvailable ? 'Lunas' : 'Belum dibayar'}
-              sub={
-                receiptAvailable
-                  ? (payment?.method.replace('_', ' ') ?? 'Pembayaran berhasil')
-                  : 'Bayar saat proses pembayaran berikutnya.'
-              }
-            />
-            <div className="divide-y divide-[var(--color-border)] overflow-hidden rounded-2xl border border-[var(--color-border)] bg-[var(--color-background)]">
-              {activeLines.map((line) => (
-                <div key={line.id} className="p-4">
-                  <div className="flex justify-between gap-3">
-                    <div>
-                      <p className="text-sm font-semibold">{line.itemNameSnapshot}</p>
-                      <p className="mt-1 text-xs text-[var(--color-text-muted)]">
-                        {quantity(line.quantity)} × {money(line.effectiveUnitPrice, locale)}
-                        {line.variantNameSnapshot ? ` · ${line.variantNameSnapshot}` : ''}
-                      </p>
+            {sale.status === 'VOIDED' && cancellationReason ? (
+              <div className="rounded-xl border border-[var(--color-danger)]/25 bg-[var(--color-danger)]/10 px-3 py-2 text-xs">
+                <p className="font-semibold text-[var(--color-danger)]">Alasan pembatalan</p>
+                <p className="mt-1 text-[var(--color-text-muted)]">{cancellationReason}</p>
+              </div>
+            ) : null}
+            <section className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border border-[var(--color-border)] bg-[var(--color-background)]">
+              <header className="flex items-center justify-between border-b border-[var(--color-border)] px-4 py-3">
+                <h3 className="text-sm font-semibold">Pesanan</h3>
+                <span className="text-xs text-[var(--color-text-muted)]">
+                  {activeLines.length} item
+                </span>
+              </header>
+              <div className="min-h-[144px] max-h-[min(38dvh,360px)] flex-1 divide-y divide-[var(--color-border)] overflow-y-auto overscroll-contain">
+                {activeLines.map((line) => {
+                  const isMultiUnitService =
+                    line.itemTypeSnapshot === 'SERVICE' &&
+                    line.fulfillmentBehaviorSnapshot === 'TRACKED' &&
+                    serviceWorkUnitCount(line) > 1;
+                  const isActiveTrackedService =
+                    status === 'PROGRESS' &&
+                    line.itemTypeSnapshot === 'SERVICE' &&
+                    line.fulfillmentBehaviorSnapshot === 'TRACKED' &&
+                    line.fulfillment !== null;
+                  const hasCompletedWork = line.fulfillment?.status === 'COMPLETED';
+                  const requiresEmployeeAttribution =
+                    line.employeeAssignmentModeSnapshot !== 'NONE' ||
+                    line.allowEmployeeContributionSnapshot;
+                  const employeeIssues = employeeAssignmentIssues(line);
+                  if (isMultiUnitService) {
+                    return (
+                      <ReferenceServiceWorkLine
+                        key={line.id}
+                        line={line}
+                        employees={employees}
+                        locale={locale}
+                        units={serviceWorkUnitsFor(line, serviceWorkUnits[serviceWorkKey(line)])}
+                        active={status === 'PROGRESS'}
+                        isMutating={isMutating}
+                        onManage={() => onManageServiceWork(line)}
+                      />
+                    );
+                  }
+                  return (
+                    <div key={line.id} className="p-4">
+                      <div className="flex justify-between gap-3">
+                        <div>
+                          <p className="text-sm font-semibold">{line.itemNameSnapshot}</p>
+                          <p className="mt-1 text-xs text-[var(--color-text-muted)]">
+                            {quantity(line.quantity)} × {money(line.effectiveUnitPrice, locale)}
+                            {line.variantNameSnapshot ? ` · ${line.variantNameSnapshot}` : ''}
+                          </p>
+                          {line.fulfillment ? (
+                            <p className="mt-1 text-[11px] font-medium text-[var(--color-text-muted)]">
+                              {line.fulfillment.status === 'WAITING'
+                                ? 'Menunggu proses'
+                                : line.fulfillment.status === 'IN_PROGRESS'
+                                  ? 'Sedang diproses'
+                                  : line.fulfillment.status === 'COMPLETED'
+                                    ? 'Selesai'
+                                    : 'Dibatalkan'}
+                            </p>
+                          ) : null}
+                          {isActiveTrackedService && requiresEmployeeAttribution ? (
+                            <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
+                              <span className="text-[var(--color-text-muted)]">
+                                {employeeIssues.length > 0
+                                  ? line.participations.some(
+                                      (participation) => participation.assigned,
+                                    )
+                                    ? employeeSummary(line, employees)
+                                    : 'Belum ada karyawan'
+                                  : employeeSummary(line, employees)}
+                              </span>
+                              {employeeIssues.length > 0 ? (
+                                <DButton
+                                  size="sm"
+                                  variant="outline"
+                                  disabled={isMutating}
+                                  onClick={() => onAssign(line)}
+                                >
+                                  Atur karyawan
+                                </DButton>
+                              ) : null}
+                            </div>
+                          ) : null}
+                          {isActiveTrackedService &&
+                          !hasCompletedWork &&
+                          employeeIssues.length === 0 ? (
+                            <DButton
+                              size="sm"
+                              variant="outline"
+                              disabled={isMutating}
+                              className="mt-2"
+                              onClick={() => onCompleteLine(line)}
+                            >
+                              Selesaikan layanan
+                            </DButton>
+                          ) : null}
+                        </div>
+                        <p className="text-sm font-bold">{money(line.totalAmount, locale)}</p>
+                      </div>
                     </div>
-                    <p className="text-sm font-bold">{money(line.totalAmount, locale)}</p>
-                  </div>
+                  );
+                })}
+              </div>
+            </section>
+            {completionIssues.length ? (
+              <div className="rounded-xl border border-[var(--color-warning)]/30 bg-[var(--color-warning)]/10 px-3 py-2 text-xs">
+                <p className="font-semibold text-[var(--color-warning)]">Belum siap diselesaikan</p>
+                <div className="mt-2 space-y-2 text-[var(--color-text-muted)]">
+                  {completionIssueGroups.map((group) => (
+                    <div key={group.id}>
+                      <p className="font-semibold text-[var(--color-text)]">{group.label}</p>
+                      <ul className="mt-0.5 list-disc space-y-0.5 pl-4">
+                        {group.issues.map((issue) => (
+                          <li key={issue}>{issue}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  ))}
                 </div>
-              ))}
-            </div>
+              </div>
+            ) : null}
           </div>
-          <footer className="shrink-0 border-t border-[var(--color-border)] bg-[var(--color-surface-muted)]/30 px-6 py-3 text-right">
-            <Button variant="outline" onClick={onClose}>
-              Tutup
-            </Button>
-          </footer>
+          <ReferenceFinancialSummary sale={sale} locale={locale} />
         </div>
       )}
+    </Dialog>
+  );
+}
+
+function ReferenceServiceWorkLine({
+  line,
+  employees,
+  locale,
+  units,
+  active,
+  isMutating,
+  onManage,
+}: {
+  line: SaleLine;
+  employees: readonly Employee[];
+  locale: string;
+  units: readonly ServiceWorkUnit[];
+  active: boolean;
+  isMutating: boolean;
+  onManage: () => void;
+}) {
+  const completedCount = units.filter((unit) => unit.status === 'COMPLETED').length;
+  const employeeWorkSummary = serviceWorkAssignmentSummary(units, employees);
+
+  return (
+    <div className="p-4">
+      <div className="flex justify-between gap-3">
+        <div className="min-w-0 flex-1">
+          <p className="text-sm font-semibold">{line.itemNameSnapshot}</p>
+          <p className="mt-1 text-xs text-[var(--color-text-muted)]">
+            {quantity(line.quantity)} × {money(line.effectiveUnitPrice, locale)}
+            {line.variantNameSnapshot ? ` · ${line.variantNameSnapshot}` : ''}
+          </p>
+          <p className="mt-1 text-[11px] font-medium text-[var(--color-text-muted)]">
+            {completedCount}/{units.length} selesai
+          </p>
+          <div className="mt-1 flex flex-wrap items-center gap-2 text-xs">
+            <span className="min-w-0 flex-1 truncate text-[var(--color-text-muted)]">
+              {units.length} pengerjaan · {employeeWorkSummary}
+            </span>
+            {active ? (
+              <DButton size="sm" variant="outline" disabled={isMutating} onClick={onManage}>
+                Kelola pengerjaan
+              </DButton>
+            ) : null}
+          </div>
+        </div>
+        <p className="shrink-0 text-sm font-bold">{money(line.totalAmount, locale)}</p>
+      </div>
+    </div>
+  );
+}
+
+function ReferenceFinancialSummary({ sale, locale }: { sale: Sale; locale: string }) {
+  const [expanded, setExpanded] = useState(false);
+  const { totalPaid, balanceDue } = financialSummary(sale);
+  const hasDiscount = !createDecimal(sale.discountAmount).equals(createDecimal('0'));
+  const hasTax = !createDecimal(sale.taxAmount).equals(createDecimal('0'));
+  const cashPayments = successfulPayments(sale).filter((payment) => payment.method === 'CASH');
+  const cashTendered = cashPayments.reduce(
+    (total, payment) => total.plus(createDecimal(payment.tenderedAmount ?? '0')),
+    createDecimal('0'),
+  );
+  const cashChange = cashPayments.reduce(
+    (total, payment) => total.plus(createDecimal(payment.changeAmount ?? '0')),
+    createDecimal('0'),
+  );
+  const hasCashTendered = cashPayments.some((payment) => payment.tenderedAmount !== null);
+  const hasCashChange = !cashChange.equals(createDecimal('0'));
+
+  return (
+    <section className="sticky bottom-0 z-10 flex shrink-0 flex-col border-t border-[var(--color-border)] bg-[var(--color-surface)]">
+      <div
+        className={`order-2 grid transition-[grid-template-rows] duration-200 ease-out ${expanded ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'}`}
+      >
+        <div className="overflow-hidden">
+          <dl className="space-y-1.5 border-b border-[var(--color-border)] px-5 py-3 text-xs">
+            <div className="flex justify-between gap-3">
+              <dt className="text-[var(--color-text-muted)]">Subtotal</dt>
+              <dd>{money(sale.grossAmount, locale)}</dd>
+            </div>
+            {hasDiscount ? (
+              <div className="flex justify-between gap-3">
+                <dt className="text-[var(--color-text-muted)]">Promo / diskon</dt>
+                <dd>−{money(sale.discountAmount, locale)}</dd>
+              </div>
+            ) : null}
+            {hasTax ? (
+              <div className="flex justify-between gap-3">
+                <dt className="text-[var(--color-text-muted)]">Pajak</dt>
+                <dd>{money(sale.taxAmount, locale)}</dd>
+              </div>
+            ) : null}
+            <div className="flex justify-between gap-3 border-t border-[var(--color-border)] pt-2 font-semibold">
+              <dt>Total</dt>
+              <dd>{money(sale.totalAmount, locale)}</dd>
+            </div>
+            <div className="flex justify-between gap-3">
+              <dt className="text-[var(--color-text-muted)]">Dibayar</dt>
+              <dd>{money(totalPaid, locale)}</dd>
+            </div>
+            <div className="flex justify-between gap-3 font-semibold text-[var(--color-brand)]">
+              <dt>Sisa</dt>
+              <dd>{money(balanceDue, locale)}</dd>
+            </div>
+            {hasCashTendered ? (
+              <div className="flex justify-between gap-3">
+                <dt className="text-[var(--color-text-muted)]">Uang diterima</dt>
+                <dd>{money(cashTendered.toFixed(4), locale)}</dd>
+              </div>
+            ) : null}
+            {hasCashChange ? (
+              <div className="flex justify-between gap-3">
+                <dt className="text-[var(--color-text-muted)]">Kembalian</dt>
+                <dd>{money(cashChange.toFixed(4), locale)}</dd>
+              </div>
+            ) : null}
+          </dl>
+        </div>
+      </div>
+      <button
+        type="button"
+        aria-expanded={expanded}
+        onClick={() => setExpanded((current) => !current)}
+        className="order-1 grid w-full grid-cols-[1fr_1fr_1fr_auto] items-center gap-3 px-5 py-3 text-left text-xs transition-colors duration-200 hover:bg-[var(--color-surface-muted)]"
+      >
+        <span>
+          <span className="block text-[10px] uppercase tracking-wide text-[var(--color-text-muted)]">
+            Total
+          </span>
+          <span className="mt-0.5 block font-semibold">{money(sale.totalAmount, locale)}</span>
+        </span>
+        <span>
+          <span className="block text-[10px] uppercase tracking-wide text-[var(--color-text-muted)]">
+            Dibayar
+          </span>
+          <span className="mt-0.5 block font-semibold">{money(totalPaid, locale)}</span>
+        </span>
+        <span className="text-right">
+          <span className="block text-[10px] uppercase tracking-wide text-[var(--color-text-muted)]">
+            Sisa
+          </span>
+          <span className="mt-0.5 block font-semibold text-[var(--color-brand)]">
+            {money(balanceDue, locale)}
+          </span>
+        </span>
+        <ChevronDown
+          className={`size-4 text-[var(--color-text-muted)] transition-transform duration-200 ${expanded ? 'rotate-180' : ''}`}
+        />
+      </button>
+    </section>
+  );
+}
+
+function ReferenceOrderAdjustmentDialog({
+  sale,
+  items,
+  locale,
+  isMutating,
+  variantPicker,
+  onClose,
+  onAdd,
+  onAddVariant,
+  onQuantity,
+  onRemove,
+}: {
+  sale: Sale | null;
+  items: readonly CatalogItem[];
+  locale: string;
+  isMutating: boolean;
+  variantPicker: VariantPickerState | null;
+  onClose: () => void;
+  onAdd: (item: CatalogItem) => void;
+  onAddVariant: (catalogVariantId: string) => void;
+  onQuantity: (line: SaleLine, quantity: string) => void;
+  onRemove: (line: SaleLine) => void;
+}) {
+  const [catalogSearch, setCatalogSearch] = useState('');
+  const [selectedVariantId, setSelectedVariantId] = useState<string | null>(null);
+
+  useEffect(() => {
+    setSelectedVariantId(null);
+  }, [variantPicker?.item.id]);
+
+  if (!sale) return null;
+
+  const paid = hasSuccessfulPayment(sale);
+  const activeLines = sale.lines.filter((line) => line.removedAt === null);
+  const options = items
+    .filter((item) => {
+      const query = catalogSearch.trim().toLocaleLowerCase();
+      return !query || `${item.name} ${item.code}`.toLocaleLowerCase().includes(query);
+    })
+    .slice(0, 12)
+    .map((item) => ({
+      value: item.id,
+      label: `${item.name} · ${item.code}`,
+    }));
+
+  return (
+    <Dialog
+      open
+      onClose={onClose}
+      title="Sesuaikan Pesanan"
+      description={`${transactionNumber(sale.id)} · perubahan tetap pada transaksi ini`}
+      ariaLabel="Adjust queued transaction"
+      closeOnEscape
+      closeOnOverlay
+      className="pos-reference-dialog w-full max-w-xl overflow-hidden rounded-t-2xl bg-[var(--color-surface)] shadow-xl sm:rounded-xl"
+      footer={
+        <div className="flex justify-end gap-2">
+          <Button variant="ghost" onClick={onClose}>
+            Batal
+          </Button>
+          <Button disabled={isMutating} onClick={onClose}>
+            Konfirmasi penyesuaian
+          </Button>
+        </div>
+      }
+    >
+      <div className="min-h-0 flex-1 space-y-4 overflow-y-auto">
+        {paid ? (
+          <div className="rounded-xl border border-[var(--color-warning)]/30 bg-[var(--color-warning)]/10 px-3 py-2 text-xs">
+            <p className="font-semibold text-[var(--color-warning)]">
+              Pembayaran sebelumnya dipertahankan
+            </p>
+            <p className="mt-1 text-[var(--color-text-muted)]">
+              Anda dapat menambahkan item. Pengurangan atau penghapusan item berbayar memerlukan
+              proses refund.
+            </p>
+          </div>
+        ) : (
+          <p className="text-xs text-[var(--color-text-muted)]">
+            Ubah qty atau hapus item yang belum dimulai, lalu konfirmasi penyesuaian.
+          </p>
+        )}
+        <div className="divide-y divide-[var(--color-border)] overflow-hidden rounded-xl border border-[var(--color-border)] bg-[var(--color-background)]">
+          {activeLines.map((line) => {
+            const canDecrease =
+              !paid && createDecimal(line.quantity).greaterThan(createDecimal('1'));
+            return (
+              <div key={line.id} className="flex items-center justify-between gap-3 p-3">
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-semibold">{line.itemNameSnapshot}</p>
+                  {line.variantNameSnapshot ? (
+                    <p className="mt-0.5 truncate text-xs font-medium text-[var(--color-text-muted)]">
+                      {line.variantNameSnapshot}
+                    </p>
+                  ) : null}
+                  <p className="mt-0.5 text-xs text-[var(--color-text-muted)]">
+                    {quantity(line.quantity)} × {money(line.effectiveUnitPrice, locale)}
+                  </p>
+                </div>
+                <div className="flex shrink-0 items-center gap-1">
+                  <button
+                    type="button"
+                    aria-label={`Kurangi ${line.itemNameSnapshot}`}
+                    disabled={!canDecrease || isMutating}
+                    onClick={() =>
+                      onQuantity(
+                        line,
+                        createDecimal(line.quantity).minus(createDecimal('1')).toFixed(4),
+                      )
+                    }
+                    className="flex size-8 items-center justify-center rounded-lg border border-[var(--color-border)] text-[var(--color-text-muted)] hover:bg-[var(--color-surface-muted)] disabled:cursor-not-allowed disabled:opacity-40"
+                  >
+                    <Minus className="size-3.5" />
+                  </button>
+                  <span className="w-8 text-center text-xs font-semibold">
+                    {quantity(line.quantity)}
+                  </span>
+                  <button
+                    type="button"
+                    aria-label={`Tambah ${line.itemNameSnapshot}`}
+                    disabled={isMutating}
+                    onClick={() =>
+                      onQuantity(
+                        line,
+                        createDecimal(line.quantity).plus(createDecimal('1')).toFixed(4),
+                      )
+                    }
+                    className="flex size-8 items-center justify-center rounded-lg border border-[var(--color-border)] text-[var(--color-text-muted)] hover:bg-[var(--color-surface-muted)] disabled:cursor-not-allowed disabled:opacity-40"
+                  >
+                    <Plus className="size-3.5" />
+                  </button>
+                  <button
+                    type="button"
+                    aria-label={`Hapus ${line.itemNameSnapshot}`}
+                    disabled={paid || isMutating}
+                    onClick={() => onRemove(line)}
+                    className="ml-1 flex size-8 items-center justify-center rounded-lg text-[var(--color-danger)] hover:bg-[var(--color-danger)]/10 disabled:cursor-not-allowed disabled:opacity-40"
+                  >
+                    <Trash2 className="size-3.5" />
+                  </button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+        <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-background)] p-3">
+          <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-[var(--color-text-muted)]">
+            Tambah item dari katalog
+          </p>
+          <Combobox
+            ariaLabel="Tambah item ke transaksi"
+            value={null}
+            placeholder="Cari produk atau jasa"
+            options={options}
+            onSearchChange={setCatalogSearch}
+            onChange={(itemId) => {
+              const item = items.find((candidate) => candidate.id === itemId);
+              if (item) onAdd(item);
+            }}
+            disabled={isMutating}
+            idleMessage="Ketik nama atau kode item untuk menambahkan ke transaksi ini."
+          />
+        </div>
+        {variantPicker ? (
+          <section className="border-t border-[var(--color-border)] pt-3">
+            <div className="space-y-3">
+              <p className="text-sm font-semibold text-[var(--color-text)]">
+                {variantPicker.item.name}
+              </p>
+              <Select
+                label="Varian"
+                value={selectedVariantId}
+                placeholder="Pilih varian"
+                options={variantPicker.variants.map((variant) => {
+                  const price = variantPicker.pricesByVariantId?.[variant.id];
+                  return {
+                    value: variant.id,
+                    label: price ? `${variant.name} · ${money(price, locale)}` : variant.name,
+                  };
+                })}
+                onChange={(value) => setSelectedVariantId(typeof value === 'string' ? value : null)}
+                disabled={isMutating}
+                className="w-full"
+              />
+              <div className="flex justify-end">
+                <Button
+                  size="sm"
+                  leftIcon={<Plus className="size-3.5" />}
+                  disabled={selectedVariantId === null || isMutating}
+                  onClick={() => {
+                    if (selectedVariantId) onAddVariant(selectedVariantId);
+                  }}
+                >
+                  Tambahkan item
+                </Button>
+              </div>
+            </div>
+          </section>
+        ) : null}
+      </div>
+    </Dialog>
+  );
+}
+
+function ReferenceBalancePaymentDialog({
+  sale,
+  locale,
+  method,
+  provider,
+  tender,
+  isMutating,
+  onClose,
+  onMethod,
+  onProvider,
+  onTender,
+  onPay,
+}: {
+  sale: Sale | null;
+  locale: string;
+  method: PaymentMethod;
+  provider: string;
+  tender: string;
+  isMutating: boolean;
+  onClose: () => void;
+  onMethod: (method: PaymentMethod) => void;
+  onProvider: (provider: string) => void;
+  onTender: (amount: string) => void;
+  onPay: () => void;
+}) {
+  if (!sale) return null;
+  const { totalPaid, balanceDue } = financialSummary(sale);
+  const isCash = method === 'CASH';
+  const needsProvider = method === 'BANK_TRANSFER' || method === 'WALLET';
+  const applied = isCash ? tender || balanceDue : balanceDue;
+  const cashShort = isCash && createDecimal(applied).lessThan(createDecimal(balanceDue));
+  const canPay =
+    isPositiveDecimal(applied) &&
+    !cashShort &&
+    (!needsProvider || Boolean(provider)) &&
+    !isMutating;
+  const methods: Array<{ value: PaymentMethod; label: string; icon: ReactNode }> = [
+    { value: 'CASH', label: 'Tunai', icon: <Banknote className="size-4" /> },
+    { value: 'BANK_TRANSFER', label: 'Transfer', icon: <CreditCard className="size-4" /> },
+    { value: 'QRIS', label: 'QRIS', icon: <QrCode className="size-4" /> },
+    { value: 'WALLET', label: 'E-Wallet', icon: <ShoppingBag className="size-4" /> },
+  ];
+  const providerOptions =
+    method === 'BANK_TRANSFER'
+      ? ['BCA', 'Mandiri', 'BRI', 'BNI']
+      : ['DANA', 'GoPay', 'OVO', 'ShopeePay'];
+
+  return (
+    <Dialog
+      open
+      onClose={onClose}
+      title={hasSuccessfulPayment(sale) ? 'Bayar Sisa' : 'Bayar Transaksi'}
+      description={transactionNumber(sale.id)}
+      ariaLabel="Pay queued transaction"
+      closeOnEscape
+      closeOnOverlay
+      className="pos-reference-dialog w-full max-w-md overflow-hidden rounded-t-2xl bg-[var(--color-surface)] shadow-xl sm:rounded-xl"
+      footer={
+        <div className="flex justify-end gap-2">
+          <Button variant="ghost" onClick={onClose}>
+            Batal
+          </Button>
+          <Button disabled={!canPay} loading={isMutating} onClick={onPay}>
+            Bayar {money(balanceDue, locale)}
+          </Button>
+        </div>
+      }
+    >
+      <div className="min-h-0 flex-1 space-y-4 overflow-y-auto">
+        <div className="grid grid-cols-2 gap-3 rounded-xl border border-[var(--color-border)] bg-[var(--color-background)] p-3 text-sm">
+          <div>
+            <p className="text-xs text-[var(--color-text-muted)]">Sudah dibayar</p>
+            <p className="mt-1 font-semibold">{money(totalPaid, locale)}</p>
+          </div>
+          <div className="text-right">
+            <p className="text-xs text-[var(--color-text-muted)]">Sisa</p>
+            <p className="mt-1 font-bold text-[var(--color-brand)]">{money(balanceDue, locale)}</p>
+          </div>
+        </div>
+        <div className="grid grid-cols-4 gap-2">
+          {methods.map((option) => (
+            <button
+              key={option.value}
+              type="button"
+              onClick={() => onMethod(option.value)}
+              className={`flex h-10 items-center justify-center gap-1 rounded-xl border text-xs font-semibold ${method === option.value ? 'border-[var(--color-brand)] bg-[var(--color-brand)] text-white' : 'border-[var(--color-border)] bg-[var(--color-background)] text-[var(--color-text-muted)] hover:bg-[var(--color-surface-muted)]'}`}
+            >
+              {option.icon}
+              <span className="hidden sm:inline">{option.label}</span>
+            </button>
+          ))}
+        </div>
+        {needsProvider ? (
+          <div className="grid grid-cols-4 gap-2">
+            {providerOptions.map((option) => (
+              <button
+                key={option}
+                type="button"
+                onClick={() => onProvider(option)}
+                className={`h-9 rounded-lg border text-xs font-semibold ${provider === option ? 'border-[var(--color-brand)] bg-[var(--color-brand)]/10 text-[var(--color-brand)]' : 'border-[var(--color-border)] text-[var(--color-text-muted)] hover:bg-[var(--color-surface-muted)]'}`}
+              >
+                {option}
+              </button>
+            ))}
+          </div>
+        ) : null}
+        {isCash ? (
+          <label className="block text-sm font-medium">
+            Uang dibayar
+            <PosCurrencyInput
+              aria-label="Cash tendered for queued transaction"
+              className="mt-1.5 h-10 rounded-lg text-right text-lg font-bold"
+              value={tender}
+              onChange={onTender}
+            />
+            {cashShort ? (
+              <span className="mt-1 block text-xs text-[var(--color-warning)]">
+                Nominal pembayaran belum mencukupi.
+              </span>
+            ) : null}
+          </label>
+        ) : (
+          <p className="rounded-xl border border-[var(--color-brand)]/20 bg-[var(--color-brand)]/5 p-3 text-xs text-[var(--color-text-muted)]">
+            Catat pembayaran{' '}
+            {method === 'BANK_TRANSFER' ? 'transfer' : method === 'WALLET' ? 'e-wallet' : 'QRIS'}{' '}
+            sebesar {money(balanceDue, locale)}.
+          </p>
+        )}
+      </div>
     </Dialog>
   );
 }
@@ -2230,29 +3464,30 @@ function ReferenceReviewDialog({
   return (
     <Dialog
       open
+      title="Review & Selesaikan"
+      description="Pastikan semua detail transaksi sudah benar sebelum diselesaikan."
       onClose={onClose}
       ariaLabel="Review and complete transaction"
       closeOnEscape
       closeOnOverlay
       className="pos-reference-dialog w-full max-w-2xl overflow-hidden rounded-t-2xl bg-[var(--color-surface)] shadow-xl sm:rounded-xl"
-    >
-      <div className="flex max-h-[85dvh] min-h-0 flex-col">
-        <header className="flex shrink-0 items-center justify-between border-b border-[var(--color-border)] px-6 py-4">
-          <div>
-            <h2 className="text-lg font-semibold">Review &amp; Selesaikan</h2>
-            <p className="mt-0.5 text-sm text-[var(--color-text-muted)]">
-              {transactionNumber(sale.id)} · {saleCustomer(sale.id).name}
-            </p>
-          </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="rounded-lg p-2 text-[var(--color-text-muted)] hover:bg-[var(--color-surface-muted)]"
+      footer={
+        <footer className="flex shrink-0 justify-end gap-2">
+          <Button variant="ghost" onClick={onClose}>
+            Batal
+          </Button>
+          <Button
+            disabled={!active || issues.length > 0}
+            onClick={onComplete}
+            leftIcon={<CheckCircle2 className="size-3.5" />}
           >
-            <X className="size-[18px]" />
-          </button>
-        </header>
-        <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-4 py-4">
+            {active ? 'Selesaikan Transaksi' : 'Memuat transaksi…'}
+          </Button>
+        </footer>
+      }
+    >
+      <div className="flex flex-col">
+        <div className="min-h-0 flex-1 space-y-4">
           {issues.length ? (
             <div className="rounded-2xl border border-[var(--color-warning)]/30 bg-[var(--color-warning)]/10 p-3">
               <p className="text-sm font-bold text-[var(--color-warning)]">
@@ -2380,18 +3615,6 @@ function ReferenceReviewDialog({
             </div>
           </div>
         </div>
-        <footer className="flex shrink-0 justify-end gap-2 border-t border-[var(--color-border)] bg-[var(--color-surface-muted)]/30 px-6 py-3">
-          <Button variant="ghost" onClick={onClose}>
-            Batal
-          </Button>
-          <Button
-            disabled={!active || issues.length > 0}
-            onClick={onComplete}
-            leftIcon={<CheckCircle2 className="size-3.5" />}
-          >
-            {active ? 'Selesaikan Transaksi' : 'Memuat transaksi…'}
-          </Button>
-        </footer>
       </div>
     </Dialog>
   );
@@ -2534,6 +3757,8 @@ function ReferenceEmployeeDialog({
   return (
     <Dialog
       open={isOpen}
+      title="Karyawan untuk layanan"
+      description="Lengkapi attribution layanan sebelum transaksi diselesaikan. Sistem membagi 100% secara rata."
       onClose={() => {
         setRows([]);
         onClose();
@@ -2542,146 +3767,8 @@ function ReferenceEmployeeDialog({
       closeOnEscape
       closeOnOverlay
       className="pos-reference-dialog w-full max-w-2xl overflow-hidden rounded-t-2xl bg-[var(--color-surface)] shadow-xl sm:rounded-xl"
-    >
-      <div className="flex max-h-[85dvh] min-h-0 flex-col">
-        <header className="flex shrink-0 items-center justify-between border-b border-[var(--color-border)] px-6 py-4">
-          <div>
-            <h2 className="text-lg font-semibold">Karyawan untuk layanan</h2>
-            <p className="mt-0.5 text-sm text-[var(--color-text-muted)]">
-              Lengkapi attribution layanan sebelum transaksi diselesaikan. Sistem membagi 100%
-              secara rata.
-            </p>
-          </div>
-          <button
-            type="button"
-            onClick={() => {
-              setRows([]);
-              onClose();
-            }}
-            className="rounded-lg p-2 text-[var(--color-text-muted)] hover:bg-[var(--color-surface-muted)]"
-          >
-            <X className="size-[18px]" />
-          </button>
-        </header>
-        <div className="min-h-0 flex-1 overflow-y-auto p-5">
-          <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-surface-muted)]/20 p-4">
-            <div className="mb-3 flex items-center justify-between">
-              <div>
-                <p className="text-sm font-semibold">{line.itemNameSnapshot}</p>
-                <p className="text-xs text-[var(--color-text-muted)]">
-                  Qty {quantity(line.quantity)} · {money(line.totalAmount, locale)}
-                </p>
-              </div>
-              <span
-                className={`rounded-full px-2.5 py-1 text-xs font-semibold ${valid ? 'bg-[var(--color-success)]/10 text-[var(--color-success)]' : 'bg-[var(--color-warning)]/10 text-[var(--color-warning)]'}`}
-              >
-                Total {total.toFixed(0)}%
-              </span>
-            </div>
-            <div className="space-y-2">
-              {activeRows.map((row, index) => (
-                <div
-                  key={`${row.employeeId}-${index}`}
-                  className="grid grid-cols-12 items-end gap-2"
-                >
-                  <label className="col-span-6 text-xs font-medium">
-                    Karyawan
-                    <div className="mt-1">
-                      <Combobox
-                        ariaLabel={`Employee ${index + 1}`}
-                        value={row.employeeId}
-                        placeholder="Pilih karyawan"
-                        options={employees.map((employee) => ({
-                          value: employee.id,
-                          label: employee.displayName,
-                        }))}
-                        onChange={(employeeId) => {
-                          if (typeof employeeId !== 'string') return;
-                          const next = [...activeRows];
-                          next[index] = { ...next[index]!, employeeId };
-                          setRows(next);
-                        }}
-                      />
-                    </div>
-                  </label>
-                  <label className="col-span-3 text-xs font-medium">
-                    Porsi
-                    <div className="mt-1">
-                      <PosNumericInput
-                        aria-label={`Contribution ${index + 1}`}
-                        className="h-9 rounded-lg text-sm"
-                        disabled={activeRows.length === 1}
-                        value={row.shareRate}
-                        integer
-                        min="0"
-                        max="100"
-                        suffix="%"
-                        onChange={(shareRate) => {
-                          const next = [...activeRows];
-                          next[index] = {
-                            ...next[index]!,
-                            shareRate,
-                            locked: true,
-                          };
-                          setRows(distribute(next));
-                        }}
-                      />
-                    </div>
-                  </label>
-                  <div className="col-span-3 flex h-9 items-center justify-end gap-1">
-                    <button
-                      type="button"
-                      title="Auto distribute"
-                      disabled={activeRows.length === 1}
-                      onClick={() => {
-                        const next = [...activeRows];
-                        next[index] = { ...next[index]!, locked: !next[index]!.locked };
-                        setRows(distribute(next));
-                      }}
-                      className={`rounded-lg p-2 transition-colors ${row.locked ? 'bg-[var(--color-brand)]/10 text-[var(--color-brand)]' : 'text-[var(--color-text-muted)] hover:bg-[var(--color-surface-muted)]'}`}
-                    >
-                      %
-                    </button>
-                    <button
-                      type="button"
-                      disabled={activeRows.length === 1}
-                      onClick={() =>
-                        setRows(
-                          distribute(
-                            activeRows.filter(
-                              (row, rowIndex) => Boolean(row) && rowIndex !== index,
-                            ),
-                          ),
-                        )
-                      }
-                      className="rounded-lg p-2 text-[var(--color-danger)] hover:bg-[var(--color-danger)]/10"
-                    >
-                      <Trash2 className="size-3.5" />
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-            <button
-              type="button"
-              onClick={() =>
-                setRows(
-                  distribute([...activeRows, { employeeId: '', shareRate: '0', locked: false }]),
-                )
-              }
-              className="mt-3 inline-flex items-center gap-1.5 text-xs font-medium text-[var(--color-brand)] hover:underline"
-            >
-              <UserPlus className="size-3" />
-              Tambah karyawan
-            </button>
-            {!valid ? (
-              <p className="mt-2 text-xs text-[var(--color-warning)]">
-                Lengkapi karyawan dan pastikan total porsi tepat 100%.
-              </p>
-            ) : null}
-          </div>
-        </div>
-        <footer className="flex shrink-0 items-center justify-between gap-2 border-t border-[var(--color-border)] bg-[var(--color-surface-muted)]/30 px-6 py-3">
+      footer={
+        <footer className="flex shrink-0 items-center justify-between gap-2">
           <span className="text-[11px] text-[var(--color-text-muted)]">
             {valid ? 'Semua porsi valid (100%)' : 'Lengkapi karyawan untuk jasa ini'}
           </span>
@@ -2711,6 +3798,352 @@ function ReferenceEmployeeDialog({
             </Button>
           </div>
         </footer>
+      }
+    >
+      <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-surface-muted)]/20 p-4">
+        <div className="mb-3 flex items-center justify-between">
+          <div>
+            <p className="text-sm font-semibold">{line.itemNameSnapshot}</p>
+            <p className="text-xs text-[var(--color-text-muted)]">
+              Qty {quantity(line.quantity)} · {money(line.totalAmount, locale)}
+            </p>
+          </div>
+          <span
+            className={`rounded-full px-2.5 py-1 text-xs font-semibold ${valid ? 'bg-[var(--color-success)]/10 text-[var(--color-success)]' : 'bg-[var(--color-warning)]/10 text-[var(--color-warning)]'}`}
+          >
+            Total {total.toFixed(0)}%
+          </span>
+        </div>
+        <div className="space-y-2">
+          {activeRows.map((row, index) => (
+            <div key={`${row.employeeId}-${index}`} className="grid grid-cols-12 items-end gap-2">
+              <label className="col-span-6 text-xs font-medium">
+                Karyawan
+                <div className="mt-1">
+                  <Combobox
+                    ariaLabel={`Employee ${index + 1}`}
+                    value={row.employeeId}
+                    placeholder="Pilih karyawan"
+                    options={employees.map((employee) => ({
+                      value: employee.id,
+                      label: employee.displayName,
+                    }))}
+                    onChange={(employeeId) => {
+                      if (typeof employeeId !== 'string') return;
+                      const next = [...activeRows];
+                      next[index] = { ...next[index]!, employeeId };
+                      setRows(next);
+                    }}
+                  />
+                </div>
+              </label>
+              <label className="col-span-3 text-xs font-medium">
+                Porsi
+                <div className="mt-1">
+                  <PosNumericInput
+                    aria-label={`Contribution ${index + 1}`}
+                    className="h-9 rounded-lg text-sm"
+                    disabled={activeRows.length === 1}
+                    value={row.shareRate}
+                    integer
+                    min="0"
+                    max="100"
+                    suffix="%"
+                    onChange={(shareRate) => {
+                      const next = [...activeRows];
+                      next[index] = {
+                        ...next[index]!,
+                        shareRate,
+                        locked: true,
+                      };
+                      setRows(distribute(next));
+                    }}
+                  />
+                </div>
+              </label>
+              <div className="col-span-3 flex h-9 items-center justify-end gap-1">
+                <button
+                  type="button"
+                  title="Auto distribute"
+                  disabled={activeRows.length === 1}
+                  onClick={() => {
+                    const next = [...activeRows];
+                    next[index] = { ...next[index]!, locked: !next[index]!.locked };
+                    setRows(distribute(next));
+                  }}
+                  className={`rounded-lg p-2 transition-colors ${row.locked ? 'bg-[var(--color-brand)]/10 text-[var(--color-brand)]' : 'text-[var(--color-text-muted)] hover:bg-[var(--color-surface-muted)]'}`}
+                >
+                  %
+                </button>
+                <button
+                  type="button"
+                  disabled={activeRows.length === 1}
+                  onClick={() =>
+                    setRows(
+                      distribute(
+                        activeRows.filter((row, rowIndex) => Boolean(row) && rowIndex !== index),
+                      ),
+                    )
+                  }
+                  className="rounded-lg p-2 text-[var(--color-danger)] hover:bg-[var(--color-danger)]/10"
+                >
+                  <Trash2 className="size-3.5" />
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+        <button
+          type="button"
+          onClick={() =>
+            setRows(distribute([...activeRows, { employeeId: '', shareRate: '0', locked: false }]))
+          }
+          className="mt-3 inline-flex items-center gap-1.5 text-xs font-medium text-[var(--color-brand)] hover:underline"
+        >
+          <UserPlus className="size-3" />
+          Tambah karyawan
+        </button>
+        {!valid ? (
+          <p className="mt-2 text-xs text-[var(--color-warning)]">
+            Lengkapi karyawan dan pastikan total porsi tepat 100%.
+          </p>
+        ) : null}
+      </div>
+    </Dialog>
+  );
+}
+
+function editableWorkContributors(
+  contributors: readonly ServiceWorkContributor[],
+): ServiceWorkContributor[] {
+  return contributors.length
+    ? contributors.map((contributor) => ({ ...contributor }))
+    : [{ employeeId: '', shareRate: '1.0000' }];
+}
+
+function ServiceWorkContributorEditor({
+  contributors,
+  employees,
+  onChange,
+}: {
+  contributors: readonly ServiceWorkContributor[];
+  employees: readonly Employee[];
+  onChange: (contributors: ServiceWorkContributor[]) => void;
+}) {
+  const rows = editableWorkContributors(contributors);
+  const total = contributionTotal(rows).times(100).toFixed(0);
+
+  return (
+    <div className="space-y-2">
+      {rows.map((row, index) => (
+        <div
+          key={`${row.employeeId}-${index}`}
+          className="grid grid-cols-[minmax(0,1fr)_74px_28px] items-end gap-2"
+        >
+          <label className="text-[11px] font-medium text-[var(--color-text-muted)]">
+            Karyawan
+            <Combobox
+              ariaLabel={`Karyawan pengerjaan ${index + 1}`}
+              value={row.employeeId}
+              placeholder="Pilih karyawan"
+              options={employees.map((employee) => ({
+                value: employee.id,
+                label: employee.displayName,
+              }))}
+              onChange={(employeeId) => {
+                if (typeof employeeId !== 'string') return;
+                const next = [...rows];
+                next[index] = { ...next[index]!, employeeId };
+                onChange(next);
+              }}
+            />
+          </label>
+          <label className="text-[11px] font-medium text-[var(--color-text-muted)]">
+            Porsi
+            <PosNumericInput
+              aria-label={`Porsi pengerjaan ${index + 1}`}
+              className="h-9 rounded-lg text-sm"
+              value={createDecimal(row.shareRate).times(100).toFixed(0)}
+              integer
+              min="0"
+              max="100"
+              suffix="%"
+              onChange={(shareRate) => {
+                const next = [...rows];
+                next[index] = {
+                  ...next[index]!,
+                  shareRate: createDecimal(shareRate || '0')
+                    .dividedBy(100)
+                    .toFixed(4),
+                };
+                onChange(next);
+              }}
+            />
+          </label>
+          <button
+            type="button"
+            disabled={rows.length === 1}
+            aria-label={`Hapus karyawan ${index + 1}`}
+            onClick={() => onChange(rows.filter((_, rowIndex) => rowIndex !== index))}
+            className="mb-0.5 rounded-lg p-2 text-[var(--color-danger)] transition-colors hover:bg-[var(--color-danger)]/10 disabled:opacity-40"
+          >
+            <Trash2 className="size-3.5" />
+          </button>
+        </div>
+      ))}
+      <div className="flex items-center justify-between gap-3">
+        <button
+          type="button"
+          onClick={() => onChange([...rows, { employeeId: '', shareRate: '0.0000' }])}
+          className="inline-flex items-center gap-1.5 text-xs font-medium text-[var(--color-brand)] hover:underline"
+        >
+          <UserPlus className="size-3" />
+          Tambah karyawan
+        </button>
+        <span
+          className={`text-xs font-semibold ${total === '100' ? 'text-[var(--color-success)]' : 'text-[var(--color-warning)]'}`}
+        >
+          Total {total}%
+        </span>
+      </div>
+    </div>
+  );
+}
+
+function ReferenceServiceWorkDialog({
+  line,
+  employees,
+  locale,
+  units,
+  isMutating,
+  onClose,
+  onSave,
+  onCompleteUnit,
+}: {
+  line: SaleLine | null;
+  employees: readonly Employee[];
+  locale: string;
+  units: readonly ServiceWorkUnit[];
+  isMutating: boolean;
+  onClose: () => void;
+  onSave: (units: readonly ServiceWorkUnit[]) => void;
+  onCompleteUnit: (index: number) => void;
+}) {
+  const [mode, setMode] = useState<'SAME' | 'PER_UNIT'>('SAME');
+  const [sharedContributors, setSharedContributors] = useState<ServiceWorkContributor[]>(() =>
+    editableWorkContributors(units[0]?.contributors ?? []),
+  );
+  const [unitPlans, setUnitPlans] = useState<ServiceWorkUnit[]>(() =>
+    units.map((unit) => ({
+      ...unit,
+      contributors: editableWorkContributors(unit.contributors),
+    })),
+  );
+
+  if (!line) return null;
+  const plannedUnits =
+    mode === 'SAME'
+      ? units.map((unit) => ({ ...unit, contributors: sharedContributors }))
+      : unitPlans;
+  const valid = plannedUnits.every((unit) => hasValidWorkAssignment(line, unit));
+
+  return (
+    <Dialog
+      open
+      title="Kelola pengerjaan"
+      description={`${line.itemNameSnapshot} · ${quantity(line.quantity)} pengerjaan layanan`}
+      onClose={onClose}
+      ariaLabel="Kelola pengerjaan layanan"
+      closeOnEscape
+      closeOnOverlay
+      className="pos-reference-dialog w-full max-w-2xl overflow-hidden rounded-t-2xl bg-[var(--color-surface)] shadow-xl sm:rounded-xl"
+      footer={
+        <div className="flex items-center justify-between gap-3">
+          <span className="text-[11px] text-[var(--color-text-muted)]">
+            {valid ? 'Setiap pengerjaan valid (100%)' : 'Setiap pengerjaan harus tepat 100%'}
+          </span>
+          <div className="flex gap-2">
+            <Button variant="ghost" onClick={onClose}>
+              Batal
+            </Button>
+            <Button disabled={!valid} onClick={() => onSave(plannedUnits)}>
+              Simpan pengerjaan
+            </Button>
+          </div>
+        </div>
+      }
+    >
+      <div className="space-y-4">
+        <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-surface-muted)]/20 p-3">
+          <p className="text-sm font-semibold">{line.itemNameSnapshot}</p>
+          <p className="mt-1 text-xs text-[var(--color-text-muted)]">
+            {quantity(line.quantity)} × {money(line.effectiveUnitPrice, locale)}
+          </p>
+        </div>
+        <div className="flex gap-2" aria-label="Mode pengerjaan">
+          <DButton
+            size="sm"
+            variant={mode === 'SAME' ? 'primary' : 'secondary'}
+            onClick={() => setMode('SAME')}
+          >
+            Sama untuk semua
+          </DButton>
+          <DButton
+            size="sm"
+            variant={mode === 'PER_UNIT' ? 'primary' : 'secondary'}
+            onClick={() => setMode('PER_UNIT')}
+          >
+            Atur per pengerjaan
+          </DButton>
+        </div>
+        {mode === 'SAME' ? (
+          <div className="rounded-xl border border-[var(--color-border)] p-3">
+            <p className="mb-3 text-xs text-[var(--color-text-muted)]">
+              Konfigurasi ini diterapkan ke semua {units.length} pengerjaan.
+            </p>
+            <ServiceWorkContributorEditor
+              contributors={sharedContributors}
+              employees={employees}
+              onChange={setSharedContributors}
+            />
+          </div>
+        ) : (
+          <div className="max-h-[52dvh] space-y-2 overflow-y-auto pr-1">
+            {unitPlans.map((unit) => (
+              <div key={unit.index} className="rounded-xl border border-[var(--color-border)] p-3">
+                <div className="mb-3 flex items-center justify-between gap-3">
+                  <p className="text-sm font-semibold">Pengerjaan #{unit.index + 1}</p>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-medium text-[var(--color-text-muted)]">
+                      {workUnitStatusLabel(unit.status)}
+                    </span>
+                    {unit.status !== 'COMPLETED' ? (
+                      <DButton
+                        size="sm"
+                        variant="outline"
+                        disabled={!hasValidWorkAssignment(line, unit) || isMutating}
+                        onClick={() => onCompleteUnit(unit.index)}
+                      >
+                        Selesaikan
+                      </DButton>
+                    ) : null}
+                  </div>
+                </div>
+                <ServiceWorkContributorEditor
+                  contributors={unit.contributors}
+                  employees={employees}
+                  onChange={(contributors) =>
+                    setUnitPlans((current) =>
+                      current.map((candidate) =>
+                        candidate.index === unit.index ? { ...candidate, contributors } : candidate,
+                      ),
+                    )
+                  }
+                />
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     </Dialog>
   );

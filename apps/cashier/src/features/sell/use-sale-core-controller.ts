@@ -314,7 +314,10 @@ export function useSaleCoreController({
       }));
       if (intent) mutate(intent);
     },
-    transitionFulfillment: (line: SaleLine, status: Exclude<FulfillmentStatus, 'WAITING'>) => {
+    transitionFulfillment: async (
+      line: SaleLine,
+      status: Exclude<FulfillmentStatus, 'WAITING'>,
+    ) => {
       const intent = withSale((currentSale) => ({
         kind: 'fulfillment' as const,
         saleId: currentSale.id,
@@ -322,7 +325,8 @@ export function useSaleCoreController({
         expectedVersion: currentSale.version,
         status,
       }));
-      if (intent) mutate(intent);
+      if (!intent) throw new Error('No active Sale is available for fulfillment update.');
+      return mutateAsync(intent);
     },
     createPayment: async (
       method: PaymentMethod,
@@ -362,14 +366,15 @@ export function useSaleCoreController({
       }));
       if (intent) mutate(intent);
     },
-    voidSale: () => {
+    voidSale: async () => {
       const intent = withSale((currentSale) => ({
         kind: 'void' as const,
         saleId: currentSale.id,
         expectedVersion: currentSale.version,
         idempotencyKey: createIdempotencyKey('void'),
       }));
-      if (intent) mutate(intent);
+      if (!intent) throw new Error('No active Sale is available for cancellation.');
+      return mutateAsync(intent);
     },
   };
 }

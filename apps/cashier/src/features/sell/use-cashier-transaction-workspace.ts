@@ -6,9 +6,9 @@ import { useNavigate } from 'react-router';
 import { useCashierSession } from '../../app/providers/cashier-session-provider';
 import { cashierTransactionErrorMessage } from './cashier-transaction-errors';
 import { cashierTransactionKeys } from './cashier-transaction-keys';
-import type { CatalogItem, SaleLine } from './cashier-transaction.types';
+import type { CatalogItem, Sale, SaleLine } from './cashier-transaction.types';
 import { createCashierTransactionAdapter, isCashierDemoMode } from './cashier-transaction-client';
-import type { VariantPickerState } from './components/variant-picker';
+import type { VariantPickerContext, VariantPickerState } from './components/variant-picker';
 import { useEmployeeOptions } from './use-employee-options';
 import { useSaleCommandCoordinator } from './use-sale-command-coordinator';
 import { useSaleCoreController } from './use-sale-core-controller';
@@ -78,7 +78,21 @@ export function useCashierTransactionWorkspace(routeSaleId?: string) {
     enabled: Boolean(saleWorkspace.sale && lineTask?.allowEmployeeContributionSnapshot),
   });
 
-  const addCatalogItem = async (item: CatalogItem, catalogVariantId?: string) => {
+  const addCatalogItem = async (
+    item: CatalogItem,
+    catalogVariantId: string | undefined,
+    context: VariantPickerContext,
+    targetSaleId?: string,
+  ) => {
+    if (context === 'CART' && resumedSaleId) {
+      throw new Error('Selesaikan penyesuaian transaksi sebelum menambahkan item ke cart.');
+    }
+    if (
+      context === 'TRANSACTION_ADJUSTMENT' &&
+      (!targetSaleId || resumedSaleId !== targetSaleId)
+    ) {
+      throw new Error('Transaksi yang akan disesuaikan tidak lagi aktif. Buka kembali penyesuaian.');
+    }
     if (!selectedLocationId) {
       saleWorkspace.addItem(item.id, catalogVariantId);
       return;
@@ -103,9 +117,14 @@ export function useCashierTransactionWorkspace(routeSaleId?: string) {
     saleWorkspace.addItem(item.id, catalogVariantId, { catalogItem: item, resolvedPrice });
   };
 
-  const selectItem = async (item: CatalogItem) => {
+  const selectItem = async (item: CatalogItem, context: VariantPickerContext = 'CART') => {
     command.clearNotice();
     try {
+      const targetSaleId =
+        context === 'TRANSACTION_ADJUSTMENT' ? (resumedSaleId ?? undefined) : undefined;
+      if (context === 'TRANSACTION_ADJUSTMENT' && !targetSaleId) {
+        throw new Error('Transaksi yang akan disesuaikan tidak lagi aktif. Buka kembali penyesuaian.');
+      }
       const variants = await catalog.loadActiveVariants(item);
       if (variants.length > 0) {
         const priceEntries = selectedLocationId
@@ -128,10 +147,12 @@ export function useCashierTransactionWorkspace(routeSaleId?: string) {
           pricesByVariantId: Object.fromEntries(priceEntries),
           locale: runtime.locale,
           currency: runtime.currency,
+          context,
+          ...(targetSaleId ? { targetSaleId } : {}),
         });
         return;
       }
-      await addCatalogItem(item);
+      await addCatalogItem(item, undefined, context, targetSaleId);
     } catch (error) {
       command.reportError(error);
     }
@@ -140,9 +161,11 @@ export function useCashierTransactionWorkspace(routeSaleId?: string) {
   const selectVariant = async (catalogVariantId: string | null) => {
     if (!variantPicker) return;
     const item = variantPicker.item;
+    const context = variantPicker.context ?? 'CART';
+    const targetSaleId = variantPicker.targetSaleId;
     setVariantPicker(null);
     try {
-      await addCatalogItem(item, catalogVariantId ?? undefined);
+      await addCatalogItem(item, catalogVariantId ?? undefined, context, targetSaleId);
     } catch (error) {
       command.reportError(error);
     }
@@ -184,6 +207,78 @@ export function useCashierTransactionWorkspace(routeSaleId?: string) {
 
   const openLineTask = (line: SaleLine) => setLineTaskId(line.id);
 
+  const transitionQueuedFulfillment = async (
+    sale: Sale,
+    line: SaleLine,
+    status: 'IN_PROGRESS' | 'COMPLETED',
+  ) => {
+    command.clearNotice();
+    try {
+      const updated = await command.runMutation(() =>
+        transactionAdapter.transitionSaleLineFulfillment(sale.id, line.id, {
+          expectedVersion: sale.version,
+          status,
+        }),
+      );
+      command.commitSale(updated);
+      return updated;
+    } catch (error) {
+      command.reportError(error);
+      throw error;
+    }
+  };
+
+  const startQueuedFulfillment = (sale: Sale, line: SaleLine) =>
+    transitionQueuedFulfillment(sale, line, 'IN_PROGRESS');
+
+  const setQueuedAssignments = async (
+    sale: Sale,
+    line: SaleLine,
+    employeeIds: string[],
+    contributors: Array<{ employeeId: string; shareRate?: string }>,
+  ) => {
+    command.clearNotice();
+    try {
+      let updated = await command.runMutation(() =>
+        transactionAdapter.setSaleLineAssignments(sale.id, line.id, {
+          expectedVersion: sale.version,
+          employeeIds,
+        }),
+      );
+      if (line.allowEmployeeContributionSnapshot) {
+        updated = await command.runMutation(() =>
+          transactionAdapter.setSaleLineContributions(sale.id, line.id, {
+            expectedVersion: updated.version,
+            contributors,
+          }),
+        );
+      }
+      command.commitSale(updated);
+      return updated;
+    } catch (error) {
+      command.reportError(error);
+      throw error;
+    }
+  };
+
+  const finalizeQueuedSale = async (sale: Sale) => {
+    command.clearNotice();
+    try {
+      const updated = await command.runMutation(() =>
+        transactionAdapter.finalizeSale(
+          sale.id,
+          sale.version,
+          `cashier-finalize-${crypto.randomUUID()}`,
+        ),
+      );
+      command.commitSale(updated);
+      return updated;
+    } catch (error) {
+      command.reportError(error);
+      throw error;
+    }
+  };
+
   return {
     locale: runtime.locale,
     currency: runtime.currency,
@@ -209,7 +304,7 @@ export function useCashierTransactionWorkspace(routeSaleId?: string) {
     isLoadingCatalog: catalog.isLoading,
     isLoadingEmployees: employeeOptions.isLoading,
     isLoadingSale: saleWorkspace.isLoading,
-    isCoreMutating: core.isPending,
+    isCoreMutating: core.isPending || command.isMutating,
     canRetryLastCommand: core.canRetryLastCoreCommand || saleWorkspace.canRetryLastAdd,
     setSearch: catalog.setSearch,
     setItemType: catalog.setItemType,
@@ -227,6 +322,10 @@ export function useCashierTransactionWorkspace(routeSaleId?: string) {
     setAssignments: core.setAssignments,
     setContributions: core.setContributions,
     transitionFulfillment: core.transitionFulfillment,
+    startQueuedFulfillment,
+    transitionQueuedFulfillment,
+    setQueuedAssignments,
+    finalizeQueuedSale,
     openCompletion: () => setCompletionOpen(true),
     closeCompletion: () => setCompletionOpen(false),
     setOrderDiscount: core.setOrderDiscount,
