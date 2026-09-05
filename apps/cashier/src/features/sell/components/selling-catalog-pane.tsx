@@ -1,5 +1,5 @@
 import { formatMoney } from '@digvation/pos-money';
-import { Button, Input, Skeleton } from '@digvation/pos-ui';
+import { DButton, DInput, DSkeleton } from '@digvation/ui';
 import { PackageSearch, Search, ShoppingBag, Wrench } from 'lucide-react';
 
 import type { CatalogItem, ResolvedPrice } from '../cashier-transaction.types';
@@ -49,7 +49,8 @@ export function SellingCatalogPane({
           aria-label="Item type"
         >
           {(['ALL', 'PRODUCT', 'SERVICE'] as const).map((type) => (
-            <button
+            <DButton
+              variant="ghost"
               key={type}
               type="button"
               onClick={() => onItemTypeChange(type)}
@@ -61,13 +62,13 @@ export function SellingCatalogPane({
               }`}
             >
               {type === 'ALL' ? 'All' : `${type.slice(0, 1)}${type.slice(1).toLocaleLowerCase()}`}
-            </button>
+            </DButton>
           ))}
         </div>
         <label className="relative block min-w-0 flex-1">
           <span className="sr-only">Search catalog</span>
           <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-[var(--color-text-muted)]" />
-          <Input
+          <DInput
             value={search}
             onChange={onSearchChange}
             placeholder="Search items"
@@ -83,9 +84,9 @@ export function SellingCatalogPane({
           <p className="mt-1 max-w-xs text-xs leading-5 text-[var(--color-text-muted)]">
             Select the active branch from the workspace controls before adding items to a Sale.
           </p>
-          <Button variant="secondary" className="mt-4" onClick={onChooseBranch}>
+          <DButton variant="secondary" className="mt-4" onClick={onChooseBranch}>
             Choose branch
-          </Button>
+          </DButton>
         </div>
       ) : null}
 
@@ -97,9 +98,9 @@ export function SellingCatalogPane({
                 key={index}
                 className="aspect-[.88] rounded-[var(--radius-card)] border border-[var(--color-border)] bg-[var(--color-surface)] p-3"
               >
-                <Skeleton className="aspect-square w-full" />
-                <Skeleton className="mt-3 h-3 w-1/2" />
-                <Skeleton className="mt-2 h-4 w-3/4" />
+                <DSkeleton className="aspect-square w-full" />
+                <DSkeleton className="mt-3 h-3 w-1/2" />
+                <DSkeleton className="mt-2 h-4 w-3/4" />
               </div>
             ))
           ) : items.length === 0 ? (
@@ -115,13 +116,14 @@ export function SellingCatalogPane({
               const price = priceByItemId.get(item.id);
 
               return (
-                <button
+                <DButton
+                  variant="ghost"
                   key={item.id}
                   type="button"
                   aria-label={`Add ${item.name}`}
                   disabled={isMutationDisabled}
                   onClick={() => onSelectItem(item)}
-                  className="group flex aspect-[.88] min-w-0 flex-col rounded-[var(--radius-card)] border border-[var(--color-border)] bg-[var(--color-surface)] p-3 text-left shadow-[var(--shadow-panel)] transition-[transform,box-shadow,border-color] duration-150 hover:border-[var(--color-brand)]/40 hover:shadow-md active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50"
+                  className="group flex h-auto min-h-0 w-full aspect-[.88] min-w-0 flex-col items-stretch justify-start rounded-[var(--radius-card)] border border-[var(--color-border)] bg-[var(--color-surface)] p-3 text-left shadow-[var(--shadow-panel)] transition-[transform,box-shadow,border-color] duration-150 hover:border-[var(--color-brand)]/40 hover:shadow-md active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   <div
                     className={`grid aspect-square w-full place-items-center rounded-xl ${
@@ -147,7 +149,7 @@ export function SellingCatalogPane({
                       ? formatMoney(price.amount, price.currency, locale)
                       : 'Price unavailable'}
                   </p>
-                </button>
+                </DButton>
               );
             })
           )}

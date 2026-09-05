@@ -1,5 +1,5 @@
 import { formatMoney } from '@digvation/pos-money';
-import { Button, Skeleton } from '@digvation/pos-ui';
+import { DButton, DSkeleton } from '@digvation/ui';
 import {
   ArrowRight,
   ArrowRightLeft,
@@ -69,14 +69,14 @@ export function CurrentSalePane({
           aria-busy="true"
           className="flex h-full min-h-0 flex-col rounded-[var(--radius-card)] border border-[var(--color-border)] bg-[var(--color-surface)] p-5 shadow-[var(--shadow-panel)]"
         >
-          <Skeleton className="h-3 w-20" />
-          <Skeleton className="mt-4 h-5 w-32" />
-          <Skeleton className="mt-6 h-14 w-full" />
+          <DSkeleton className="h-3 w-20" />
+          <DSkeleton className="mt-4 h-5 w-32" />
+          <DSkeleton className="mt-6 h-14 w-full" />
           <div className="mt-4 flex-1 space-y-3 rounded-[var(--radius-control)] bg-[var(--color-surface-muted)]/50 p-3">
-            <Skeleton className="h-20 w-full" />
-            <Skeleton className="h-20 w-full" />
+            <DSkeleton className="h-20 w-full" />
+            <DSkeleton className="h-20 w-full" />
           </div>
-          <Skeleton className="mt-4 h-10 w-full" />
+          <DSkeleton className="mt-4 h-10 w-full" />
         </section>
       );
     }
@@ -113,9 +113,9 @@ export function CurrentSalePane({
             <span>Total</span>
             <span className="tabular-nums">{formatMoney('0.0000', currency, locale)}</span>
           </div>
-          <Button variant="secondary" className="mt-3 w-full" onClick={onOpenSales}>
+          <DButton variant="secondary" className="mt-3 w-full" onClick={onOpenSales}>
             <ArrowRightLeft className="mr-2 size-4" /> Open Sales
-          </Button>
+          </DButton>
         </div>
       </section>
     );
@@ -141,12 +141,12 @@ export function CurrentSalePane({
             </p>
             <h2 className="mt-1 truncate text-base font-bold">Current order</h2>
             <p className="mt-1 text-xs text-[var(--color-text-muted)]">
-              {viewModel.activeLines.length} items · {sale.status}
+              {viewModel.activeLines.length} items Â· {sale.status}
             </p>
           </div>
-          <Button variant="ghost" onClick={onOpenSales} className="px-3" aria-label="Open Sales">
+          <DButton variant="ghost" onClick={onOpenSales} className="px-3" aria-label="Open Sales">
             <ArrowRightLeft className="size-4" />
-          </Button>
+          </DButton>
         </div>
 
         <div className="mt-3 flex items-center gap-2 rounded-[var(--radius-control)] border border-[var(--color-brand)]/15 bg-[var(--color-brand)]/5 px-3 py-2 text-xs">
@@ -217,7 +217,7 @@ export function CurrentSalePane({
             <div className="flex justify-between gap-4 text-[var(--color-text-muted)]">
               <dt>Discount</dt>
               <dd className="tabular-nums">
-                −{formatMoney(sale.discountAmount, sale.currency, locale)}
+                âˆ’{formatMoney(sale.discountAmount, sale.currency, locale)}
               </dd>
             </div>
           ) : null}
@@ -256,14 +256,14 @@ export function CurrentSalePane({
           </div>
         </div>
 
-        <Button className="mt-3 w-full" onClick={onContinue}>
+        <DButton className="mt-3 w-full" onClick={onContinue}>
           {isTerminal ? 'View Sale Completion' : 'Continue'}
           <ArrowRight className="ml-2 size-4" />
-        </Button>
+        </DButton>
         {!isTerminal ? (
-          <Button variant="secondary" className="mt-2 w-full" onClick={onNewSale}>
+          <DButton variant="secondary" className="mt-2 w-full" onClick={onNewSale}>
             <Plus className="mr-2 size-4" /> New Sale
-          </Button>
+          </DButton>
         ) : null}
       </div>
     </section>

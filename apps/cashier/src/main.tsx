@@ -1,6 +1,7 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 
+import '@digvation/ui/styles.css';
 import '@digvation/pos-ui/styles.css';
 
 import { AppBootScreen } from './app/bootstrap/app-boot-screen';

@@ -1,4 +1,4 @@
-import { Button, Input, useToast } from '@digvation/pos-ui';
+import { DButton, DInput, useToast } from '@digvation/ui';
 import { ReceiptText } from 'lucide-react';
 import { useRef, useState, type FormEvent, type TransitionEvent } from 'react';
 
@@ -97,7 +97,7 @@ export function CashierLoginPage({ authPort, onAuthenticated }: CashierLoginPage
           </p>
 
           <form autoComplete="on" className="mt-6 space-y-4" onSubmit={submit}>
-            <Input
+            <DInput
               id="cashier-identifier"
               name="username"
               label="ID pengguna"
@@ -109,7 +109,7 @@ export function CashierLoginPage({ authPort, onAuthenticated }: CashierLoginPage
               autoCapitalize="none"
               spellCheck={false}
             />
-            <Input
+            <DInput
               id="cashier-password"
               name="password"
               label="Kata sandi"
@@ -120,9 +120,9 @@ export function CashierLoginPage({ authPort, onAuthenticated }: CashierLoginPage
               placeholder="Masukkan kata sandi"
               autoComplete="current-password"
             />
-            <Button type="submit" fullWidth loading={isSubmitting} className="mt-2">
+            <DButton type="submit" fullWidth loading={isSubmitting} className="mt-2">
               {isLeaving ? 'Membuka POS...' : isSubmitting ? 'Memverifikasi...' : 'Masuk'}
-            </Button>
+            </DButton>
           </form>
         </div>
       </section>

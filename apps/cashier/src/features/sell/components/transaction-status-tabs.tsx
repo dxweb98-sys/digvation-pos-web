@@ -1,6 +1,8 @@
 import { CheckCircle2, CircleDotDashed, Clock3, XCircle } from 'lucide-react';
 import { useState } from 'react';
 
+import { DButton } from '@digvation/ui';
+
 const STATUS_OPTIONS = [
   { id: 'DRAFT', label: 'Draft', count: 12, icon: CircleDotDashed },
   { id: 'IN_PROGRESS', label: 'On Progress', count: 5, icon: Clock3 },
@@ -18,7 +20,8 @@ export function TransactionStatusTabs() {
         {STATUS_OPTIONS.map(({ id, label, count, icon: Icon }) => {
           const isSelected = selectedStatus === id;
           return (
-            <button
+            <DButton
+              variant="ghost"
               key={id}
               type="button"
               onClick={() => setSelectedStatus(id)}
@@ -36,7 +39,7 @@ export function TransactionStatusTabs() {
               >
                 {count}
               </span>
-            </button>
+            </DButton>
           );
         })}
       </div>

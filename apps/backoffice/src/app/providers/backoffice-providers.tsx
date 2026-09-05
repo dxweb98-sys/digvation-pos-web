@@ -1,6 +1,6 @@
 import { AuthProvider, type AuthPort, type AuthSession } from '@digvation/pos-auth';
 import { RuntimeProvider, type RuntimeConfig } from '@digvation/pos-runtime';
-import { ToastProvider } from '@digvation/pos-ui';
+import { DToastProvider as ToastProvider } from '@digvation/ui';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { RouterProviderProps } from 'react-router';
 import { RouterProvider } from 'react-router/dom';

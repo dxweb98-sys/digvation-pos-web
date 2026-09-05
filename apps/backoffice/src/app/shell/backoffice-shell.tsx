@@ -1,6 +1,6 @@
 import { useAuth } from '@digvation/pos-auth';
 import { useRuntime } from '@digvation/pos-runtime';
-import { Badge } from '@digvation/pos-ui';
+import { DBadge } from '@digvation/ui';
 import { CircleUserRound, LayoutDashboard, Settings2 } from 'lucide-react';
 import { NavLink, Outlet } from 'react-router';
 
@@ -36,7 +36,7 @@ export function BackofficeShell() {
               <p className="truncate text-xs text-[var(--color-text-muted)]">{brandSubtitle}</p>
             </div>
           </div>
-          <Badge variant="outline">Backoffice</Badge>
+          <DBadge variant="outline">Backoffice</DBadge>
         </div>
       </header>
 

@@ -120,9 +120,6 @@ importers:
       '@digvation/pos-runtime':
         specifier: workspace:*
         version: link:../../packages/runtime
-      '@digvation/pos-ui':
-        specifier: workspace:*
-        version: link:../../packages/ui
       '@digvation/ui':
         specifier: file:C:/Users/dicky/Documents/work/digvation/Digvation-Design-System/packages/ui
         version: file:../../../Digvation-Design-System/packages/ui(react-dom@19.2.8(react@19.2.8))(react@19.2.8)

@@ -1,10 +1,10 @@
 import {
-  CurrencyInput,
-  DecimalInput,
+  DCurrencyInput,
+  DDecimalInput,
   normalizeDecimalInput,
   type CurrencyInputProps,
   type DecimalInputProps,
-} from '@digvation/pos-ui';
+} from '@digvation/ui';
 import { useState, type ReactNode } from 'react';
 
 function plainNumeric(value: string) {
@@ -67,7 +67,7 @@ export function PosNumericInput({
 
   return (
     <div className="relative">
-      <DecimalInput
+      <DDecimalInput
         {...props}
         value={display}
         className={`${className} ${suffix ? 'pr-8' : ''}`}
@@ -109,7 +109,7 @@ export function PosCurrencyInput({
   onChange: (value: string) => void;
 }) {
   return (
-    <CurrencyInput
+    <DCurrencyInput
       {...props}
       value={value}
       onValueChange={onChange}

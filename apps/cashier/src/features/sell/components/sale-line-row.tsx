@@ -1,5 +1,5 @@
 import { compareDecimalStrings, createDecimal, formatMoney } from '@digvation/pos-money';
-import { Badge, Button } from '@digvation/pos-ui';
+import { DBadge, DButton } from '@digvation/ui';
 import { Minus, Plus, SlidersHorizontal, Trash2 } from 'lucide-react';
 
 import type { SaleLine } from '../cashier-transaction.types';
@@ -42,7 +42,7 @@ export function SaleLineRow({
         <div className="min-w-0">
           <p className="truncate text-sm font-bold">{line.itemNameSnapshot}</p>
           <p className="mt-1 truncate text-xs text-[var(--color-text-muted)]">
-            {line.variantNameSnapshot ? `${line.variantNameSnapshot} · ` : ''}
+            {line.variantNameSnapshot ? `${line.variantNameSnapshot} Ã‚Â· ` : ''}
             {line.itemCodeSnapshot}
           </p>
         </div>
@@ -53,31 +53,32 @@ export function SaleLineRow({
 
       <div className="mt-2 flex flex-wrap gap-1.5 text-[11px] font-semibold text-[var(--color-text-muted)]">
         {line.fulfillment ? (
-          <Badge className="bg-[var(--color-accent-sky)]/45 px-2 py-1">
+          <DBadge className="bg-[var(--color-accent-sky)]/45 px-2 py-1">
             {line.fulfillment.status}
-          </Badge>
+          </DBadge>
         ) : null}
         {assignedCount > 0 ? (
-          <Badge className="bg-[var(--color-accent-mint)]/55 px-2 py-1">
+          <DBadge className="bg-[var(--color-accent-mint)]/55 px-2 py-1">
             {assignedCount} assigned
-          </Badge>
+          </DBadge>
         ) : null}
         {contributorCount > 0 ? (
-          <Badge className="bg-[var(--color-accent-lavender)]/55 px-2 py-1">
+          <DBadge className="bg-[var(--color-accent-lavender)]/55 px-2 py-1">
             {contributorCount} contributors
-          </Badge>
+          </DBadge>
         ) : null}
         {line.overrideAmount ? (
-          <Badge className="bg-[var(--color-accent-yellow)]/50 px-2 py-1">Override</Badge>
+          <DBadge className="bg-[var(--color-accent-yellow)]/50 px-2 py-1">Override</DBadge>
         ) : null}
         {line.discountType ? (
-          <Badge className="bg-[var(--color-accent-coral)]/30 px-2 py-1">Discount</Badge>
+          <DBadge className="bg-[var(--color-accent-coral)]/30 px-2 py-1">Discount</DBadge>
         ) : null}
       </div>
 
       <div className="mt-3 flex items-center justify-between gap-3">
         <div className="flex items-center rounded-[var(--radius-control)] border border-[var(--color-border)] bg-[var(--color-surface-muted)] p-1">
-          <button
+          <DButton
+            variant="ghost"
             type="button"
             aria-label={`Decrease ${line.itemNameSnapshot} quantity`}
             disabled={!canDecrease}
@@ -85,11 +86,12 @@ export function SaleLineRow({
             className="grid size-8 place-items-center rounded-md text-[var(--color-text-muted)] transition-colors hover:bg-[var(--color-surface)] hover:text-[var(--color-text)] disabled:opacity-35"
           >
             <Minus className="size-4" />
-          </button>
+          </DButton>
           <span className="min-w-10 px-2 text-center text-sm font-bold tabular-nums">
             {line.quantity}
           </span>
-          <button
+          <DButton
+            variant="ghost"
             type="button"
             aria-label={`Increase ${line.itemNameSnapshot} quantity`}
             disabled={isDisabled}
@@ -97,11 +99,11 @@ export function SaleLineRow({
             className="grid size-8 place-items-center rounded-md text-[var(--color-text-muted)] transition-colors hover:bg-[var(--color-surface)] hover:text-[var(--color-text)] disabled:opacity-35"
           >
             <Plus className="size-4" />
-          </button>
+          </DButton>
         </div>
 
         <div className="flex gap-1">
-          <Button
+          <DButton
             variant="ghost"
             aria-label={`Manage ${line.itemNameSnapshot}`}
             onClick={() => onManage(line)}
@@ -109,8 +111,8 @@ export function SaleLineRow({
             className="px-2"
           >
             <SlidersHorizontal className="size-4" />
-          </Button>
-          <Button
+          </DButton>
+          <DButton
             variant="ghost"
             aria-label={`Remove ${line.itemNameSnapshot}`}
             disabled={isDisabled}
@@ -119,7 +121,7 @@ export function SaleLineRow({
             className="px-2 text-[var(--color-danger)] hover:bg-[var(--color-danger)]/10 hover:text-[var(--color-danger)]"
           >
             <Trash2 className="size-4" />
-          </Button>
+          </DButton>
         </div>
       </div>
 

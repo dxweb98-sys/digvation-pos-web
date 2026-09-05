@@ -1,5 +1,5 @@
 import { formatMoney } from '@digvation/pos-money';
-import { Dialog } from '@digvation/pos-ui';
+import { DButton, DDialog } from '@digvation/ui';
 import { Check, ChevronRight, X } from 'lucide-react';
 
 import type { CatalogItem, CatalogVariant } from '../cashier-transaction.types';
@@ -27,7 +27,7 @@ export function VariantPicker({
   onClose,
 }: VariantPickerProps) {
   return (
-    <Dialog
+    <DDialog
       open
       onClose={onClose}
       ariaLabelledBy="variant-picker-title"
@@ -50,21 +50,23 @@ export function VariantPicker({
             Pilih satu varian untuk dimasukkan ke cart.
           </p>
         </div>
-        <button
+        <DButton
+          variant="ghost"
           type="button"
           aria-label="Close variant picker"
           onClick={onClose}
           className="grid size-9 place-items-center rounded-xl text-[var(--color-text-muted)] transition-colors hover:bg-[var(--color-surface-muted)]"
         >
           <X className="size-4" />
-        </button>
+        </DButton>
       </div>
 
       <div className="mt-4 grid gap-1.5">
         {variants.map((variant) => {
           const price = pricesByVariantId[variant.id];
           return (
-            <button
+            <DButton
+              variant="ghost"
               key={variant.id}
               type="button"
               onClick={() => onSelect(variant.id)}
@@ -89,10 +91,10 @@ export function VariantPicker({
                 ) : null}
                 <ChevronRight className="size-4 text-[var(--color-text-muted)] transition-transform group-hover:translate-x-0.5 group-hover:text-[var(--color-brand)]" />
               </span>
-            </button>
+            </DButton>
           );
         })}
       </div>
-    </Dialog>
+    </DDialog>
   );
 }
