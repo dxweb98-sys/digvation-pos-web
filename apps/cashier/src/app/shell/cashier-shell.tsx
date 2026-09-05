@@ -9,7 +9,6 @@ import {
   LogOut,
   MapPin,
   ReceiptText,
-  Rows3,
   UserRound,
 } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
@@ -20,10 +19,7 @@ import { createCashierTransactionAdapter } from '../../features/sell/cashier-tra
 import { useCashierSession } from '../providers/cashier-session-provider';
 import { getAppVersion } from '../version/app-version';
 
-const NAVIGATION = [
-  { to: '/sell', label: 'Sell', icon: LayoutGrid },
-  { to: '/open-sales', label: 'Open Sales', icon: Rows3 },
-] as const;
+const NAVIGATION = [{ to: '/sell', label: 'Sell', icon: LayoutGrid }] as const;
 
 function formatCurrentDate(locale: string): string {
   return new Intl.DateTimeFormat(locale, {

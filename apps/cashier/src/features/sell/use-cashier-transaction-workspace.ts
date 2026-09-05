@@ -85,13 +85,13 @@ export function useCashierTransactionWorkspace(routeSaleId?: string) {
     }
     const resolvedPrice =
       catalogVariantId === undefined
-        ? catalog.priceByItemId.get(item.id) ??
+        ? (catalog.priceByItemId.get(item.id) ??
           (await transactionAdapter.resolvePrice({
             catalogItemId: item.id,
             sellingLocationId: selectedLocationId,
             currency: runtime.currency,
             effectiveAt: new Date().toISOString(),
-          }))
+          })))
         : await transactionAdapter.resolvePrice({
             catalogItemId: item.id,
             catalogVariantId,
@@ -151,7 +151,7 @@ export function useCashierTransactionWorkspace(routeSaleId?: string) {
   const newSale = () => {
     if (saleWorkspace.sale?.status === 'OPEN') {
       const confirmed = window.confirm(
-        'Start a new Sale? The current Sale remains OPEN and can be resumed from Open Sales.',
+        'Start a new Sale? The current Sale remains OPEN until it is finalized or voided.',
       );
       if (!confirmed) return;
     }
@@ -229,7 +229,6 @@ export function useCashierTransactionWorkspace(routeSaleId?: string) {
     voidSale: core.voidSale,
     newSale,
     resumeSale,
-    openSales: () => navigate('/open-sales'),
     acknowledgeLatestState: command.acknowledgeLatestState,
     retryLastCommand,
   };

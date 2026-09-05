@@ -1,14 +1,6 @@
 import { formatMoney } from '@digvation/pos-money';
 import { DButton, DSkeleton } from '@digvation/ui';
-import {
-  ArrowRight,
-  ArrowRightLeft,
-  BadgeCheck,
-  CircleAlert,
-  Plus,
-  ShoppingBag,
-  UserRound,
-} from 'lucide-react';
+import { ArrowRight, BadgeCheck, CircleAlert, Plus, ShoppingBag, UserRound } from 'lucide-react';
 
 import type { SaleLine } from '../cashier-transaction.types';
 import { actionBlockMessage, type SaleWorkspaceViewModel } from '../sale-workspace-view-model';
@@ -24,7 +16,6 @@ interface CurrentSalePaneProps {
   onManageLine: (line: SaleLine) => void;
   onContinue: () => void;
   onNewSale: () => void;
-  onOpenSales: () => void;
 }
 
 function workspaceMessage(viewModel: SaleWorkspaceViewModel): string | null {
@@ -57,7 +48,6 @@ export function CurrentSalePane({
   onManageLine,
   onContinue,
   onNewSale,
-  onOpenSales,
 }: CurrentSalePaneProps) {
   const sale = viewModel.sale;
 
@@ -113,9 +103,6 @@ export function CurrentSalePane({
             <span>Total</span>
             <span className="tabular-nums">{formatMoney('0.0000', currency, locale)}</span>
           </div>
-          <DButton variant="secondary" className="mt-3 w-full" onClick={onOpenSales}>
-            <ArrowRightLeft className="mr-2 size-4" /> Open Sales
-          </DButton>
         </div>
       </section>
     );
@@ -144,9 +131,6 @@ export function CurrentSalePane({
               {viewModel.activeLines.length} items Â· {sale.status}
             </p>
           </div>
-          <DButton variant="ghost" onClick={onOpenSales} className="px-3" aria-label="Open Sales">
-            <ArrowRightLeft className="size-4" />
-          </DButton>
         </div>
 
         <div className="mt-3 flex items-center gap-2 rounded-[var(--radius-control)] border border-[var(--color-brand)]/15 bg-[var(--color-brand)]/5 px-3 py-2 text-xs">
