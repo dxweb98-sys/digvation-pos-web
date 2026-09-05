@@ -176,6 +176,10 @@ async function installRoutes(page: Page, options: Partial<RouteState> = {}) {
       await route.fulfill({ json: envelope({ items: [branch], limit: 100, offset: 0 }) });
       return;
     }
+    if (method === 'GET' && url.pathname === '/api/v1/employees') {
+      await route.fulfill({ json: envelope({ items: [], limit: 100, offset: 0 }) });
+      return;
+    }
     if (method === 'GET' && url.pathname === '/api/v1/catalog/categories') {
       await route.fulfill({ json: envelope({ items: [category], limit: 100, offset: 0 }) });
       return;
