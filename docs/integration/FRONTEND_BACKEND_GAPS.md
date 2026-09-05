@@ -54,13 +54,19 @@ Stable v0.3.0 exposes UUID Sale identity only. Frontend currently displays a sho
 
 ## GAP-06 — Atomic Transaction Start
 
-**Status:** ACCEPTED_DEFERRED
+**Status:** FRONTEND_MIGRATED
 
-Stable contract requires Create Sale followed by Add SaleLine. If Create succeeds and Add fails, an empty OPEN Sale can remain.
+Cashier now commits its local `CartDraft` through `POST /api/v1/sales/start`.
+The request contains Selling Location, currency, and 1-100 selection-only lines.
+The backend remains authoritative for captured price, tax, totals,
+fulfillment/service snapshots, Sale identity, and Sale version. A failed command
+leaves no partial Sale; an uncertain result is retried only with the preserved
+idempotency key.
 
-Frontend recovery is locked: keep that exact Sale active; never auto-void it and never create a second Sale automatically.
-
-A future backend atomic start command may remove this two-command gap if approved.
+Backend evidence currently comes from the uncommitted review branch
+`feat/cashier-atomic-transaction-start`, based on `f8a6890`. The approved backend
+release/SHA in `contracts/contract-lock.json` remains unchanged until backend review
+and release provide verified lock facts.
 
 ## GAP-07 — Contribution Semantics Clarification
 
