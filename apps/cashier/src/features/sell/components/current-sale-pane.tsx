@@ -1,5 +1,5 @@
 import { formatMoney } from '@digvation/pos-money';
-import { DButton, DSkeleton } from '@digvation/ui';
+import { DButton, DSkeleton } from '@digvation-labs/ui';
 import { ArrowRight, BadgeCheck, CircleAlert, Plus, ShoppingBag, UserRound } from 'lucide-react';
 
 import type { SaleLine } from '../cashier-transaction.types';

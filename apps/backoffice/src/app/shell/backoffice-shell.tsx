@@ -1,6 +1,6 @@
 import { useAuth } from '@digvation/pos-auth';
 import { useRuntime } from '@digvation/pos-runtime';
-import { DBadge } from '@digvation/ui';
+import { DBadge } from '@digvation-labs/ui';
 import { CircleUserRound, LayoutDashboard, Settings2 } from 'lucide-react';
 import { NavLink, Outlet } from 'react-router';
 

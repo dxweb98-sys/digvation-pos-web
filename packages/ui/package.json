@@ -8,7 +8,7 @@
     "./styles.css": "./src/styles.css"
   },
   "dependencies": {
-    "@digvation/ui": "file:C:/Users/dicky/Documents/work/digvation/Digvation-Design-System/packages/ui",
+    "@digvation-labs/ui": "file:C:/Users/dicky/Documents/work/digvation/Digvation-Design-System/packages/ui",
     "clsx": "2.1.1",
     "tailwind-merge": "3.6.0"
   },
