@@ -75,15 +75,15 @@ importers:
 
   apps/backoffice:
     dependencies:
+      '@digvation-labs/ui':
+        specifier: file:C:/Users/dicky/Documents/work/digvation/Digvation-Design-System/packages/ui
+        version: file:../../../Digvation-Design-System/packages/ui(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
       '@digvation/pos-auth':
         specifier: workspace:*
         version: link:../../packages/auth
       '@digvation/pos-runtime':
         specifier: workspace:*
         version: link:../../packages/runtime
-      '@digvation-labs/ui':
-        specifier: file:C:/Users/dicky/Documents/work/digvation/Digvation-Design-System/packages/ui
-        version: '@digvation-labs/ui@file:../../../Digvation-Design-System/packages/ui(react-dom@19.2.8(react@19.2.8))(react@19.2.8)'
       '@tanstack/react-query':
         specifier: 5.102.8
         version: 5.102.8(react@19.2.8)
@@ -109,6 +109,9 @@ importers:
 
   apps/cashier:
     dependencies:
+      '@digvation-labs/ui':
+        specifier: file:C:/Users/dicky/Documents/work/digvation/Digvation-Design-System/packages/ui
+        version: file:../../../Digvation-Design-System/packages/ui(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
       '@digvation/pos-api':
         specifier: workspace:*
         version: link:../../packages/api
@@ -124,9 +127,6 @@ importers:
       '@digvation/pos-ui':
         specifier: workspace:*
         version: link:../../packages/ui
-      '@digvation-labs/ui':
-        specifier: file:C:/Users/dicky/Documents/work/digvation/Digvation-Design-System/packages/ui
-        version: '@digvation-labs/ui@file:../../../Digvation-Design-System/packages/ui(react-dom@19.2.8(react@19.2.8))(react@19.2.8)'
       '@tanstack/react-query':
         specifier: 5.102.8
         version: 5.102.8(react@19.2.8)
@@ -183,7 +183,7 @@ importers:
     dependencies:
       '@digvation-labs/ui':
         specifier: file:C:/Users/dicky/Documents/work/digvation/Digvation-Design-System/packages/ui
-        version: '@digvation-labs/ui@file:../../../Digvation-Design-System/packages/ui(react-dom@19.2.8(react@19.2.8))(react@19.2.8)'
+        version: file:../../../Digvation-Design-System/packages/ui(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
       clsx:
         specifier: 2.1.1
         version: 2.1.1

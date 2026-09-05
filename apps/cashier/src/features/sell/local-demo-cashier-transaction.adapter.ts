@@ -360,12 +360,6 @@ function validateReadyToFinalize(sale: Sale): void {
   }
   for (const line of active) {
     if (
-      line.fulfillmentBehaviorSnapshot === 'TRACKED' &&
-      line.fulfillment?.status !== 'COMPLETED'
-    ) {
-      throw new Error(`${line.itemNameSnapshot}: pekerjaan belum selesai.`);
-    }
-    if (
       line.employeeAssignmentModeSnapshot === 'REQUIRED' &&
       !line.participations.some((participation) => participation.assigned)
     ) {

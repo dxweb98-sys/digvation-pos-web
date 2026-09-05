@@ -30,6 +30,7 @@ import {
   Eye,
   Minus,
   MoreHorizontal,
+  Pencil,
   PlayCircle,
   Plus,
   Printer,
@@ -44,6 +45,7 @@ import {
   XCircle,
 } from 'lucide-react';
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { createPortal } from 'react-dom';
 
 import { cashierTransactionKeys } from '../cashier-transaction-keys';
 import { createCashierTransactionAdapter } from '../cashier-transaction-client';
@@ -55,6 +57,7 @@ import {
 import type {
   CatalogItem,
   Employee,
+  Payment,
   PaymentMethod,
   Sale,
   SaleLine,
@@ -313,10 +316,10 @@ function serviceWorkAssignmentSummary(
       .join('|'),
   );
   const firstAssignment = assignments[0] ?? '';
-  if (!firstAssignment) return 'Belum ada karyawan';
-  if (assignments.some((assignment) => assignment !== firstAssignment)) {
-    return 'Atur per pengerjaan';
-  }
+  if (!firstAssignment || assignments.some((assignment) => !assignment))
+    return 'Belum ada karyawan';
+  const configurationCount = new Set(assignments).size;
+  if (configurationCount > 1) return `${configurationCount} konfigurasi`;
 
   const names = (units[0]?.contributors ?? [])
     .filter((contributor) => contributor.employeeId)
@@ -326,6 +329,22 @@ function serviceWorkAssignmentSummary(
         contributor.employeeId,
     );
   return `${names.join(' · ')} untuk semua`;
+}
+
+function employeeWorkSummary(line: SaleLine, employees: readonly Employee[]): string {
+  const assigned = line.participations.filter((participation) => participation.assigned);
+  if (!assigned.length) return 'Belum ditentukan';
+  return assigned
+    .map((participation) => {
+      const employee = employees.find((candidate) => candidate.id === participation.employeeId);
+      const share = participation.shareRate
+        ? `${createDecimal(participation.shareRate).times(100).toFixed(0)}%`
+        : null;
+      return share
+        ? `${employee?.displayName ?? participation.employeeId} · ${share}`
+        : (employee?.displayName ?? participation.employeeId);
+    })
+    .join(' · ');
 }
 
 function queueStatus(sale: Sale): QueueStatus {
@@ -704,32 +723,6 @@ export function ReplatformedPosWorkspace({ workspace }: { workspace: Workspace }
       return false;
     }
   };
-  const completeQueuedWorkLine = async (transaction: Sale, line: SaleLine) => {
-    const employeeIssues = employeeAssignmentIssues(line);
-    if (employeeIssues.length) {
-      showToast({
-        title: 'Lengkapi karyawan terlebih dahulu',
-        description: employeeIssues.join(' '),
-        variant: 'warning',
-      });
-      return;
-    }
-    try {
-      const updated = await workspace.transitionQueuedFulfillment(transaction, line, 'COMPLETED');
-      setQueueDetail(updated);
-      showToast({
-        title: 'Pekerjaan selesai',
-        description: `${line.itemNameSnapshot} telah ditandai selesai.`,
-        variant: 'success',
-      });
-    } catch {
-      showToast({
-        title: 'Gagal memperbarui pekerjaan',
-        description: 'Status pekerjaan belum berubah.',
-        variant: 'danger',
-      });
-    }
-  };
   const saveServiceWorkUnits = async (
     target: { sale: Sale; line: SaleLine },
     units: readonly ServiceWorkUnit[],
@@ -771,51 +764,16 @@ export function ReplatformedPosWorkspace({ workspace }: { workspace: Workspace }
       });
     }
   };
-  const completeServiceWorkUnit = async (transaction: Sale, line: SaleLine, index: number) => {
-    const currentUnits = serviceWorkUnitsFor(line, serviceWorkUnits[serviceWorkKey(line)]);
-    const currentUnit = currentUnits[index];
-    if (!currentUnit || currentUnit.status === 'COMPLETED') return;
-    if (!hasValidWorkAssignment(line, currentUnit)) {
-      showToast({
-        title: 'Lengkapi karyawan terlebih dahulu',
-        description: `Pengerjaan #${index + 1} membutuhkan kontribusi karyawan tepat 100%.`,
-        variant: 'warning',
-      });
-      return;
-    }
-
-    const nextUnits = currentUnits.map((unit) =>
-      unit.index === index ? { ...unit, status: 'COMPLETED' as const } : unit,
-    );
-    const allCompleted = nextUnits.every((unit) => unit.status === 'COMPLETED');
-    try {
-      if (allCompleted) {
-        const updated = await workspace.transitionQueuedFulfillment(transaction, line, 'COMPLETED');
-        setQueueDetail(updated);
-      }
-      setServiceWorkUnits((current) => ({ ...current, [serviceWorkKey(line)]: nextUnits }));
-      showToast({
-        title: allCompleted ? 'Layanan selesai' : 'Pengerjaan selesai',
-        description: allCompleted
-          ? `${line.itemNameSnapshot} telah diselesaikan.`
-          : `Pengerjaan #${index + 1} telah ditandai selesai.`,
-        variant: 'success',
-      });
-    } catch {
-      showToast({
-        title: 'Gagal memperbarui pengerjaan',
-        description: 'Status pengerjaan belum berubah.',
-        variant: 'danger',
-      });
-    }
-  };
   const completeQueuedTransaction = (transaction: Sale) => {
-    const issues = workflowIssues(transaction);
+    const issues = workflowIssues(transaction, serviceWorkUnits);
     if (issues.length) return;
     setCompletionConfirmationTarget(transaction);
   };
   const confirmQueuedCompletion = async () => {
-    if (!completionConfirmationTarget || workflowIssues(completionConfirmationTarget).length) {
+    if (
+      !completionConfirmationTarget ||
+      workflowIssues(completionConfirmationTarget, serviceWorkUnits).length
+    ) {
       return;
     }
     try {
@@ -1200,9 +1158,6 @@ export function ReplatformedPosWorkspace({ workspace }: { workspace: Workspace }
           if (!displayedQueueDetail) return;
           setQueueAssignmentTarget({ sale: displayedQueueDetail, line });
         }}
-        onCompleteLine={(line) => {
-          if (displayedQueueDetail) void completeQueuedWorkLine(displayedQueueDetail, line);
-        }}
         serviceWorkUnits={serviceWorkUnits}
         onManageServiceWork={(line) => {
           if (!displayedQueueDetail) return;
@@ -1307,15 +1262,9 @@ export function ReplatformedPosWorkspace({ workspace }: { workspace: Workspace }
               )
             : []
         }
-        isMutating={workspace.isCoreMutating}
         onClose={() => setServiceWorkTarget(null)}
         onSave={(units) => {
           if (serviceWorkTarget) void saveServiceWorkUnits(serviceWorkTarget, units);
-        }}
-        onCompleteUnit={(index) => {
-          if (serviceWorkTarget) {
-            void completeServiceWorkUnit(serviceWorkTarget.sale, serviceWorkTarget.line, index);
-          }
         }}
       />
       <ReferenceEmployeeDialog
@@ -2533,7 +2482,6 @@ function ReferenceTransactionDetail({
   onClose,
   onViewReceipt,
   onAssign,
-  onCompleteLine,
   serviceWorkUnits,
   onManageServiceWork,
   onComplete,
@@ -2551,12 +2499,12 @@ function ReferenceTransactionDetail({
   onNewSale: () => void;
   onViewReceipt: (sale: Sale) => void;
   onAssign: (line: SaleLine) => void;
-  onCompleteLine: (line: SaleLine) => void;
   serviceWorkUnits: ServiceWorkUnitsByLine;
   onManageServiceWork: (line: SaleLine) => void;
   onComplete: () => void;
   isMutating: boolean;
 }) {
+  const [receiptPaper, setReceiptPaper] = useState<'58' | '80'>('80');
   if (!sale) return null;
   const status = queueStatus(sale);
   const customerContext = readStoredCustomer(saleCustomerKey(sale.id));
@@ -2564,11 +2512,12 @@ function ReferenceTransactionDetail({
   const activeLines = sale.lines.filter((line) => !line.removedAt);
   const payments = successfulPayments(sale);
   const payment = payments[payments.length - 1] ?? null;
-  const finalized = sale.status === 'FINALIZED';
   const receiptAvailable = payments.length > 0;
   const showReceipt = showPaymentReceipt && receiptAvailable;
-  const { totalPaid, balanceDue } = financialSummary(sale);
-  const completionIssues = status === 'PROGRESS' ? workflowIssues(sale) : [];
+  const { totalPaid } = financialSummary(sale);
+  const hasDiscount = !createDecimal(sale.discountAmount).equals(createDecimal('0'));
+  const hasTax = !createDecimal(sale.taxAmount).equals(createDecimal('0'));
+  const completionIssues = status === 'PROGRESS' ? workflowIssues(sale, serviceWorkUnits) : [];
   const completionIssueGroups = groupWorkflowIssues(sale, completionIssues);
   const transactionDate = new Intl.DateTimeFormat(locale, {
     dateStyle: 'medium',
@@ -2576,341 +2525,412 @@ function ReferenceTransactionDetail({
   }).format(new Date(sale.finalizedAt ?? sale.updatedAt));
 
   return (
-    <Dialog
-      open
-      onClose={onClose}
-      title={showReceipt ? 'Preview struk pembayaran' : 'Detail transaksi'}
-      description={transactionNumber(sale.id)}
-      ariaLabel={showReceipt ? 'Receipt preview' : 'Transaction detail'}
-      closeOnEscape
-      closeOnOverlay
-      noPadding
-      className={`pos-reference-dialog max-h-[92dvh] w-full overflow-hidden rounded-t-2xl bg-[var(--color-surface)] shadow-xl sm:rounded-xl ${showReceipt ? 'max-w-md' : 'max-w-lg'}`}
-      footer={
-        <div className="flex shrink-0 flex-col-reverse justify-end gap-2 sm:flex-row">
-          <DButton variant="ghost" onClick={onClose}>
-            Tutup
-          </DButton>
-          {!showReceipt && receiptAvailable ? (
-            <DButton
-              rightIcon={<Printer className="size-3.5" />}
-              variant="outline"
-              onClick={() => onViewReceipt(sale)}
-            >
-              Lihat Struk
+    <>
+      <Dialog
+        open
+        onClose={onClose}
+        title={showReceipt ? 'Preview struk pembayaran' : 'Detail transaksi'}
+        description={transactionNumber(sale.id)}
+        ariaLabel={showReceipt ? 'Receipt preview' : 'Transaction detail'}
+        closeOnEscape
+        closeOnOverlay
+        noPadding
+        className={`pos-reference-dialog max-h-[92dvh] w-full overflow-hidden rounded-t-2xl bg-[var(--color-surface)] shadow-xl sm:rounded-xl ${showReceipt ? 'max-w-md' : 'max-w-lg'}`}
+        footer={
+          <div
+            className={`flex shrink-0 flex-col-reverse justify-end gap-2 sm:flex-row ${showReceipt ? 'pos-receipt-actions' : ''}`}
+          >
+            <DButton variant="ghost" onClick={onClose}>
+              Tutup
             </DButton>
-          ) : null}
-          {!showReceipt && status === 'PROGRESS' ? (
-            <DButton
-              variant="primary"
-              disabled={completionIssues.length > 0}
-              loading={isMutating}
-              leftIcon={<CheckCircle2 className="size-3.5" />}
-              onClick={onComplete}
-            >
-              Selesaikan
-            </DButton>
-          ) : null}
-          {showReceipt ? (
-            <DButton
-              rightIcon={<Printer className="size-3.5" />}
-              variant="outline"
-              onClick={() => window.print()}
-            >
-              Cetak
-            </DButton>
-          ) : null}
-        </div>
-      }
-    >
-      {showReceipt ? (
-        <div className="flex max-h-[92dvh] min-h-0 flex-col px-5 py-4 sm:px-6">
-          <div className="pos-receipt-print min-h-0 flex-1 overflow-y-auto bg-white text-slate-950">
-            <header className="text-center">
-              <h2 className="text-lg font-black tracking-tight">{businessName}</h2>
-              <p className="mt-1 text-xs text-slate-500">{branchName}</p>
-              <div className="my-4 border-t border-dashed border-slate-300" />
-              <p className="font-mono text-xs font-semibold">{transactionNumber(sale.id)}</p>
-              <p className="mt-1 text-[11px] text-slate-500">{transactionDate}</p>
-              <p className="mt-1 text-[11px] text-slate-500">Kasir: {cashierName}</p>
-            </header>
-
-            <section className="mt-4 text-xs">
-              <p className="font-semibold">Pelanggan</p>
-              <p className="mt-1">{customer.name}</p>
-              {customer.phone ? <p className="text-slate-500">{customer.phone}</p> : null}
-            </section>
-
-            <div className="my-4 border-t border-dashed border-slate-300" />
-
-            <section className="space-y-4">
-              {activeLines.map((line) => (
-                <div key={line.id} className="text-xs">
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <p className="font-bold">{line.itemNameSnapshot}</p>
-                      {line.variantNameSnapshot ? (
-                        <p className="mt-0.5 text-slate-500">{line.variantNameSnapshot}</p>
-                      ) : null}
-                    </div>
-                    <p className="shrink-0 font-bold">{money(line.totalAmount, locale)}</p>
-                  </div>
-                  <p className="mt-1 text-slate-500">
-                    {quantity(line.quantity)} × {money(line.effectiveUnitPrice, locale)}
-                  </p>
-                  {line.itemTypeSnapshot === 'SERVICE' &&
-                  line.participations.some((participation) => participation.assigned) ? (
-                    <p className="mt-1 leading-5 text-slate-600">
-                      {employeeSummary(line, employees)}
-                    </p>
-                  ) : null}
-                </div>
-              ))}
-            </section>
-
-            <div className="my-4 border-t border-dashed border-slate-300" />
-
-            <dl className="space-y-1.5 text-xs">
-              <div className="flex justify-between gap-3">
-                <dt className="text-slate-500">Subtotal</dt>
-                <dd>{money(sale.grossAmount, locale)}</dd>
-              </div>
-              {sale.discountAmount !== '0.0000' ? (
-                <div className="flex justify-between gap-3">
-                  <dt className="text-slate-500">Diskon</dt>
-                  <dd>−{money(sale.discountAmount, locale)}</dd>
-                </div>
-              ) : null}
-              <div className="flex justify-between gap-3">
-                <dt className="text-slate-500">Pajak</dt>
-                <dd>{money(sale.taxAmount, locale)}</dd>
-              </div>
-              <div className="mt-2 flex justify-between gap-3 border-t border-slate-200 pt-2 text-sm font-black">
-                <dt>TOTAL</dt>
-                <dd>{money(sale.totalAmount, locale)}</dd>
-              </div>
-            </dl>
-
-            <div className="my-4 border-t border-dashed border-slate-300" />
-
-            <section className="space-y-1.5 text-xs">
-              <div className="flex justify-between gap-3">
-                <span className="text-slate-500">Pembayaran</span>
-                <span className="font-semibold">{payment?.method.replace('_', ' ') ?? '-'}</span>
-              </div>
-              <div className="flex justify-between gap-3">
-                <span className="text-slate-500">Pembayaran ini</span>
-                <span>{payment ? money(payment.appliedAmount, locale) : '-'}</span>
-              </div>
-              <div className="flex justify-between gap-3">
-                <span className="text-slate-500">Total dibayar</span>
-                <span>{money(totalPaid, locale)}</span>
-              </div>
-              {isPositiveDecimal(balanceDue) ? (
-                <div className="flex justify-between gap-3 font-semibold">
-                  <span className="text-slate-500">Sisa pembayaran</span>
-                  <span>{money(balanceDue, locale)}</span>
-                </div>
-              ) : null}
-              {payment?.method === 'CASH' ? (
-                <>
-                  <div className="flex justify-between gap-3">
-                    <span className="text-slate-500">Uang diterima</span>
-                    <span>{money(payment.tenderedAmount ?? payment.appliedAmount, locale)}</span>
-                  </div>
-                  <div className="flex justify-between gap-3">
-                    <span className="text-slate-500">Kembalian</span>
-                    <span>{money(payment.changeAmount ?? '0.0000', locale)}</span>
-                  </div>
-                </>
-              ) : null}
-            </section>
-
-            <div className="my-4 border-t border-dashed border-slate-300" />
-            <p className="text-center text-xs font-bold">
-              {hasSuccessfulCheckout(sale)
-                ? finalized
-                  ? 'LUNAS · FINALIZED'
-                  : 'LUNAS · PEMBAYARAN BERHASIL'
-                : 'PEMBAYARAN BERHASIL · SISA MASIH ADA'}
-            </p>
-            <p className="mt-2 text-center text-[11px] text-slate-500">
-              Terima kasih telah bertransaksi.
-            </p>
+            {!showReceipt && receiptAvailable ? (
+              <DButton
+                rightIcon={<Printer className="size-3.5" />}
+                variant="outline"
+                onClick={() => onViewReceipt(sale)}
+              >
+                Lihat Struk
+              </DButton>
+            ) : null}
+            {!showReceipt && status === 'PROGRESS' ? (
+              <DButton
+                variant="primary"
+                disabled={completionIssues.length > 0}
+                loading={isMutating}
+                leftIcon={<CheckCircle2 className="size-3.5" />}
+                onClick={onComplete}
+              >
+                Selesaikan
+              </DButton>
+            ) : null}
+            {showReceipt ? (
+              <DButton
+                rightIcon={<Printer className="size-3.5" />}
+                variant="outline"
+                onClick={() => window.print()}
+              >
+                Cetak
+              </DButton>
+            ) : null}
           </div>
-        </div>
-      ) : (
-        <div className="flex min-h-0 flex-1 flex-col">
-          <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-5 py-4 sm:px-6">
-            <div className="overflow-hidden rounded-2xl border border-[var(--color-border)] bg-[var(--color-background)]">
-              <div className="bg-gradient-to-br from-[var(--color-brand)]/5 to-transparent px-5 py-4">
-                <p className="font-mono text-xs text-[var(--color-text-muted)]">
-                  {transactionNumber(sale.id)}
-                </p>
-                <div className="mt-3 flex flex-wrap gap-1">
-                  <span
-                    className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-medium ${statusMeta[status].tone}`}
-                  >
-                    {statusMeta[status].label}
-                  </span>
-                  <span
-                    className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-medium ${hasSuccessfulCheckout(sale) ? 'bg-[var(--color-success)]/10 text-[var(--color-success)]' : receiptAvailable ? 'bg-[var(--color-warning)]/10 text-[var(--color-warning)]' : 'bg-[var(--color-surface-muted)] text-[var(--color-text-muted)]'}`}
-                  >
-                    {hasSuccessfulCheckout(sale)
-                      ? 'Lunas'
-                      : receiptAvailable
-                        ? 'Bayar sebagian'
-                        : 'Belum dibayar'}
-                  </span>
-                </div>
-                <p className="mt-3 text-xs text-[var(--color-text-muted)]">{transactionDate}</p>
-                <div className="mt-3 flex items-center gap-2 text-sm">
-                  <span className="truncate font-semibold">{customer.name}</span>
-                  <Badge
-                    variant={customerStatus(customerContext).variant}
-                    className="shrink-0 text-[10px]"
-                  >
-                    {customerStatus(customerContext).label}
-                  </Badge>
-                </div>
-                {customer.membership ? (
-                  <p className="mt-1 text-xs text-[var(--color-text-muted)]">
-                    {customer.membership.memberCode} · {customer.membership.status}
-                  </p>
-                ) : customer.phone ? (
-                  <p className="mt-1 text-xs text-[var(--color-text-muted)]">{customer.phone}</p>
-                ) : null}
+        }
+      >
+        {showReceipt ? (
+          <div className="flex max-h-[92dvh] min-h-0 flex-col px-5 py-4 sm:px-6">
+            <div className="pos-receipt-preview-toolbar mb-3 flex items-center justify-between gap-3">
+              <span className="text-xs font-medium text-[var(--color-text-muted)]">
+                Ukuran kertas
+              </span>
+              <div className="flex items-center gap-1.5" aria-label="Ukuran struk">
+                <DButton
+                  size="sm"
+                  variant={receiptPaper === '58' ? 'primary' : 'secondary'}
+                  onClick={() => setReceiptPaper('58')}
+                >
+                  58 mm
+                </DButton>
+                <DButton
+                  size="sm"
+                  variant={receiptPaper === '80' ? 'primary' : 'secondary'}
+                  onClick={() => setReceiptPaper('80')}
+                >
+                  80 mm
+                </DButton>
               </div>
             </div>
-            {sale.status === 'VOIDED' && cancellationReason ? (
-              <div className="rounded-xl border border-[var(--color-danger)]/25 bg-[var(--color-danger)]/10 px-3 py-2 text-xs">
-                <p className="font-semibold text-[var(--color-danger)]">Alasan pembatalan</p>
-                <p className="mt-1 text-[var(--color-text-muted)]">{cancellationReason}</p>
-              </div>
-            ) : null}
-            <section className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border border-[var(--color-border)] bg-[var(--color-background)]">
-              <header className="flex items-center justify-between border-b border-[var(--color-border)] px-4 py-3">
-                <h3 className="text-sm font-semibold">Pesanan</h3>
-                <span className="text-xs text-[var(--color-text-muted)]">
-                  {activeLines.length} item
-                </span>
-              </header>
-              <div className="min-h-[144px] max-h-[min(38dvh,360px)] flex-1 divide-y divide-[var(--color-border)] overflow-y-auto overscroll-contain">
-                {activeLines.map((line) => {
-                  const isMultiUnitService =
-                    line.itemTypeSnapshot === 'SERVICE' &&
-                    line.fulfillmentBehaviorSnapshot === 'TRACKED' &&
-                    serviceWorkUnitCount(line) > 1;
-                  const isActiveTrackedService =
-                    status === 'PROGRESS' &&
-                    line.itemTypeSnapshot === 'SERVICE' &&
-                    line.fulfillmentBehaviorSnapshot === 'TRACKED' &&
-                    line.fulfillment !== null;
-                  const hasCompletedWork = line.fulfillment?.status === 'COMPLETED';
-                  const requiresEmployeeAttribution =
-                    line.employeeAssignmentModeSnapshot !== 'NONE' ||
-                    line.allowEmployeeContributionSnapshot;
-                  const employeeIssues = employeeAssignmentIssues(line);
-                  if (isMultiUnitService) {
-                    return (
-                      <ReferenceServiceWorkLine
-                        key={line.id}
-                        line={line}
-                        employees={employees}
-                        locale={locale}
-                        units={serviceWorkUnitsFor(line, serviceWorkUnits[serviceWorkKey(line)])}
-                        active={status === 'PROGRESS'}
-                        isMutating={isMutating}
-                        onManage={() => onManageServiceWork(line)}
-                      />
-                    );
-                  }
-                  return (
-                    <div key={line.id} className="p-4">
-                      <div className="flex justify-between gap-3">
-                        <div>
-                          <p className="text-sm font-semibold">{line.itemNameSnapshot}</p>
-                          <p className="mt-1 text-xs text-[var(--color-text-muted)]">
-                            {quantity(line.quantity)} × {money(line.effectiveUnitPrice, locale)}
-                            {line.variantNameSnapshot ? ` · ${line.variantNameSnapshot}` : ''}
-                          </p>
-                          {line.fulfillment ? (
-                            <p className="mt-1 text-[11px] font-medium text-[var(--color-text-muted)]">
-                              {line.fulfillment.status === 'WAITING'
-                                ? 'Menunggu proses'
-                                : line.fulfillment.status === 'IN_PROGRESS'
-                                  ? 'Sedang diproses'
-                                  : line.fulfillment.status === 'COMPLETED'
-                                    ? 'Selesai'
-                                    : 'Dibatalkan'}
-                            </p>
-                          ) : null}
-                          {isActiveTrackedService && requiresEmployeeAttribution ? (
-                            <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
-                              <span className="text-[var(--color-text-muted)]">
-                                {employeeIssues.length > 0
-                                  ? line.participations.some(
-                                      (participation) => participation.assigned,
-                                    )
-                                    ? employeeSummary(line, employees)
-                                    : 'Belum ada karyawan'
-                                  : employeeSummary(line, employees)}
-                              </span>
-                              {employeeIssues.length > 0 ? (
-                                <DButton
-                                  size="sm"
-                                  variant="outline"
-                                  disabled={isMutating}
-                                  onClick={() => onAssign(line)}
-                                >
-                                  Atur karyawan
-                                </DButton>
-                              ) : null}
-                            </div>
-                          ) : null}
-                          {isActiveTrackedService &&
-                          !hasCompletedWork &&
-                          employeeIssues.length === 0 ? (
-                            <DButton
-                              size="sm"
-                              variant="outline"
-                              disabled={isMutating}
-                              className="mt-2"
-                              onClick={() => onCompleteLine(line)}
-                            >
-                              Selesaikan layanan
-                            </DButton>
-                          ) : null}
-                        </div>
-                        <p className="text-sm font-bold">{money(line.totalAmount, locale)}</p>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </section>
-            {completionIssues.length ? (
-              <div className="rounded-xl border border-[var(--color-warning)]/30 bg-[var(--color-warning)]/10 px-3 py-2 text-xs">
-                <p className="font-semibold text-[var(--color-warning)]">Belum siap diselesaikan</p>
-                <div className="mt-2 space-y-2 text-[var(--color-text-muted)]">
-                  {completionIssueGroups.map((group) => (
-                    <div key={group.id}>
-                      <p className="font-semibold text-[var(--color-text)]">{group.label}</p>
-                      <ul className="mt-0.5 list-disc space-y-0.5 pl-4">
-                        {group.issues.map((issue) => (
-                          <li key={issue}>{issue}</li>
-                        ))}
-                      </ul>
-                    </div>
-                  ))}
+            <div
+              className={`pos-receipt-preview pos-receipt-print--${receiptPaper} min-h-0 flex-1 overflow-y-auto bg-white text-slate-950`}
+            >
+              <ReceiptContent
+                sale={sale}
+                activeLines={activeLines}
+                customer={customer}
+                locale={locale}
+                businessName={businessName}
+                branchName={branchName}
+                cashierName={cashierName}
+                transactionDate={transactionDate}
+                totalPaid={totalPaid}
+                payment={payment}
+                hasDiscount={hasDiscount}
+                hasTax={hasTax}
+              />
+            </div>
+          </div>
+        ) : (
+          <div className="flex min-h-0 flex-1 flex-col">
+            <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-5 py-4 sm:px-6">
+              <div className="overflow-hidden rounded-2xl border border-[var(--color-border)] bg-[var(--color-background)]">
+                <div className="bg-gradient-to-br from-[var(--color-brand)]/5 to-transparent px-5 py-4">
+                  <p className="font-mono text-xs text-[var(--color-text-muted)]">
+                    {transactionNumber(sale.id)}
+                  </p>
+                  <div className="mt-3 flex flex-wrap gap-1">
+                    <span
+                      className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-medium ${statusMeta[status].tone}`}
+                    >
+                      {statusMeta[status].label}
+                    </span>
+                    <span
+                      className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-medium ${hasSuccessfulCheckout(sale) ? 'bg-[var(--color-success)]/10 text-[var(--color-success)]' : receiptAvailable ? 'bg-[var(--color-warning)]/10 text-[var(--color-warning)]' : 'bg-[var(--color-surface-muted)] text-[var(--color-text-muted)]'}`}
+                    >
+                      {hasSuccessfulCheckout(sale)
+                        ? 'Lunas'
+                        : receiptAvailable
+                          ? 'Bayar sebagian'
+                          : 'Belum dibayar'}
+                    </span>
+                  </div>
+                  <p className="mt-3 text-xs text-[var(--color-text-muted)]">{transactionDate}</p>
+                  <div className="mt-3 flex items-center gap-2 text-sm">
+                    <span className="truncate font-semibold">{customer.name}</span>
+                    <Badge
+                      variant={customerStatus(customerContext).variant}
+                      className="shrink-0 text-[10px]"
+                    >
+                      {customerStatus(customerContext).label}
+                    </Badge>
+                  </div>
+                  {customer.membership ? (
+                    <p className="mt-1 text-xs text-[var(--color-text-muted)]">
+                      {customer.membership.memberCode} · {customer.membership.status}
+                    </p>
+                  ) : customer.phone ? (
+                    <p className="mt-1 text-xs text-[var(--color-text-muted)]">{customer.phone}</p>
+                  ) : null}
                 </div>
               </div>
-            ) : null}
+              {sale.status === 'VOIDED' && cancellationReason ? (
+                <div className="rounded-xl border border-[var(--color-danger)]/25 bg-[var(--color-danger)]/10 px-3 py-2 text-xs">
+                  <p className="font-semibold text-[var(--color-danger)]">Alasan pembatalan</p>
+                  <p className="mt-1 text-[var(--color-text-muted)]">{cancellationReason}</p>
+                </div>
+              ) : null}
+              {completionIssues.length ? (
+                <div className="rounded-xl border border-[var(--color-warning)]/30 bg-[var(--color-warning)]/10 px-3 py-2 text-xs">
+                  <p className="font-semibold text-[var(--color-warning)]">
+                    Belum siap diselesaikan
+                  </p>
+                  <div className="mt-2 space-y-2 text-[var(--color-text-muted)]">
+                    {completionIssueGroups.map((group) => (
+                      <div key={group.id}>
+                        <p className="font-semibold text-[var(--color-text)]">{group.label}</p>
+                        <ul className="mt-0.5 list-disc space-y-0.5 pl-4">
+                          {group.issues.map((issue) => (
+                            <li key={issue}>{issue}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
+              <section className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border border-[var(--color-border)] bg-[var(--color-background)]">
+                <header className="flex items-center justify-between border-b border-[var(--color-border)] px-4 py-3">
+                  <h3 className="text-sm font-semibold">Pesanan</h3>
+                  <span className="text-xs text-[var(--color-text-muted)]">
+                    {activeLines.length} item
+                  </span>
+                </header>
+                <div className="min-h-[144px] max-h-[min(38dvh,360px)] flex-1 divide-y divide-[var(--color-border)] overflow-y-auto overscroll-contain">
+                  {activeLines.map((line) => {
+                    const isMultiUnitService =
+                      line.itemTypeSnapshot === 'SERVICE' &&
+                      line.fulfillmentBehaviorSnapshot === 'TRACKED' &&
+                      serviceWorkUnitCount(line) > 1;
+                    const isTrackedService =
+                      line.itemTypeSnapshot === 'SERVICE' &&
+                      line.fulfillmentBehaviorSnapshot === 'TRACKED' &&
+                      line.fulfillment !== null;
+                    const canEditServiceWork = isTrackedService && status === 'PROGRESS';
+                    const requiresEmployeeAttribution =
+                      line.employeeAssignmentModeSnapshot !== 'NONE' ||
+                      line.allowEmployeeContributionSnapshot;
+                    const employeeIssues = employeeAssignmentIssues(line);
+                    if (isMultiUnitService) {
+                      return (
+                        <ReferenceServiceWorkLine
+                          key={line.id}
+                          line={line}
+                          employees={employees}
+                          locale={locale}
+                          units={serviceWorkUnitsFor(line, serviceWorkUnits[serviceWorkKey(line)])}
+                          active={status === 'PROGRESS'}
+                          isMutating={isMutating}
+                          onManage={() => onManageServiceWork(line)}
+                        />
+                      );
+                    }
+                    return (
+                      <div key={line.id} className="p-4">
+                        <div className="flex justify-between gap-3">
+                          <div>
+                            <p className="text-sm font-semibold">{line.itemNameSnapshot}</p>
+                            <p className="mt-1 text-xs text-[var(--color-text-muted)]">
+                              {quantity(line.quantity)} × {money(line.effectiveUnitPrice, locale)}
+                              {line.variantNameSnapshot ? ` · ${line.variantNameSnapshot}` : ''}
+                            </p>
+                            {line.fulfillment ? (
+                              <p className="mt-1 text-[11px] font-medium text-[var(--color-text-muted)]">
+                                {line.fulfillment.status === 'WAITING'
+                                  ? 'Menunggu proses'
+                                  : line.fulfillment.status === 'IN_PROGRESS'
+                                    ? 'Sedang diproses'
+                                    : line.fulfillment.status === 'COMPLETED'
+                                      ? 'Selesai'
+                                      : 'Dibatalkan'}
+                              </p>
+                            ) : null}
+                            {isTrackedService && requiresEmployeeAttribution ? (
+                              <div className="mt-2 flex min-w-0 items-center gap-2 text-xs">
+                                <span className="shrink-0 font-medium text-[var(--color-text-muted)]">
+                                  Pengerjaan
+                                </span>
+                                <span className="min-w-0 flex-1 truncate text-[var(--color-text-muted)]">
+                                  {employeeWorkSummary(line, employees)}
+                                </span>
+                                {canEditServiceWork ? (
+                                  employeeIssues.length > 0 ? (
+                                    <DButton
+                                      size="sm"
+                                      variant="outline"
+                                      disabled={isMutating}
+                                      className="h-7 px-2 text-[11px]"
+                                      onClick={() => onAssign(line)}
+                                    >
+                                      Atur
+                                    </DButton>
+                                  ) : (
+                                    <DButton
+                                      size="icon"
+                                      variant="ghost"
+                                      disabled={isMutating}
+                                      aria-label={`Ubah pengerjaan ${line.itemNameSnapshot}`}
+                                      onClick={() => onAssign(line)}
+                                    >
+                                      <Pencil className="size-3.5" />
+                                    </DButton>
+                                  )
+                                ) : null}
+                              </div>
+                            ) : null}
+                          </div>
+                          <p className="text-sm font-bold">{money(line.totalAmount, locale)}</p>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </section>
+            </div>
+            <ReferenceFinancialSummary sale={sale} locale={locale} />
           </div>
-          <ReferenceFinancialSummary sale={sale} locale={locale} />
+        )}
+      </Dialog>
+      {showReceipt
+        ? createPortal(
+            <div className={`pos-receipt-print pos-receipt-print--${receiptPaper}`}>
+              <ReceiptContent
+                sale={sale}
+                activeLines={activeLines}
+                customer={customer}
+                locale={locale}
+                businessName={businessName}
+                branchName={branchName}
+                cashierName={cashierName}
+                transactionDate={transactionDate}
+                totalPaid={totalPaid}
+                payment={payment}
+                hasDiscount={hasDiscount}
+                hasTax={hasTax}
+              />
+            </div>,
+            document.body,
+          )
+        : null}
+    </>
+  );
+}
+
+function ReceiptContent({
+  sale,
+  activeLines,
+  customer,
+  locale,
+  businessName,
+  branchName,
+  cashierName,
+  transactionDate,
+  totalPaid,
+  payment,
+  hasDiscount,
+  hasTax,
+}: {
+  sale: Sale;
+  activeLines: readonly SaleLine[];
+  customer: PosCustomer;
+  locale: string;
+  businessName: string;
+  branchName: string;
+  cashierName: string;
+  transactionDate: string;
+  totalPaid: string;
+  payment: Payment | null;
+  hasDiscount: boolean;
+  hasTax: boolean;
+}) {
+  return (
+    <>
+      <header className="text-center">
+        <h2 className="text-lg font-black tracking-tight">{businessName}</h2>
+        <p className="mt-1 text-xs text-slate-500">{branchName}</p>
+        <div className="my-4 border-t border-dashed border-slate-300" />
+        <p className="font-mono text-xs font-semibold">{transactionNumber(sale.id)}</p>
+        <p className="mt-1 text-[11px] text-slate-500">{transactionDate}</p>
+        <p className="mt-1 text-[11px] text-slate-500">Kasir: {cashierName}</p>
+      </header>
+
+      <section className="mt-4 text-xs">
+        <p className="font-semibold">Pelanggan</p>
+        <p className="mt-1">{customer.name}</p>
+        {customer.phone ? <p className="text-slate-500">{customer.phone}</p> : null}
+      </section>
+
+      <div className="my-4 border-t border-dashed border-slate-300" />
+
+      <section className="space-y-2.5">
+        {activeLines.map((line) => (
+          <div key={line.id} className="text-xs leading-4">
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <p className="font-bold">{line.itemNameSnapshot}</p>
+                {line.variantNameSnapshot ? (
+                  <p className="mt-0.5 text-slate-500">{line.variantNameSnapshot}</p>
+                ) : null}
+              </div>
+              <p className="shrink-0 font-bold">{money(line.totalAmount, locale)}</p>
+            </div>
+            <p className="mt-1 text-slate-500">
+              {quantity(line.quantity)} × {money(line.effectiveUnitPrice, locale)}
+            </p>
+          </div>
+        ))}
+      </section>
+
+      <div className="my-4 border-t border-dashed border-slate-300" />
+
+      <dl className="space-y-1.5 text-xs">
+        <div className="flex justify-between gap-3">
+          <dt className="text-slate-500">Subtotal</dt>
+          <dd>{money(sale.grossAmount, locale)}</dd>
         </div>
-      )}
-    </Dialog>
+        {hasDiscount ? (
+          <div className="flex justify-between gap-3">
+            <dt className="text-slate-500">Diskon</dt>
+            <dd>−{money(sale.discountAmount, locale)}</dd>
+          </div>
+        ) : null}
+        {hasTax ? (
+          <div className="flex justify-between gap-3">
+            <dt className="text-slate-500">Pajak</dt>
+            <dd>{money(sale.taxAmount, locale)}</dd>
+          </div>
+        ) : null}
+        <div className="mt-2 flex justify-between gap-3 border-t border-slate-200 pt-2 text-sm font-black">
+          <dt>TOTAL</dt>
+          <dd>{money(sale.totalAmount, locale)}</dd>
+        </div>
+      </dl>
+
+      <div className="my-4 border-t border-dashed border-slate-300" />
+
+      <section className="space-y-1.5 text-xs">
+        <div className="flex justify-between gap-3">
+          <span className="text-slate-500">Dibayar</span>
+          <span>{money(totalPaid, locale)}</span>
+        </div>
+        {payment?.method === 'CASH' ? (
+          <>
+            {payment.tenderedAmount ? (
+              <div className="flex justify-between gap-3">
+                <span className="text-slate-500">Uang diterima</span>
+                <span>{money(payment.tenderedAmount, locale)}</span>
+              </div>
+            ) : null}
+            {isPositiveDecimal(payment.changeAmount ?? '0') ? (
+              <div className="flex justify-between gap-3">
+                <span className="text-slate-500">Kembalian</span>
+                <span>{money(payment.changeAmount ?? '0.0000', locale)}</span>
+              </div>
+            ) : null}
+          </>
+        ) : null}
+      </section>
+
+      <div className="my-4 border-t border-dashed border-slate-300" />
+      <p className="text-center text-[11px] text-slate-500">Terima kasih telah bertransaksi.</p>
+      <div className="pos-receipt-tear" aria-hidden="true" />
+    </>
   );
 }
 
@@ -2931,7 +2951,6 @@ function ReferenceServiceWorkLine({
   isMutating: boolean;
   onManage: () => void;
 }) {
-  const completedCount = units.filter((unit) => unit.status === 'COMPLETED').length;
   const employeeWorkSummary = serviceWorkAssignmentSummary(units, employees);
 
   return (
@@ -2943,16 +2962,19 @@ function ReferenceServiceWorkLine({
             {quantity(line.quantity)} × {money(line.effectiveUnitPrice, locale)}
             {line.variantNameSnapshot ? ` · ${line.variantNameSnapshot}` : ''}
           </p>
-          <p className="mt-1 text-[11px] font-medium text-[var(--color-text-muted)]">
-            {completedCount}/{units.length} selesai
-          </p>
           <div className="mt-1 flex flex-wrap items-center gap-2 text-xs">
             <span className="min-w-0 flex-1 truncate text-[var(--color-text-muted)]">
-              {units.length} pengerjaan · {employeeWorkSummary}
+              {units.length} unit · {employeeWorkSummary}
             </span>
             {active ? (
-              <DButton size="sm" variant="outline" disabled={isMutating} onClick={onManage}>
-                Kelola pengerjaan
+              <DButton
+                size="icon"
+                variant="ghost"
+                disabled={isMutating}
+                aria-label={`Ubah pengerjaan ${line.itemNameSnapshot}`}
+                onClick={onManage}
+              >
+                <Pencil className="size-3.5" />
               </DButton>
             ) : null}
           </div>
@@ -4015,19 +4037,15 @@ function ReferenceServiceWorkDialog({
   employees,
   locale,
   units,
-  isMutating,
   onClose,
   onSave,
-  onCompleteUnit,
 }: {
   line: SaleLine | null;
   employees: readonly Employee[];
   locale: string;
   units: readonly ServiceWorkUnit[];
-  isMutating: boolean;
   onClose: () => void;
   onSave: (units: readonly ServiceWorkUnit[]) => void;
-  onCompleteUnit: (index: number) => void;
 }) {
   const [mode, setMode] = useState<'SAME' | 'PER_UNIT'>('SAME');
   const [sharedContributors, setSharedContributors] = useState<ServiceWorkContributor[]>(() =>
@@ -4111,23 +4129,8 @@ function ReferenceServiceWorkDialog({
           <div className="max-h-[52dvh] space-y-2 overflow-y-auto pr-1">
             {unitPlans.map((unit) => (
               <div key={unit.index} className="rounded-xl border border-[var(--color-border)] p-3">
-                <div className="mb-3 flex items-center justify-between gap-3">
+                <div className="mb-3">
                   <p className="text-sm font-semibold">Pengerjaan #{unit.index + 1}</p>
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs font-medium text-[var(--color-text-muted)]">
-                      {workUnitStatusLabel(unit.status)}
-                    </span>
-                    {unit.status !== 'COMPLETED' ? (
-                      <DButton
-                        size="sm"
-                        variant="outline"
-                        disabled={!hasValidWorkAssignment(line, unit) || isMutating}
-                        onClick={() => onCompleteUnit(unit.index)}
-                      >
-                        Selesaikan
-                      </DButton>
-                    ) : null}
-                  </div>
                 </div>
                 <ServiceWorkContributorEditor
                   contributors={unit.contributors}
