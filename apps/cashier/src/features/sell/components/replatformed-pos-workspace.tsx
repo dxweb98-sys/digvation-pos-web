@@ -5,6 +5,7 @@ import {
   DBadge as Badge,
   DButton,
   DButton as Button,
+  DCheckbox,
   DCombobox,
   DCombobox as Combobox,
   DDialog,
@@ -14,6 +15,7 @@ import {
   DInput as Input,
   DSearchInput as SearchInput,
   DSkeleton as Skeleton,
+  useToast,
 } from '@digvation/ui';
 import { useQuery } from '@tanstack/react-query';
 import {
@@ -63,11 +65,17 @@ import { SaleLineTaskDialog } from './sale-line-task-dialog';
 import './replatformed-pos-workspace.css';
 
 type Workspace = ReturnType<typeof useCashierTransactionWorkspace>;
-type QueueStatus = 'DRAFT' | 'PROGRESS' | 'COMPLETED' | 'CANCELED';
+type QueueStatus = 'QUEUED' | 'PROGRESS' | 'COMPLETED' | 'CANCELED';
+type FulfillmentDestination = 'QUEUE' | 'START_PROCESS';
+interface QueuedSaleEntry {
+  saleId: string;
+  sellingLocationId: string;
+}
 
 type PosCustomer = TransactionCustomer;
 
 const CURRENT_CUSTOMER_KEY = 'digvation-pos-demo-current-customer';
+const QUEUED_SALE_IDS_KEY = 'digvation-pos-demo-queued-sale-ids';
 const saleCustomerKey = (saleId: string) => `digvation-pos-demo-customer:${saleId}`;
 
 function readStoredCustomer(key: string): PosCustomer | null {
@@ -88,11 +96,37 @@ function writeStoredCustomer(key: string, customer: PosCustomer | null): void {
   }
 }
 
+function readQueuedSaleEntries(): QueuedSaleEntry[] {
+  try {
+    const raw = window.sessionStorage.getItem(QUEUED_SALE_IDS_KEY);
+    const parsed = raw ? JSON.parse(raw) : [];
+    return Array.isArray(parsed)
+      ? parsed.filter(
+          (value): value is QueuedSaleEntry =>
+            typeof value === 'object' &&
+            value !== null &&
+            typeof value.saleId === 'string' &&
+            typeof value.sellingLocationId === 'string',
+        )
+      : [];
+  } catch {
+    return [];
+  }
+}
+
+function writeQueuedSaleEntries(entries: readonly QueuedSaleEntry[]): void {
+  try {
+    window.sessionStorage.setItem(QUEUED_SALE_IDS_KEY, JSON.stringify(entries));
+  } catch {
+    // Queue presentation state remains available for the current session when storage is unavailable.
+  }
+}
+
 const statusMeta: Record<
   QueueStatus,
   { label: string; icon: ReactNode; tone: string; soft: string }
 > = {
-  DRAFT: {
+  QUEUED: {
     label: 'Antrian',
     icon: <Clock className="size-[15px]" />,
     tone: 'bg-[var(--color-warning)]/10 text-[var(--color-warning)]',
@@ -163,7 +197,7 @@ function queueStatus(sale: Sale): QueueStatus {
   if (sale.status === 'FINALIZED') return 'COMPLETED';
   if (sale.status === 'VOIDED') return 'CANCELED';
   if (sale.lines.some((line) => line.fulfillment?.status === 'IN_PROGRESS')) return 'PROGRESS';
-  return 'DRAFT';
+  return 'QUEUED';
 }
 
 function isPositiveDecimal(value: string) {
@@ -221,9 +255,41 @@ function workflowIssues(sale: Sale, requiresEmployeeAttribution = true) {
   return issues;
 }
 
+function processIssues(sale: Sale | null, lines: readonly SaleLine[]): string[] {
+  if (!sale) return ['Tambahkan setidaknya satu item ke cart.'];
+  if (sale.status !== 'OPEN') return ['Hanya transaksi aktif yang dapat diproses.'];
+  if (!lines.length) return ['Tambahkan setidaknya satu item ke cart.'];
+
+  return lines.flatMap((line) => {
+    if (!isPositiveDecimal(line.quantity))
+      return [`${line.itemNameSnapshot}: qty harus lebih dari 0.`];
+    if (!isPositiveDecimal(line.effectiveUnitPrice))
+      return [`${line.itemNameSnapshot}: harga belum tersedia.`];
+    return [];
+  });
+}
+
+function hasSuccessfulCheckout(sale: Sale): boolean {
+  if (sale.payments.some((payment) => payment.status === 'PENDING')) return false;
+  const settledAmount = sale.payments
+    .filter((payment) => payment.status === 'SUCCEEDED')
+    .reduce((sum, payment) => sum.plus(createDecimal(payment.appliedAmount)), createDecimal('0'));
+  return settledAmount.equals(createDecimal(sale.totalAmount));
+}
+
+function requiresAssignmentHandoff(line: SaleLine): boolean {
+  return (
+    line.removedAt === null &&
+    line.itemTypeSnapshot === 'SERVICE' &&
+    line.fulfillmentBehaviorSnapshot === 'TRACKED' &&
+    line.employeeAssignmentModeSnapshot === 'REQUIRED'
+  );
+}
+
 export function ReplatformedPosWorkspace({ workspace }: { workspace: Workspace }) {
   const runtime = useRuntime();
   const { session } = useAuth();
+  const { showToast } = useToast();
   const adapter = useMemo(
     () => createCashierTransactionAdapter(runtime.apiBaseUrl),
     [runtime.apiBaseUrl],
@@ -235,7 +301,9 @@ export function ReplatformedPosWorkspace({ workspace }: { workspace: Workspace }
   });
   const [search, setSearch] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('');
-  const [queueTab, setQueueTab] = useState<QueueStatus>('DRAFT');
+  const [queueTab, setQueueTab] = useState<QueueStatus>('QUEUED');
+  const [queuedSaleEntries, setQueuedSaleEntries] =
+    useState<QueuedSaleEntry[]>(readQueuedSaleEntries);
   const [queueIssues, setQueueIssues] = useState<Record<string, string[]>>({});
   const [queueOpen, setQueueOpen] = useState(false);
   const [queueDetail, setQueueDetail] = useState<Sale | null>(null);
@@ -247,11 +315,16 @@ export function ReplatformedPosWorkspace({ workspace }: { workspace: Workspace }
   );
   const [customerPickerOpen, setCustomerPickerOpen] = useState(false);
   const [checkoutOpen, setCheckoutOpen] = useState(false);
+  const [payNow, setPayNow] = useState(true);
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('CASH');
   const [provider, setProvider] = useState('');
   const [tender, setTender] = useState('');
   const [reviewTarget, setReviewTarget] = useState<Sale | null>(null);
   const [assignmentLine, setAssignmentLine] = useState<SaleLine | null>(null);
+  const [startProcessHandoff, setStartProcessHandoff] = useState<{
+    saleId: string;
+    lineId: string;
+  } | null>(null);
   const [receiptSaleId, setReceiptSaleId] = useState<string | null>(null);
 
   const sale = workspace.viewModel.sale;
@@ -260,11 +333,26 @@ export function ReplatformedPosWorkspace({ workspace }: { workspace: Workspace }
 
   useEffect(() => {
     writeStoredCustomer(CURRENT_CUSTOMER_KEY, cartCustomer);
-    if (sale?.id) writeStoredCustomer(saleCustomerKey(sale.id), cartCustomer);
-  }, [cartCustomer, sale?.id]);
+    if (sale?.id && !queuedSaleEntries.some((entry) => entry.saleId === sale.id)) {
+      writeStoredCustomer(saleCustomerKey(sale.id), cartCustomer);
+    }
+  }, [cartCustomer, queuedSaleEntries, sale?.id]);
 
   const displayedQueueDetail =
-    receiptSaleId && sale?.id === receiptSaleId && sale.status === 'FINALIZED' ? sale : queueDetail;
+    receiptSaleId && sale?.id === receiptSaleId && hasSuccessfulCheckout(sale) ? sale : queueDetail;
+
+  useEffect(() => {
+    if (!startProcessHandoff || assignmentLine || sale?.id !== startProcessHandoff.saleId) return;
+
+    const line = sale.lines.find((candidate) => candidate.id === startProcessHandoff.lineId);
+    if (line) {
+      setAssignmentLine(line);
+      return;
+    }
+
+    setStartProcessHandoff(null);
+    workspace.clearProcessedDraft();
+  }, [assignmentLine, sale, startProcessHandoff, workspace]);
   const categories = useMemo(
     () => [
       ...new Set(
@@ -284,18 +372,98 @@ export function ReplatformedPosWorkspace({ workspace }: { workspace: Workspace }
     );
   }, [search, selectedCategory, workspace.items]);
   const groups = useMemo(() => {
-    const records = transactionsQuery.data?.items ?? [];
+    const queuedSaleIds = new Set(
+      queuedSaleEntries
+        .filter((entry) => entry.sellingLocationId === workspace.selectedLocationId)
+        .map((entry) => entry.saleId),
+    );
+    const records = (transactionsQuery.data?.items ?? []).filter((record) =>
+      queuedSaleIds.has(record.id),
+    );
     return {
-      DRAFT: records.filter((record) => queueStatus(record) === 'DRAFT'),
+      QUEUED: records.filter((record) => queueStatus(record) === 'QUEUED'),
       PROGRESS: records.filter((record) => queueStatus(record) === 'PROGRESS'),
       COMPLETED: records.filter((record) => queueStatus(record) === 'COMPLETED'),
       CANCELED: records.filter((record) => queueStatus(record) === 'CANCELED'),
     };
-  }, [transactionsQuery.data]);
+  }, [queuedSaleEntries, transactionsQuery.data, workspace.selectedLocationId]);
 
   const selectType = (type: CatalogItemTypeFilter) => {
     workspace.setItemType(type);
     setSelectedCategory('');
+  };
+  const openCheckout = () => {
+    const issues = processIssues(sale, lines);
+    if (issues.length) {
+      showToast({ title: 'Cart belum siap checkout', description: issues[0], variant: 'warning' });
+      return;
+    }
+    if (workspace.viewModel.synchronization !== 'CLEAN') {
+      showToast({
+        title: 'Tunggu perubahan selesai',
+        description: 'Cart sedang menyinkronkan perubahan terakhir.',
+        variant: 'warning',
+      });
+      return;
+    }
+
+    setTender(total);
+    setPayNow(true);
+    setPaymentMethod('CASH');
+    setProvider('');
+    setCartOpen(false);
+    setCheckoutOpen(true);
+  };
+
+  const commitCheckoutToQueue = (
+    completedSale: Sale,
+    wasPaid: boolean,
+    destination: FulfillmentDestination,
+  ) => {
+    const nextQueuedSaleEntries = queuedSaleEntries.some(
+      (entry) => entry.saleId === completedSale.id,
+    )
+      ? queuedSaleEntries
+      : [
+          ...queuedSaleEntries,
+          { saleId: completedSale.id, sellingLocationId: completedSale.sellingLocationId },
+        ];
+
+    writeStoredCustomer(saleCustomerKey(completedSale.id), cartCustomer);
+    writeQueuedSaleEntries(nextQueuedSaleEntries);
+    setQueuedSaleEntries(nextQueuedSaleEntries);
+    setQueueTab('QUEUED');
+    setQueueOpen(true);
+    setCartOpen(false);
+    setCartCustomer(null);
+    setCheckoutOpen(false);
+
+    const assignmentLine =
+      destination === 'START_PROCESS'
+        ? completedSale.lines.find(requiresAssignmentHandoff)
+        : undefined;
+    if (assignmentLine) {
+      setStartProcessHandoff({ saleId: completedSale.id, lineId: assignmentLine.id });
+      workspace.resumeSale(completedSale.id);
+    } else {
+      workspace.clearProcessedDraft();
+    }
+
+    if (wasPaid && destination === 'QUEUE') {
+      setReceiptSaleId(completedSale.id);
+      setQueueDetail(completedSale);
+    }
+
+    showToast({
+      title: wasPaid ? 'Pembayaran berhasil' : 'Transaksi berhasil dibuat',
+      description:
+        destination === 'START_PROCESS' && assignmentLine
+          ? `${transactionNumber(completedSale.id)} masuk antrian. Lengkapi penugasan layanan sebelum memulai proses.`
+          : wasPaid
+            ? `${transactionNumber(completedSale.id)} lunas dan masuk antrian.`
+            : `${transactionNumber(completedSale.id)} masuk antrian. Pembayaran masih belum diterima.`,
+      variant: 'success',
+    });
   };
   const resume = (transaction: Sale) => {
     workspace.resumeSale(transaction.id);
@@ -327,20 +495,41 @@ export function ReplatformedPosWorkspace({ workspace }: { workspace: Workspace }
     setCancelTarget(null);
     setCancelReason('');
   };
-  const pay = () => {
+  const completeCheckout = async (destination: FulfillmentDestination) => {
     if (!sale || !lines.length) return;
+
+    if (!payNow) {
+      commitCheckoutToQueue(sale, false, destination);
+      return;
+    }
+
     const applied = paymentMethod === 'CASH' ? tender || total : total;
     if (!isPositiveDecimal(applied)) return;
     if (paymentMethod === 'CASH' && createDecimal(applied).lessThan(createDecimal(total))) return;
     if ((paymentMethod === 'BANK_TRANSFER' || paymentMethod === 'WALLET') && !provider) return;
-    workspace.createPayment(
-      paymentMethod,
-      total,
-      paymentMethod === 'CASH' ? applied : undefined,
-      provider || undefined,
-    );
-    setCheckoutOpen(false);
-    setCartOpen(true);
+    try {
+      const completedSale = await workspace.createPayment(
+        paymentMethod,
+        total,
+        paymentMethod === 'CASH' ? applied : undefined,
+        provider || undefined,
+      );
+      if (!hasSuccessfulCheckout(completedSale)) {
+        showToast({
+          title: 'Checkout belum selesai',
+          description: 'Pembayaran belum berhasil diselesaikan. Cart tetap tersedia.',
+          variant: 'warning',
+        });
+        return;
+      }
+      commitCheckoutToQueue(completedSale, true, destination);
+    } catch {
+      showToast({
+        title: 'Checkout gagal',
+        description: 'Pembayaran belum berhasil diproses. Cart tidak diubah.',
+        variant: 'danger',
+      });
+    }
   };
   const quickTender = ['50000', '100000', '150000', '200000', '500000'];
   const effectiveTender = tender || total;
@@ -481,19 +670,10 @@ export function ReplatformedPosWorkspace({ workspace }: { workspace: Workspace }
         gross={sale?.grossAmount ?? '0.0000'}
         locale={workspace.locale}
         customer={cartCustomer}
-        employees={workspace.employees}
         onChooseCustomer={() => setCustomerPickerOpen(true)}
-        onManageEmployee={setAssignmentLine}
         onQuantity={(line, next) => workspace.changeQuantity(line, next)}
         onRemove={workspace.removeLine}
-        onManageLine={workspace.openLineTask}
-        onCheckout={() => {
-          setTender(total);
-          setPaymentMethod('CASH');
-          setProvider('');
-          setCartOpen(false);
-          setCheckoutOpen(true);
-        }}
+        onCheckout={openCheckout}
       />
 
       <ReferenceCustomerDialog
@@ -512,10 +692,14 @@ export function ReplatformedPosWorkspace({ workspace }: { workspace: Workspace }
 
       <ReferencePaymentDialog
         open={checkoutOpen}
-        onClose={() => setCheckoutOpen(false)}
+        onClose={() => {
+          setCheckoutOpen(false);
+          setCartOpen(true);
+        }}
         lines={lines}
         total={total}
         gross={sale?.grossAmount ?? '0.0000'}
+        discountAmount={sale?.discountAmount ?? '0.0000'}
         locale={workspace.locale}
         customer={cartCustomer}
         method={paymentMethod}
@@ -523,6 +707,8 @@ export function ReplatformedPosWorkspace({ workspace }: { workspace: Workspace }
         tender={tender}
         change={change}
         isCashShort={cashShort}
+        payNow={payNow}
+        onPayNowChange={setPayNow}
         onMethod={(next) => {
           setPaymentMethod(next);
           setProvider('');
@@ -530,8 +716,9 @@ export function ReplatformedPosWorkspace({ workspace }: { workspace: Workspace }
         onProvider={setProvider}
         onTender={setTender}
         quickTender={quickTender}
-        onSaveDraft={() => setCheckoutOpen(false)}
-        onPay={pay}
+        isSubmitting={workspace.isCoreMutating}
+        onQueue={() => void completeCheckout('QUEUE')}
+        onStartProcess={() => void completeCheckout('START_PROCESS')}
       />
       <ReferenceTransactionDetail
         sale={displayedQueueDetail}
@@ -582,13 +769,23 @@ export function ReplatformedPosWorkspace({ workspace }: { workspace: Workspace }
         line={assignmentLine}
         employees={workspace.employees}
         locale={workspace.locale}
-        onClose={() => setAssignmentLine(null)}
+        onClose={() => {
+          setAssignmentLine(null);
+          if (startProcessHandoff) {
+            setStartProcessHandoff(null);
+            workspace.clearProcessedDraft();
+          }
+        }}
         onSave={(employeeIds, contributors) => {
           if (!assignmentLine) return;
           workspace.setAssignments(assignmentLine, employeeIds);
           if (assignmentLine.allowEmployeeContributionSnapshot)
             workspace.setContributions(assignmentLine, contributors);
           setAssignmentLine(null);
+          if (startProcessHandoff) {
+            setStartProcessHandoff(null);
+            workspace.clearProcessedDraft();
+          }
         }}
       />
       {workspace.lineTask ? (
@@ -847,7 +1044,7 @@ function ReferenceQueueCard({
   const customer = saleCustomer(sale.id);
   const actionItems = [
     { label: 'Detail', icon: <Eye className="size-3.5" />, onSelect: () => onView(sale) },
-    ...(status === 'DRAFT'
+    ...(status === 'QUEUED'
       ? [
           {
             label: 'Lanjutkan',
@@ -973,12 +1170,9 @@ function ReferenceFloatingCart({
   gross,
   locale,
   customer,
-  employees,
   onChooseCustomer,
-  onManageEmployee,
   onQuantity,
   onRemove,
-  onManageLine,
   onCheckout,
 }: {
   open: boolean;
@@ -988,12 +1182,9 @@ function ReferenceFloatingCart({
   gross: string;
   locale: string;
   customer: PosCustomer | null;
-  employees: readonly Employee[];
   onChooseCustomer: () => void;
-  onManageEmployee: (line: SaleLine) => void;
   onQuantity: (line: SaleLine, quantity: string) => void;
   onRemove: (line: SaleLine) => void;
-  onManageLine: (line: SaleLine) => void;
   onCheckout: () => void;
 }) {
   const panel = (
@@ -1003,12 +1194,9 @@ function ReferenceFloatingCart({
       gross={gross}
       locale={locale}
       customer={customer}
-      employees={employees}
       onChooseCustomer={onChooseCustomer}
-      onManageEmployee={onManageEmployee}
       onQuantity={onQuantity}
       onRemove={onRemove}
-      onManageLine={onManageLine}
       onCheckout={onCheckout}
     />
   );
@@ -1103,12 +1291,9 @@ function ReferenceCartPanel({
   gross,
   locale,
   customer,
-  employees,
   onChooseCustomer,
-  onManageEmployee,
   onQuantity,
   onRemove,
-  onManageLine,
   onCheckout,
 }: {
   lines: readonly SaleLine[];
@@ -1116,12 +1301,9 @@ function ReferenceCartPanel({
   gross: string;
   locale: string;
   customer: PosCustomer | null;
-  employees: readonly Employee[];
   onChooseCustomer: () => void;
-  onManageEmployee: (line: SaleLine) => void;
   onQuantity: (line: SaleLine, quantity: string) => void;
   onRemove: (line: SaleLine) => void;
-  onManageLine: (line: SaleLine) => void;
   onCheckout: () => void;
 }) {
   const status = customerStatus(customer);
@@ -1191,20 +1373,6 @@ function ReferenceCartPanel({
                     <Trash2 className="size-3.5" />
                   </button>
                 </div>
-                {line.itemTypeSnapshot === 'SERVICE' ? (
-                  <button
-                    type="button"
-                    onClick={() => onManageEmployee(line)}
-                    className="mt-2 flex w-full items-center justify-between gap-2 rounded-xl bg-[var(--color-brand)]/5 px-3 py-2 text-left text-xs transition-colors hover:bg-[var(--color-brand)]/10"
-                  >
-                    <span className="min-w-0 truncate font-semibold text-[var(--color-brand)]">
-                      {employeeSummary(line, employees)}
-                    </span>
-                    <span className="shrink-0 text-[10px] font-semibold text-[var(--color-text-muted)]">
-                      Atur
-                    </span>
-                  </button>
-                ) : null}
                 <div className="mt-3 flex items-center justify-between gap-3">
                   <div className="inline-grid grid-cols-[36px_48px_36px] items-center overflow-hidden rounded-lg border border-[var(--color-border)] bg-[var(--color-background)] shadow-[inset_0_1px_0_rgb(15_23_42_/_0.02)]">
                     <button
@@ -1237,15 +1405,6 @@ function ReferenceCartPanel({
                     {money(line.totalAmount, locale)}
                   </p>
                 </div>
-                {line.itemTypeSnapshot === 'SERVICE' ? (
-                  <button
-                    type="button"
-                    onClick={() => onManageLine(line)}
-                    className="mt-2 text-xs font-semibold text-[var(--color-brand)] hover:underline"
-                  >
-                    Kelola layanan
-                  </button>
-                ) : null}
               </div>
             ))}
           </div>
@@ -1455,6 +1614,7 @@ function ReferencePaymentDialog({
   lines,
   total,
   gross,
+  discountAmount,
   locale,
   customer,
   method,
@@ -1462,18 +1622,22 @@ function ReferencePaymentDialog({
   tender,
   change,
   isCashShort,
+  payNow,
+  onPayNowChange,
   onMethod,
   onProvider,
   onTender,
   quickTender,
-  onSaveDraft,
-  onPay,
+  isSubmitting,
+  onQueue,
+  onStartProcess,
 }: {
   open: boolean;
   onClose: () => void;
   lines: readonly SaleLine[];
   total: string;
   gross: string;
+  discountAmount: string;
   locale: string;
   customer: PosCustomer | null;
   method: PaymentMethod;
@@ -1481,16 +1645,21 @@ function ReferencePaymentDialog({
   tender: string;
   change: string;
   isCashShort: boolean;
+  payNow: boolean;
+  onPayNowChange: (payNow: boolean) => void;
   onMethod: (method: PaymentMethod) => void;
   onProvider: (provider: string) => void;
   onTender: (amount: string) => void;
   quickTender: readonly string[];
-  onSaveDraft: () => void;
-  onPay: () => void;
+  isSubmitting: boolean;
+  onQueue: () => void;
+  onStartProcess: () => void;
 }) {
   const isCash = method === 'CASH';
   const needsProvider = method === 'BANK_TRANSFER' || method === 'WALLET';
-  const canPay = lines.length > 0 && !isCashShort && (!needsProvider || Boolean(provider));
+  const canPay =
+    lines.length > 0 && !isCashShort && (!needsProvider || Boolean(provider)) && !isSubmitting;
+  const canConfirm = payNow ? canPay : lines.length > 0 && !isSubmitting;
   const methods: Array<{ value: PaymentMethod; label: string; icon: ReactNode }> = [
     { value: 'CASH', label: 'Tunai', icon: <Banknote className="size-[15px]" /> },
     { value: 'BANK_TRANSFER', label: 'Transfer', icon: <CreditCard className="size-[15px]" /> },
@@ -1504,204 +1673,262 @@ function ReferencePaymentDialog({
   return (
     <DDialog
       title="Checkout pembayaran"
-      description="Review pesanan sebelum simpan draft atau bayar langsung."
+      description="Review transaksi dan pembayaran sebelum masuk antrian."
       open={open}
       onClose={onClose}
       ariaLabel="Checkout payment"
       closeOnEscape
       closeOnOverlay
       className="pos-reference-dialog w-full max-w-lg overflow-hidden rounded-t-2xl bg-[var(--color-surface)] shadow-xl sm:rounded-xl"
-    >
-      <div className="flex max-h-[85dvh] min-h-0 flex-col">
-        <header className="flex shrink-0 items-center justify-between border-b border-[var(--color-border)] px-6 py-4">
-          <div>
-            <h2 className="text-lg font-semibold">Checkout Pembayaran</h2>
-            <p className="mt-0.5 text-sm text-[var(--color-text-muted)]">
-              Review pesanan sebelum simpan draft atau bayar langsung.
-            </p>
-          </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="rounded-lg p-2 text-[var(--color-text-muted)] hover:bg-[var(--color-surface-muted)]"
-          >
-            <X className="size-[18px]" />
-          </button>
-        </header>
-        <div className="min-h-0 flex-1 space-y-3 overflow-y-auto px-4 py-4">
-          <div className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-background)] p-4">
-            <div className="flex items-start justify-between gap-4">
-              <div>
-                <p className="text-xs text-[var(--color-text-muted)]">Total Pembayaran</p>
-                <h3 className="mt-0.5 text-2xl font-bold leading-tight text-[var(--color-brand)]">
-                  {money(total, locale)}
-                </h3>
-              </div>
-              <div className="min-w-0 text-right">
-                <p className="text-xs text-[var(--color-text-muted)]">Pelanggan</p>
-                <p className="max-w-[170px] truncate text-sm font-semibold">
-                  {customer?.name ?? 'Pelanggan umum'}
-                </p>
-                <p className="text-[11px] text-[var(--color-text-muted)]">{lines.length} item</p>
-              </div>
-            </div>
-            <div className="mt-3 rounded-xl bg-[var(--color-surface-muted)]/60 px-3 py-2 text-xs">
-              <div className="flex justify-between">
-                <span className="text-[var(--color-text-muted)]">Subtotal</span>
-                <span className="font-semibold">{money(gross, locale)}</span>
-              </div>
-            </div>
-          </div>
-          <div className="overflow-hidden rounded-2xl border border-[var(--color-border)] bg-[var(--color-background)]">
-            <div className="flex items-center justify-between border-b border-[var(--color-border)] px-4 py-2.5">
-              <p className="text-xs font-semibold uppercase tracking-wide text-[var(--color-text-muted)]">
-                Detail Pesanan
-              </p>
-              <span className="text-xs text-[var(--color-text-muted)]">{lines.length} item</span>
-            </div>
-            <div className="max-h-[120px] divide-y divide-[var(--color-border)] overflow-y-auto">
-              {lines.map((line) => (
-                <div key={line.id} className="px-4 py-2.5">
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <p className="truncate text-sm font-semibold">{line.itemNameSnapshot}</p>
-                      <p className="mt-0.5 text-xs text-[var(--color-text-muted)]">
-                        {quantity(line.quantity)} × {money(line.effectiveUnitPrice, locale)}
-                        {line.itemTypeSnapshot === 'SERVICE' ? (
-                          <span className="ml-1 font-semibold text-[var(--color-brand)]">
-                            · Jasa
-                          </span>
-                        ) : null}
-                      </p>
-                    </div>
-                    <p className="shrink-0 text-sm font-bold">{money(line.totalAmount, locale)}</p>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-          <div className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-background)] p-4">
-            <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-[var(--color-text-muted)]">
-              Metode Pembayaran
-            </p>
-            <div className="grid grid-cols-4 gap-2">
-              {methods.map((option) => (
-                <button
-                  key={option.value}
-                  type="button"
-                  onClick={() => onMethod(option.value)}
-                  className={`flex h-10 items-center justify-center gap-1.5 rounded-xl border text-xs font-semibold transition-all active:scale-[.98] ${method === option.value ? 'border-[var(--color-brand)] bg-[var(--color-brand)] text-white shadow-sm' : 'border-[var(--color-border)] bg-[var(--color-background)] text-[var(--color-text-muted)] hover:bg-[var(--color-surface-muted)] hover:text-[var(--color-text)]'}`}
-                >
-                  {option.icon}
-                  <span className="hidden sm:inline">{option.label}</span>
-                </button>
-              ))}
-            </div>
-            {needsProvider ? (
-              <div className="mt-3">
-                <p className="mb-2 text-xs font-semibold text-[var(--color-text-muted)]">
-                  Pilih {method === 'BANK_TRANSFER' ? 'Bank' : 'E-Wallet'}
-                </p>
-                <div className="grid grid-cols-4 gap-2">
-                  {providerOptions.map((option) => (
-                    <button
-                      key={option}
-                      type="button"
-                      onClick={() => onProvider(option)}
-                      className={`h-9 rounded-xl border text-xs font-semibold transition-all active:scale-[.98] ${provider === option ? 'border-[var(--color-brand)] bg-[var(--color-brand)]/10 text-[var(--color-brand)]' : 'border-[var(--color-border)] bg-[var(--color-background)] text-[var(--color-text-muted)] hover:bg-[var(--color-surface-muted)]'}`}
-                    >
-                      {option}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            ) : null}
-            {method === 'QRIS' ? (
-              <div className="mt-3 rounded-xl border border-[var(--color-brand)]/20 bg-[var(--color-brand)]/5 p-3">
-                <p className="text-sm font-bold text-[var(--color-brand)]">QRIS</p>
-                <p className="mt-1 text-xs text-[var(--color-text-muted)]">
-                  Pembayaran QRIS akan dicatat sebagai pembayaran berhasil untuk transaksi ini.
-                </p>
-              </div>
-            ) : null}
-          </div>
-          {isCash ? (
-            <div className="space-y-3 rounded-2xl border border-[var(--color-border)] bg-[var(--color-background)] p-4">
-              <label className="block text-sm font-medium">
-                Uang dibayar
-                <div className="relative mt-1.5">
-                  <PosCurrencyInput
-                    aria-label="Cash tendered"
-                    className="h-10 rounded-lg bg-[var(--color-surface)] text-right text-lg font-bold"
-                    value={tender}
-                    onChange={onTender}
-                  />
-                </div>
-              </label>
-              <div className="grid grid-cols-3 gap-2">
-                {[total, ...quickTender]
-                  .filter((amount, index, list) => list.indexOf(amount) === index)
-                  .slice(0, 6)
-                  .map((amount) => (
-                    <button
-                      key={amount}
-                      type="button"
-                      onClick={() => onTender(amount)}
-                      className={`h-9 rounded-lg border text-[11px] font-semibold transition-all active:scale-[.98] ${tender === amount ? 'border-[var(--color-brand)] bg-[var(--color-brand)]/10 text-[var(--color-brand)]' : 'border-[var(--color-border)] bg-[var(--color-background)] hover:bg-[var(--color-surface-muted)]'}`}
-                    >
-                      {money(amount, locale)}
-                    </button>
-                  ))}
-              </div>
-              <div
-                className={`flex items-center justify-between rounded-xl px-3 py-2 ${isCashShort ? 'bg-[var(--color-warning)]/10 text-[var(--color-warning)]' : 'bg-[var(--color-success)]/10 text-[var(--color-success)]'}`}
-              >
-                <span className="text-sm font-bold">
-                  {isCashShort ? 'Pembayaran kurang' : 'Kembalian'}
-                </span>
-                <span className="text-sm font-bold">
-                  {isCashShort
-                    ? money(
-                        createDecimal(total)
-                          .minus(createDecimal(tender || '0'))
-                          .toFixed(4),
-                        locale,
-                      )
-                    : money(change, locale)}
-                </span>
-              </div>
-            </div>
-          ) : (
-            <div className="rounded-2xl border border-[var(--color-brand)]/20 bg-[var(--color-brand)]/5 p-3">
-              <p className="text-sm font-bold text-[var(--color-brand)]">
-                Pembayaran{' '}
-                {method === 'BANK_TRANSFER'
-                  ? 'Transfer'
-                  : method === 'WALLET'
-                    ? 'E-Wallet'
-                    : 'QRIS'}
-              </p>
-              <p className="mt-1 text-xs text-[var(--color-text-muted)]">
-                Pilih provider bila diperlukan, lalu catat pembayaran ini.
-              </p>
-            </div>
-          )}
-        </div>
-        <footer className="flex shrink-0 flex-col-reverse justify-end gap-2 border-t border-[var(--color-border)] bg-[var(--color-surface-muted)]/30 px-6 py-3 sm:flex-row">
+      footer={
+        <div className="flex shrink-0 flex-col-reverse justify-end gap-2 sm:flex-row">
           <DButton variant="ghost" onClick={onClose}>
             Batal
           </DButton>
-          <DButton variant="outline" disabled={!lines.length} onClick={onSaveDraft}>
-            Simpan Draft
+          <DButton
+            variant="outline"
+            disabled={!canConfirm}
+            loading={isSubmitting}
+            onClick={onQueue}
+          >
+            Masuk Antrian
           </DButton>
           <DButton
-            disabled={!canPay}
-            onClick={onPay}
+            disabled={!canConfirm}
+            loading={isSubmitting}
+            onClick={onStartProcess}
             leftIcon={<CheckCircle2 className="size-3.5" />}
           >
-            {method === 'QRIS' ? 'Bayar QRIS' : 'Bayar Langsung'}
+            Lanjut Proses
           </DButton>
-        </footer>
+        </div>
+      }
+    >
+      <div className="min-h-0 flex-1 space-y-3 overflow-y-auto">
+        <div className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-background)] p-4">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <p className="text-xs text-[var(--color-text-muted)]">Total Pembayaran</p>
+              <h3 className="mt-0.5 text-2xl font-bold leading-tight text-[var(--color-brand)]">
+                {money(total, locale)}
+              </h3>
+            </div>
+            <div className="min-w-0 text-right">
+              <p className="text-xs text-[var(--color-text-muted)]">Pelanggan</p>
+              <p className="max-w-[170px] truncate text-sm font-semibold">
+                {customer?.name ?? 'Pelanggan umum'}
+              </p>
+              <Badge
+                variant={customerStatus(customer).variant}
+                className="mt-1 px-2 py-0 text-[10px]"
+              >
+                {customerStatus(customer).label}
+              </Badge>
+              <p className="text-[11px] text-[var(--color-text-muted)]">{lines.length} item</p>
+            </div>
+          </div>
+          <div className="mt-3 rounded-xl bg-[var(--color-surface-muted)]/60 px-3 py-2 text-xs">
+            <div className="flex justify-between">
+              <span className="text-[var(--color-text-muted)]">Subtotal</span>
+              <span className="font-semibold">{money(gross, locale)}</span>
+            </div>
+            <div className="mt-1 flex justify-between">
+              <span className="text-[var(--color-text-muted)]">Diskon transaksi</span>
+              <span className="font-semibold">{money(discountAmount, locale)}</span>
+            </div>
+            <div className="mt-2 flex justify-between border-t border-[var(--color-border)] pt-2 text-sm">
+              <span className="font-bold">Grand total</span>
+              <span className="font-bold text-[var(--color-brand)]">{money(total, locale)}</span>
+            </div>
+          </div>
+        </div>
+        <div className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-background)] p-4">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <p className="text-sm font-semibold">Promo</p>
+              <p className="mt-1 text-xs text-[var(--color-text-muted)]">
+                Promo akan dihitung dan divalidasi oleh sistem saat kapabilitas backend tersedia.
+              </p>
+            </div>
+            <span className="shrink-0 rounded-full bg-[var(--color-surface-muted)] px-2 py-1 text-[10px] font-semibold text-[var(--color-text-muted)]">
+              Belum tersedia
+            </span>
+          </div>
+        </div>
+        {customer?.membership ? (
+          <div className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-background)] p-4">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <p className="text-sm font-semibold">Gunakan poin member</p>
+                <p className="mt-1 text-xs text-[var(--color-text-muted)]">
+                  Saldo, nilai penukaran, dan kelayakan poin akan divalidasi oleh sistem.
+                </p>
+              </div>
+              <span className="shrink-0 rounded-full bg-[var(--color-surface-muted)] px-2 py-1 text-[10px] font-semibold text-[var(--color-text-muted)]">
+                Opsional
+              </span>
+            </div>
+          </div>
+        ) : null}
+        <div className="overflow-hidden rounded-2xl border border-[var(--color-border)] bg-[var(--color-background)]">
+          <div className="flex items-center justify-between border-b border-[var(--color-border)] px-4 py-2.5">
+            <p className="text-xs font-semibold uppercase tracking-wide text-[var(--color-text-muted)]">
+              Detail Pesanan
+            </p>
+            <span className="text-xs text-[var(--color-text-muted)]">{lines.length} item</span>
+          </div>
+          <div className="max-h-[120px] divide-y divide-[var(--color-border)] overflow-y-auto">
+            {lines.map((line) => (
+              <div key={line.id} className="px-4 py-2.5">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-semibold">{line.itemNameSnapshot}</p>
+                    <p className="mt-0.5 text-xs text-[var(--color-text-muted)]">
+                      {quantity(line.quantity)} × {money(line.effectiveUnitPrice, locale)}
+                      {line.itemTypeSnapshot === 'SERVICE' ? (
+                        <span className="ml-1 font-semibold text-[var(--color-brand)]">· Jasa</span>
+                      ) : null}
+                    </p>
+                  </div>
+                  <p className="shrink-0 text-sm font-bold">{money(line.totalAmount, locale)}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+        <label className="flex cursor-pointer items-start gap-3 rounded-2xl border border-[var(--color-border)] bg-[var(--color-background)] p-4">
+          <DCheckbox
+            checked={payNow}
+            onChange={(event) => onPayNowChange(event.target.checked)}
+            className="mt-0.5"
+          />
+          <span>
+            <span className="block text-sm font-semibold">Bayar sekarang</span>
+            <span className="mt-1 block text-xs leading-5 text-[var(--color-text-muted)]">
+              Aktifkan untuk mencatat pembayaran sebelum transaksi diteruskan. Nonaktifkan untuk
+              menyimpan transaksi dengan pembayaran belum diterima.
+            </span>
+          </span>
+        </label>
+        {payNow ? (
+          <>
+            <div className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-background)] p-4">
+              <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-[var(--color-text-muted)]">
+                Metode Pembayaran
+              </p>
+              <div className="grid grid-cols-4 gap-2">
+                {methods.map((option) => (
+                  <button
+                    key={option.value}
+                    type="button"
+                    onClick={() => onMethod(option.value)}
+                    className={`flex h-10 items-center justify-center gap-1.5 rounded-xl border text-xs font-semibold transition-all active:scale-[.98] ${method === option.value ? 'border-[var(--color-brand)] bg-[var(--color-brand)] text-white shadow-sm' : 'border-[var(--color-border)] bg-[var(--color-background)] text-[var(--color-text-muted)] hover:bg-[var(--color-surface-muted)] hover:text-[var(--color-text)]'}`}
+                  >
+                    {option.icon}
+                    <span className="hidden sm:inline">{option.label}</span>
+                  </button>
+                ))}
+              </div>
+              {needsProvider ? (
+                <div className="mt-3">
+                  <p className="mb-2 text-xs font-semibold text-[var(--color-text-muted)]">
+                    Pilih {method === 'BANK_TRANSFER' ? 'Bank' : 'E-Wallet'}
+                  </p>
+                  <div className="grid grid-cols-4 gap-2">
+                    {providerOptions.map((option) => (
+                      <button
+                        key={option}
+                        type="button"
+                        onClick={() => onProvider(option)}
+                        className={`h-9 rounded-xl border text-xs font-semibold transition-all active:scale-[.98] ${provider === option ? 'border-[var(--color-brand)] bg-[var(--color-brand)]/10 text-[var(--color-brand)]' : 'border-[var(--color-border)] bg-[var(--color-background)] text-[var(--color-text-muted)] hover:bg-[var(--color-surface-muted)]'}`}
+                      >
+                        {option}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
+              {method === 'QRIS' ? (
+                <div className="mt-3 rounded-xl border border-[var(--color-brand)]/20 bg-[var(--color-brand)]/5 p-3">
+                  <p className="text-sm font-bold text-[var(--color-brand)]">QRIS</p>
+                  <p className="mt-1 text-xs text-[var(--color-text-muted)]">
+                    Pembayaran QRIS akan dicatat sebagai pembayaran berhasil untuk transaksi ini.
+                  </p>
+                </div>
+              ) : null}
+            </div>
+            {isCash ? (
+              <div className="space-y-3 rounded-2xl border border-[var(--color-border)] bg-[var(--color-background)] p-4">
+                <label className="block text-sm font-medium">
+                  Uang dibayar
+                  <div className="relative mt-1.5">
+                    <PosCurrencyInput
+                      aria-label="Cash tendered"
+                      className="h-10 rounded-lg bg-[var(--color-surface)] text-right text-lg font-bold"
+                      value={tender}
+                      onChange={onTender}
+                    />
+                  </div>
+                </label>
+                <div className="grid grid-cols-3 gap-2">
+                  {[total, ...quickTender]
+                    .filter((amount, index, list) => list.indexOf(amount) === index)
+                    .slice(0, 6)
+                    .map((amount) => (
+                      <button
+                        key={amount}
+                        type="button"
+                        onClick={() => onTender(amount)}
+                        className={`h-9 rounded-lg border text-[11px] font-semibold transition-all active:scale-[.98] ${tender === amount ? 'border-[var(--color-brand)] bg-[var(--color-brand)]/10 text-[var(--color-brand)]' : 'border-[var(--color-border)] bg-[var(--color-background)] hover:bg-[var(--color-surface-muted)]'}`}
+                      >
+                        {money(amount, locale)}
+                      </button>
+                    ))}
+                </div>
+                <div
+                  className={`flex items-center justify-between rounded-xl px-3 py-2 ${isCashShort ? 'bg-[var(--color-warning)]/10 text-[var(--color-warning)]' : 'bg-[var(--color-success)]/10 text-[var(--color-success)]'}`}
+                >
+                  <span className="text-sm font-bold">
+                    {isCashShort ? 'Pembayaran kurang' : 'Kembalian'}
+                  </span>
+                  <span className="text-sm font-bold">
+                    {isCashShort
+                      ? money(
+                          createDecimal(total)
+                            .minus(createDecimal(tender || '0'))
+                            .toFixed(4),
+                          locale,
+                        )
+                      : money(change, locale)}
+                  </span>
+                </div>
+              </div>
+            ) : (
+              <div className="rounded-2xl border border-[var(--color-brand)]/20 bg-[var(--color-brand)]/5 p-3">
+                <p className="text-sm font-bold text-[var(--color-brand)]">
+                  Pembayaran{' '}
+                  {method === 'BANK_TRANSFER'
+                    ? 'Transfer'
+                    : method === 'WALLET'
+                      ? 'E-Wallet'
+                      : 'QRIS'}
+                </p>
+                <p className="mt-1 text-xs text-[var(--color-text-muted)]">
+                  Pilih provider bila diperlukan, lalu catat pembayaran ini.
+                </p>
+              </div>
+            )}
+          </>
+        ) : (
+          <div className="rounded-2xl border border-[var(--color-warning)]/25 bg-[var(--color-warning)]/10 p-3">
+            <p className="text-sm font-bold text-[var(--color-warning)]">
+              Pembayaran belum diterima
+            </p>
+            <p className="mt-1 text-xs text-[var(--color-text-muted)]">
+              Transaksi akan masuk antrian tanpa pembayaran. Receipt pembayaran belum tersedia.
+            </p>
+          </div>
+        )}
       </div>
     </DDialog>
   );
@@ -1728,11 +1955,12 @@ function ReferenceTransactionDetail({
 }) {
   if (!sale) return null;
   const status =
-    sale.status === 'FINALIZED' ? 'COMPLETED' : sale.status === 'VOIDED' ? 'CANCELED' : 'DRAFT';
+    sale.status === 'FINALIZED' ? 'COMPLETED' : sale.status === 'VOIDED' ? 'CANCELED' : 'QUEUED';
   const customer = saleCustomer(sale.id);
   const activeLines = sale.lines.filter((line) => !line.removedAt);
   const payment = sale.payments.find((candidate) => candidate.status === 'SUCCEEDED') ?? null;
   const finalized = sale.status === 'FINALIZED';
+  const receiptAvailable = hasSuccessfulCheckout(sale);
   const transactionDate = new Intl.DateTimeFormat(locale, {
     dateStyle: 'medium',
     timeStyle: 'short',
@@ -1742,12 +1970,12 @@ function ReferenceTransactionDetail({
     <Dialog
       open
       onClose={onClose}
-      ariaLabel={finalized ? 'Receipt preview' : 'Transaction detail'}
+      ariaLabel={receiptAvailable ? 'Receipt preview' : 'Transaction detail'}
       closeOnEscape
       closeOnOverlay
-      className={`pos-reference-dialog w-full overflow-hidden rounded-t-2xl bg-[var(--color-surface)] shadow-xl sm:rounded-xl ${finalized ? 'max-w-md' : 'max-w-lg'}`}
+      className={`pos-reference-dialog w-full overflow-hidden rounded-t-2xl bg-[var(--color-surface)] shadow-xl sm:rounded-xl ${receiptAvailable ? 'max-w-md' : 'max-w-lg'}`}
     >
-      {finalized ? (
+      {receiptAvailable ? (
         <div className="flex max-h-[92dvh] min-h-0 flex-col">
           <div className="pos-receipt-print min-h-0 flex-1 overflow-y-auto bg-white px-6 py-6 text-slate-950">
             <header className="text-center">
@@ -1841,7 +2069,9 @@ function ReferenceTransactionDetail({
             </section>
 
             <div className="my-4 border-t border-dashed border-slate-300" />
-            <p className="text-center text-xs font-bold">LUNAS · FINALIZED</p>
+            <p className="text-center text-xs font-bold">
+              {finalized ? 'LUNAS · FINALIZED' : 'LUNAS · PEMBAYARAN BERHASIL'}
+            </p>
             <p className="mt-2 text-center text-[11px] text-slate-500">
               Terima kasih telah bertransaksi.
             </p>
@@ -1898,6 +2128,16 @@ function ReferenceTransactionDetail({
               label="Pelanggan"
               value={customer.name}
               sub={customer.phone || undefined}
+            />
+            <ReferenceInfoTile
+              icon={<CreditCard className="size-4" />}
+              label="Pembayaran"
+              value={receiptAvailable ? 'Lunas' : 'Belum dibayar'}
+              sub={
+                receiptAvailable
+                  ? (payment?.method.replace('_', ' ') ?? 'Pembayaran berhasil')
+                  : 'Bayar saat proses pembayaran berikutnya.'
+              }
             />
             <div className="divide-y divide-[var(--color-border)] overflow-hidden rounded-2xl border border-[var(--color-border)] bg-[var(--color-background)]">
               {activeLines.map((line) => (

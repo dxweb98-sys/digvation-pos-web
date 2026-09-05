@@ -162,6 +162,14 @@ export function useCashierTransactionWorkspace(routeSaleId?: string) {
     command.clearAttention();
   };
 
+  const clearProcessedDraft = () => {
+    navigate('/sell');
+    setResumedSaleId(null);
+    setCompletionOpen(false);
+    setLineTaskId(null);
+    command.clearAttention();
+  };
+
   const resumeSale = (saleId: string) => {
     setResumedSaleId(saleId);
     setCompletionOpen(false);
@@ -228,6 +236,7 @@ export function useCashierTransactionWorkspace(routeSaleId?: string) {
     finalizeSale: core.finalizeSale,
     voidSale: core.voidSale,
     newSale,
+    clearProcessedDraft,
     resumeSale,
     acknowledgeLatestState: command.acknowledgeLatestState,
     retryLastCommand,

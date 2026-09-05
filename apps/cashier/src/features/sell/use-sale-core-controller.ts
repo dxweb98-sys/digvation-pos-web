@@ -213,6 +213,11 @@ export function useSaleCoreController({
     mutation.mutate(intent);
   };
 
+  const mutateAsync = async (intent: CoreCommandIntent): Promise<Sale> => {
+    if (isRetryableIntent(intent)) setRetryIntent(intent);
+    return mutation.mutateAsync(intent);
+  };
+
   const withSale = <T>(createIntent: (currentSale: Sale) => T): T | null => {
     if (!sale || sale.status !== 'OPEN') return null;
     return createIntent(sale);
@@ -319,7 +324,7 @@ export function useSaleCoreController({
       }));
       if (intent) mutate(intent);
     },
-    createPayment: (
+    createPayment: async (
       method: PaymentMethod,
       appliedAmount: string,
       tenderedAmount?: string,
@@ -335,7 +340,8 @@ export function useSaleCoreController({
         ...(providerReference ? { providerReference } : {}),
         idempotencyKey: createIdempotencyKey('payment'),
       }));
-      if (intent) mutate(intent);
+      if (!intent) throw new Error('No active Sale is available for payment.');
+      return mutateAsync(intent);
     },
     transitionPayment: (payment: Payment, status: Exclude<PaymentStatus, 'PENDING'>) => {
       const intent = withSale((currentSale) => ({
