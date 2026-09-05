@@ -1,5 +1,5 @@
 import { createDecimal, formatMoney } from '@digvation/pos-money';
-import { Button, Dialog, Input, Select } from '@digvation/pos-ui';
+import { DButton, DCurrencyInput, DDecimalInput, DDialog, DInput, DSelect } from '@digvation/ui';
 import {
   BadgeCheck,
   Banknote,
@@ -120,7 +120,7 @@ export function SaleCompletionDialog({
     setFormError(null);
     const value = discountToApiValue(discountType, discountValue);
     if (!value || discountReason.trim() === '') {
-      setFormError('Order discount value and reason are required. Percentage uses 0–100%.');
+      setFormError('Order discount value and reason are required. Percentage uses 0â€“100%.');
       return;
     }
     onSetOrderDiscount({ type: discountType, value, reason: discountReason.trim() });
@@ -128,7 +128,7 @@ export function SaleCompletionDialog({
 
   const completionMessage =
     viewModel.primaryMode === 'PAID_WORK_REMAINING'
-      ? 'Payment complete · service work still needs attention.'
+      ? 'Payment complete Â· service work still needs attention.'
       : viewModel.primaryMode === 'READY_TO_FINALIZE'
         ? 'Domain readiness is complete. Finalization can be submitted.'
         : viewModel.primaryMode === 'FINALIZED'
@@ -138,7 +138,7 @@ export function SaleCompletionDialog({
             : 'This workspace can stay open while payment and operational work progress independently.';
 
   return (
-    <Dialog
+    <DDialog
       open
       onClose={onClose}
       ariaLabel="Sale Completion"
@@ -153,14 +153,14 @@ export function SaleCompletionDialog({
           <h2 className="mt-2 text-xl font-bold">Sale {sale.id.slice(0, 8)}</h2>
           <p className="mt-1 text-sm text-[var(--color-text-muted)]">{completionMessage}</p>
         </div>
-        <Button
+        <DButton
           variant="ghost"
           aria-label="Close Sale Completion"
           onClick={onClose}
           className="px-3"
         >
           <X className="size-5" />
-        </Button>
+        </DButton>
       </header>
 
       <div className="min-h-0 flex-1 overflow-y-auto bg-[var(--color-background)] p-4 sm:p-5">
@@ -204,50 +204,51 @@ export function SaleCompletionDialog({
               <div className="mt-4 grid gap-3 sm:grid-cols-2">
                 <label className="text-xs font-semibold text-[var(--color-text-muted)]">
                   Method
-                  <Select
+                  <DSelect
                     aria-label="Payment method"
                     value={method}
                     disabled={paymentDisabled}
-                    onChange={(event) => setMethod(event.target.value as PaymentMethod)}
+                    clearable={false}
+                    onChange={(value) => {
+                      if (typeof value === 'string') setMethod(value as PaymentMethod);
+                    }}
                     className="mt-1.5"
                   >
                     <option value="CASH">Cash</option>
                     <option value="BANK_TRANSFER">Bank transfer</option>
                     <option value="WALLET">Wallet</option>
                     <option value="QRIS">QRIS</option>
-                  </Select>
+                  </DSelect>
                 </label>
                 <label className="text-xs font-semibold text-[var(--color-text-muted)]">
                   Applied amount
-                  <Input
+                  <DCurrencyInput
                     aria-label="Payment applied amount"
                     value={appliedAmount}
                     disabled={paymentDisabled}
-                    onChange={(event) => setAppliedAmount(event.target.value)}
-                    inputMode="decimal"
+                    onValueChange={setAppliedAmount}
                     className="mt-1.5"
                   />
                 </label>
                 {method === 'CASH' ? (
                   <label className="text-xs font-semibold text-[var(--color-text-muted)] sm:col-span-2">
                     Tendered cash
-                    <Input
+                    <DCurrencyInput
                       aria-label="Cash tendered amount"
                       value={tenderedAmount}
                       disabled={paymentDisabled}
-                      onChange={(event) => setTenderedAmount(event.target.value)}
-                      inputMode="decimal"
+                      onValueChange={setTenderedAmount}
                       className="mt-1.5"
                     />
                   </label>
                 ) : (
                   <label className="text-xs font-semibold text-[var(--color-text-muted)] sm:col-span-2">
                     Provider reference (optional)
-                    <Input
+                    <DInput
                       aria-label="Payment provider reference"
                       value={providerReference}
                       disabled={paymentDisabled}
-                      onChange={(event) => setProviderReference(event.target.value)}
+                      onChange={setProviderReference}
                       className="mt-1.5"
                     />
                   </label>
@@ -258,9 +259,9 @@ export function SaleCompletionDialog({
                   {actionBlockMessage(viewModel.paymentMutation.reason)}
                 </p>
               ) : null}
-              <Button className="mt-4 w-full" disabled={paymentDisabled} onClick={createPayment}>
+              <DButton className="mt-4 w-full" disabled={paymentDisabled} onClick={createPayment}>
                 <Banknote className="mr-2 size-4" /> Add payment
-              </Button>
+              </DButton>
             </article>
 
             {sale.payments.length > 0 ? (
@@ -285,34 +286,34 @@ export function SaleCompletionDialog({
                       </div>
                       {payment.status === 'PENDING' && sale.status === 'OPEN' ? (
                         <div className="mt-3 flex flex-wrap gap-2">
-                          <Button
+                          <DButton
                             variant="secondary"
                             disabled={isBusy}
                             onClick={() => onTransitionPayment(payment, 'SUCCEEDED')}
                           >
                             Mark succeeded
-                          </Button>
-                          <Button
+                          </DButton>
+                          <DButton
                             variant="ghost"
                             disabled={isBusy}
                             onClick={() => onTransitionPayment(payment, 'FAILED')}
                           >
                             Failed
-                          </Button>
-                          <Button
+                          </DButton>
+                          <DButton
                             variant="ghost"
                             disabled={isBusy}
                             onClick={() => onTransitionPayment(payment, 'CANCELLED')}
                           >
                             Cancel
-                          </Button>
-                          <Button
+                          </DButton>
+                          <DButton
                             variant="ghost"
                             disabled={isBusy}
                             onClick={() => onTransitionPayment(payment, 'EXPIRED')}
                           >
                             Expire
-                          </Button>
+                          </DButton>
                         </div>
                       ) : null}
                     </div>
@@ -327,51 +328,52 @@ export function SaleCompletionDialog({
                 One active ORDER discount is supported by backend v0.3.0.
               </p>
               <div className="mt-4 grid grid-cols-[140px_minmax(0,1fr)] gap-2">
-                <Select
+                <DSelect
                   aria-label="Order discount type"
                   value={discountType}
                   disabled={monetaryDisabled}
-                  onChange={(event) => {
-                    setDiscountType(event.target.value as DiscountType);
+                  clearable={false}
+                  onChange={(value) => {
+                    if (typeof value !== 'string') return;
+                    setDiscountType(value as DiscountType);
                     setDiscountValue('');
                   }}
                 >
                   <option value="PERCENTAGE">Percentage</option>
                   <option value="FIXED_AMOUNT">Fixed amount</option>
-                </Select>
-                <Input
+                </DSelect>
+                <DDecimalInput
                   aria-label="Order discount value"
                   value={discountValue}
                   disabled={monetaryDisabled}
-                  onChange={(event) => setDiscountValue(event.target.value)}
+                  onValueChange={setDiscountValue}
                   placeholder={discountType === 'PERCENTAGE' ? '10 (%)' : '50000'}
-                  inputMode="decimal"
                 />
               </div>
-              <Input
+              <DInput
                 aria-label="Order discount reason"
                 value={discountReason}
                 disabled={monetaryDisabled}
-                onChange={(event) => setDiscountReason(event.target.value)}
+                onChange={setDiscountReason}
                 placeholder="Reason"
                 className="mt-2"
               />
               <div className="mt-4 flex gap-2">
-                <Button
+                <DButton
                   variant="secondary"
                   disabled={monetaryDisabled}
                   onClick={applyOrderDiscount}
                 >
                   Apply order discount
-                </Button>
+                </DButton>
                 {sale.orderDiscountType ? (
-                  <Button
+                  <DButton
                     variant="ghost"
                     disabled={monetaryDisabled}
                     onClick={onClearOrderDiscount}
                   >
                     Remove
-                  </Button>
+                  </DButton>
                 ) : null}
               </div>
             </article>
@@ -442,17 +444,17 @@ export function SaleCompletionDialog({
                   {actionBlockMessage(viewModel.finalizeMutation.reason)}
                 </p>
               ) : null}
-              <Button className="mt-4 w-full" disabled={finalizeDisabled} onClick={onFinalize}>
+              <DButton className="mt-4 w-full" disabled={finalizeDisabled} onClick={onFinalize}>
                 <CheckCircle2 className="mr-2 size-4" /> Finalize Sale
-              </Button>
-              <Button
+              </DButton>
+              <DButton
                 variant="ghost"
                 className="mt-2 w-full text-[var(--color-danger)]"
                 disabled={voidDisabled}
                 onClick={onVoid}
               >
                 <Trash2 className="mr-2 size-4" /> Void unpaid Sale
-              </Button>
+              </DButton>
               {viewModel.voidMutation.state === 'DISABLED' ? (
                 <p className="mt-2 text-xs text-[var(--color-text-muted)]">
                   {actionBlockMessage(viewModel.voidMutation.reason)}
@@ -471,6 +473,6 @@ export function SaleCompletionDialog({
           </aside>
         </div>
       </div>
-    </Dialog>
+    </DDialog>
   );
 }

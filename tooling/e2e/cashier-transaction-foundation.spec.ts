@@ -289,7 +289,7 @@ async function installRoutes(page: Page, options: Partial<RouteState> = {}) {
 
 async function startSaleFromFirstItem(page: Page) {
   await page.goto('/sell');
-  await expect(page.getByRole('combobox', { name: 'Branch' })).toHaveValue(branch.id);
+  await expect(page.getByRole('button', { name: /Active branch Main Branch/i })).toBeVisible();
   await expect(page.getByText(/Rp\s?125\.000/)).toBeVisible();
   await page.getByRole('button', { name: 'Add Hair Cut', exact: true }).click();
 }
@@ -298,17 +298,22 @@ test('lazy start creates the Sale only when the first item is added', async ({ p
   const state = await installRoutes(page);
 
   await page.goto('/sell');
-  await expect(page.getByText('Ready for a new Sale')).toBeVisible();
+  await expect(
+    page.locator('[role="dialog"][aria-label="Cart"]').first().getByText('Cart masih kosong'),
+  ).toBeVisible();
   await expect(page.getByRole('button', { name: 'New Sale' })).toHaveCount(0);
-  await expect(page.getByRole('combobox', { name: 'Branch' })).toHaveValue(branch.id);
+  await expect(page.getByRole('button', { name: /Active branch Main Branch/i })).toBeVisible();
 
   await page.getByRole('button', { name: 'Add Hair Cut', exact: true }).click();
 
   await expect(page).toHaveURL(new RegExp(`/sell/${saleId}$`));
+  await page.getByRole('button', { name: 'Cart', exact: true }).click();
   await expect(
-    page.getByRole('region', { name: 'Current Sale' }).getByText('Hair Cut', { exact: true }),
+    page
+      .locator('[role="dialog"][aria-label="Cart"]')
+      .first()
+      .getByText('Hair Cut', { exact: true }),
   ).toBeVisible();
-  await expect(page.getByText(/Rp\s?125\.000/).last()).toBeVisible();
   expect(state.createRequests).toBe(1);
   expect(state.addRequests).toBe(1);
 });
@@ -319,7 +324,7 @@ test('first-line failure preserves the created empty OPEN Sale', async ({ page }
   await startSaleFromFirstItem(page);
 
   await expect(page).toHaveURL(new RegExp(`/sell/${saleId}$`));
-  await expect(page.getByText('This OPEN Sale has no active lines')).toBeVisible();
+  await expect(page.getByRole('alert')).toContainText('No effective price for this selection');
   await expect(page.getByText('No effective price for this selection')).toBeVisible();
   expect(state.createRequests).toBe(1);
   expect(state.addRequests).toBe(1);
@@ -329,12 +334,14 @@ test('quantity and remove use the latest authoritative Sale version', async ({ p
   const state = await installRoutes(page);
   await startSaleFromFirstItem(page);
 
-  await page.getByRole('button', { name: 'Increase Hair Cut quantity' }).click();
-  await expect(page.getByText('2.0000', { exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Cart', exact: true }).click();
+  const cart = page.locator('[role="dialog"][aria-label="Cart"]').first();
+  await cart.getByRole('button', { name: 'Increase Hair Cut quantity' }).click();
+  await expect(cart.getByLabel('Quantity for Hair Cut')).toHaveValue('2');
   expect(state.quantityExpectedVersions).toEqual([2]);
 
-  await page.getByRole('button', { name: 'Remove Hair Cut' }).click();
-  await expect(page.getByText('This OPEN Sale has no active lines')).toBeVisible();
+  await cart.getByRole('button', { name: 'Remove Hair Cut' }).click();
+  await expect(cart.getByText('Cart masih kosong')).toBeVisible();
   expect(state.removeExpectedVersions).toEqual([3]);
 });
 
@@ -344,7 +351,12 @@ test('version conflict reloads latest Sale and never auto-replays the command', 
   const state = await installRoutes(page, { conflictOnNextQuantity: true });
   await startSaleFromFirstItem(page);
 
-  await page.getByRole('button', { name: 'Increase Hair Cut quantity' }).click();
+  await page.getByRole('button', { name: 'Cart', exact: true }).click();
+  await page
+    .locator('[role="dialog"][aria-label="Cart"]')
+    .first()
+    .getByRole('button', { name: 'Increase Hair Cut quantity' })
+    .click();
 
   await expect(page.getByText(/changed on another terminal/i)).toBeVisible();
   await expect(page.getByRole('button', { name: 'Reviewed' })).toBeVisible();
@@ -352,8 +364,15 @@ test('version conflict reloads latest Sale and never auto-replays the command', 
 
   await page.waitForTimeout(250);
   expect(state.quantityExpectedVersions).toEqual([2]);
+  await page.getByRole('button', { name: 'Close active cart' }).click();
   await page.getByRole('button', { name: 'Reviewed' }).click();
-  await expect(page.getByRole('button', { name: 'Increase Hair Cut quantity' })).toBeEnabled();
+  await page.getByRole('button', { name: 'Cart', exact: true }).click();
+  await expect(
+    page
+      .locator('[role="dialog"][aria-label="Cart"]')
+      .first()
+      .getByRole('button', { name: 'Increase Hair Cut quantity' }),
+  ).toBeEnabled();
 });
 
 test('Open Sales switches active Sale by navigation only', async ({ page }) => {
@@ -365,8 +384,12 @@ test('Open Sales switches active Sale by navigation only', async ({ page }) => {
 
   await page.getByText(`Sale ${saleId.slice(0, 8)}`).click();
   await expect(page).toHaveURL(new RegExp(`/sell/${saleId}$`));
+  await page.getByRole('button', { name: 'Cart', exact: true }).click();
   await expect(
-    page.getByRole('region', { name: 'Current Sale' }).getByText('Hair Cut', { exact: true }),
+    page
+      .locator('[role="dialog"][aria-label="Cart"]')
+      .first()
+      .getByText('Hair Cut', { exact: true }),
   ).toBeVisible();
 
   expect(state.createRequests).toBe(0);

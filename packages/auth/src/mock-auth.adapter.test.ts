@@ -7,7 +7,7 @@ describe('MockAuthAdapter', () => {
     const adapter = new MockAuthAdapter();
     const session = await adapter.me();
 
-    expect(session.identity.displayName).toBe('Development User');
-    expect(session.identity.permissions).toContain('auth:self');
+    expect(session?.identity.displayName).toBe('Demo Cashier');
+    expect(session?.identity.permissions).toContain('auth:self');
   });
 });

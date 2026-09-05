@@ -3,7 +3,10 @@ import { createContext, useCallback, useContext, useMemo, useState, type ReactNo
 interface CashierSessionContextValue {
   selectedLocationId: string | null;
   recentSaleIds: readonly string[];
+  isBranchPickerOpen: boolean;
   selectLocation: (locationId: string | null) => void;
+  openBranchPicker: () => void;
+  closeBranchPicker: () => void;
   rememberSale: (saleId: string) => void;
 }
 
@@ -13,9 +16,18 @@ const MAX_RECENT_SALES = 8;
 export function CashierSessionProvider({ children }: { children: ReactNode }) {
   const [selectedLocationId, setSelectedLocationId] = useState<string | null>(null);
   const [recentSaleIds, setRecentSaleIds] = useState<readonly string[]>([]);
+  const [isBranchPickerOpen, setBranchPickerOpen] = useState(false);
 
   const selectLocation = useCallback((locationId: string | null) => {
     setSelectedLocationId(locationId);
+  }, []);
+
+  const openBranchPicker = useCallback(() => {
+    setBranchPickerOpen(true);
+  }, []);
+
+  const closeBranchPicker = useCallback(() => {
+    setBranchPickerOpen(false);
   }, []);
 
   const rememberSale = useCallback((saleId: string) => {
@@ -28,8 +40,24 @@ export function CashierSessionProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const value = useMemo(
-    () => ({ selectedLocationId, recentSaleIds, selectLocation, rememberSale }),
-    [recentSaleIds, rememberSale, selectLocation, selectedLocationId],
+    () => ({
+      selectedLocationId,
+      recentSaleIds,
+      isBranchPickerOpen,
+      selectLocation,
+      openBranchPicker,
+      closeBranchPicker,
+      rememberSale,
+    }),
+    [
+      closeBranchPicker,
+      isBranchPickerOpen,
+      openBranchPicker,
+      recentSaleIds,
+      rememberSale,
+      selectLocation,
+      selectedLocationId,
+    ],
   );
 
   return <CashierSessionContext.Provider value={value}>{children}</CashierSessionContext.Provider>;

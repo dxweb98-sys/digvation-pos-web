@@ -1,5 +1,5 @@
 import { createDecimal, formatMoney } from '@digvation/pos-money';
-import { Button, Checkbox, Dialog, Input, Select } from '@digvation/pos-ui';
+import { DButton, DCheckbox, DDecimalInput, DDialog, DInput, DSelect } from '@digvation/ui';
 import { CheckCircle2, CircleDot, Percent, Play, Square, UserRound, X } from 'lucide-react';
 import { useMemo, useState } from 'react';
 
@@ -169,7 +169,7 @@ export function SaleLineTaskDialog({
     setFormError(null);
     const value = discountValueForApi(discountType, discountValue);
     if (!value || discountReason.trim() === '') {
-      setFormError('Discount value and reason are required. Percentage uses 0–100%.');
+      setFormError('Discount value and reason are required. Percentage uses 0â€“100%.');
       return;
     }
     onSetLineDiscount(line, { type: discountType, value, reason: discountReason.trim() });
@@ -187,7 +187,7 @@ export function SaleLineTaskDialog({
   const actions = fulfillmentActions(line.fulfillment?.status ?? null);
 
   return (
-    <Dialog
+    <DDialog
       open
       onClose={onClose}
       ariaLabel={`Manage ${line.itemNameSnapshot}`}
@@ -203,9 +203,9 @@ export function SaleLineTaskDialog({
             Assignment, contribution, fulfillment and monetary adjustments remain separate commands.
           </p>
         </div>
-        <Button variant="ghost" aria-label="Close line task" onClick={onClose} className="px-3">
+        <DButton variant="ghost" aria-label="Close line task" onClick={onClose} className="px-3">
           <X className="size-5" />
-        </Button>
+        </DButton>
       </header>
 
       <div className="min-h-0 flex-1 overflow-y-auto bg-[var(--color-background)] p-4 sm:p-5">
@@ -232,7 +232,7 @@ export function SaleLineTaskDialog({
                     key={employee.id}
                     className="flex cursor-pointer items-center gap-3 rounded-[var(--radius-control)] bg-[var(--color-surface-muted)] px-3 py-2.5 text-sm"
                   >
-                    <Checkbox
+                    <DCheckbox
                       checked={assignedIds.includes(employee.id)}
                       disabled={operationalDisabled}
                       onChange={() => toggleAssignment(employee.id)}
@@ -252,14 +252,14 @@ export function SaleLineTaskDialog({
               {operationalMessage ? (
                 <p className="mt-3 text-xs text-[var(--color-text-muted)]">{operationalMessage}</p>
               ) : null}
-              <Button
+              <DButton
                 variant="secondary"
                 className="mt-4 w-full"
                 disabled={operationalDisabled}
                 onClick={() => onSetAssignments(line, assignedIds)}
               >
                 Save assignment
-              </Button>
+              </DButton>
             </article>
           ) : null}
 
@@ -282,7 +282,7 @@ export function SaleLineTaskDialog({
                       className="rounded-[var(--radius-control)] bg-[var(--color-surface-muted)] p-3"
                     >
                       <label className="flex cursor-pointer items-center gap-3 text-sm">
-                        <Checkbox
+                        <DCheckbox
                           checked={selected}
                           disabled={operationalDisabled}
                           onChange={() => toggleContributor(employee.id)}
@@ -292,14 +292,14 @@ export function SaleLineTaskDialog({
                       {selected ? (
                         <label className="mt-2 flex items-center gap-2 text-xs text-[var(--color-text-muted)]">
                           Share %
-                          <Input
+                          <DInput
                             aria-label={`${employee.displayName} contribution share`}
                             value={contributionShares[employee.id] ?? ''}
                             disabled={operationalDisabled}
-                            onChange={(event) =>
+                            onChange={(value) =>
                               setContributionShares((current) => ({
                                 ...current,
-                                [employee.id]: event.target.value,
+                                [employee.id]: value,
                               }))
                             }
                             placeholder="auto"
@@ -312,14 +312,14 @@ export function SaleLineTaskDialog({
                   );
                 })}
               </div>
-              <Button
+              <DButton
                 variant="secondary"
                 className="mt-4 w-full"
                 disabled={operationalDisabled}
                 onClick={saveContributions}
               >
                 Save contribution
-              </Button>
+              </DButton>
 
               {contributionPreview ? (
                 <div className="mt-4 rounded-[var(--radius-control)] border border-[var(--color-border)] p-3">
@@ -359,7 +359,7 @@ export function SaleLineTaskDialog({
               </p>
               <div className="mt-4 flex flex-wrap gap-2">
                 {actions.map((status) => (
-                  <Button
+                  <DButton
                     key={status}
                     variant="secondary"
                     disabled={operationalDisabled}
@@ -369,7 +369,7 @@ export function SaleLineTaskDialog({
                     {status === 'COMPLETED' ? <CheckCircle2 className="mr-2 size-4" /> : null}
                     {status === 'CANCELED' ? <Square className="mr-2 size-4" /> : null}
                     {status.replace('_', ' ')}
-                  </Button>
+                  </DButton>
                 ))}
                 {actions.length === 0 ? (
                   <p className="text-xs text-[var(--color-text-muted)]">
@@ -387,37 +387,37 @@ export function SaleLineTaskDialog({
             </p>
             <label className="mt-4 block text-xs font-semibold text-[var(--color-text-muted)]">
               Unit amount
-              <Input
+              <DInput
                 aria-label="Price override amount"
                 value={overrideAmount}
                 disabled={monetaryDisabled}
-                onChange={(event) => setOverrideAmount(event.target.value)}
+                onChange={setOverrideAmount}
                 inputMode="decimal"
                 className="mt-1.5"
               />
             </label>
             <label className="mt-3 block text-xs font-semibold text-[var(--color-text-muted)]">
               Reason
-              <Input
+              <DInput
                 aria-label="Price override reason"
                 value={overrideReason}
                 disabled={monetaryDisabled}
-                onChange={(event) => setOverrideReason(event.target.value)}
+                onChange={setOverrideReason}
                 className="mt-1.5"
               />
             </label>
             <div className="mt-4 flex gap-2">
-              <Button variant="secondary" disabled={monetaryDisabled} onClick={saveOverride}>
+              <DButton variant="secondary" disabled={monetaryDisabled} onClick={saveOverride}>
                 Apply override
-              </Button>
+              </DButton>
               {line.overrideAmount ? (
-                <Button
+                <DButton
                   variant="ghost"
                   disabled={monetaryDisabled}
                   onClick={() => onClearPriceOverride(line)}
                 >
                   Remove
-                </Button>
+                </DButton>
               ) : null}
             </div>
             {monetaryMessage ? (
@@ -428,53 +428,54 @@ export function SaleLineTaskDialog({
           <article className="rounded-[var(--radius-card)] border border-[var(--color-border)] bg-[var(--color-surface)] p-4 shadow-sm">
             <h3 className="font-bold">Line discount</h3>
             <div className="mt-4 grid grid-cols-[140px_minmax(0,1fr)] gap-2">
-              <Select
+              <DSelect
                 aria-label="Line discount type"
                 value={discountType}
                 disabled={monetaryDisabled}
-                onChange={(event) => {
-                  const next = event.target.value as DiscountType;
+                clearable={false}
+                onChange={(value) => {
+                  if (typeof value !== 'string') return;
+                  const next = value as DiscountType;
                   setDiscountType(next);
                   setDiscountValue('');
                 }}
               >
                 <option value="PERCENTAGE">Percentage</option>
                 <option value="FIXED_AMOUNT">Fixed amount</option>
-              </Select>
-              <Input
+              </DSelect>
+              <DDecimalInput
                 aria-label="Line discount value"
                 value={discountValue}
                 disabled={monetaryDisabled}
-                onChange={(event) => setDiscountValue(event.target.value)}
+                onValueChange={setDiscountValue}
                 placeholder={discountType === 'PERCENTAGE' ? '10 (%)' : '50000'}
-                inputMode="decimal"
               />
             </div>
-            <Input
+            <DInput
               aria-label="Line discount reason"
               value={discountReason}
               disabled={monetaryDisabled}
-              onChange={(event) => setDiscountReason(event.target.value)}
+              onChange={setDiscountReason}
               placeholder="Reason"
               className="mt-2"
             />
             <div className="mt-4 flex gap-2">
-              <Button variant="secondary" disabled={monetaryDisabled} onClick={saveDiscount}>
+              <DButton variant="secondary" disabled={monetaryDisabled} onClick={saveDiscount}>
                 Apply discount
-              </Button>
+              </DButton>
               {line.discountType ? (
-                <Button
+                <DButton
                   variant="ghost"
                   disabled={monetaryDisabled}
                   onClick={() => onClearLineDiscount(line)}
                 >
                   Remove
-                </Button>
+                </DButton>
               ) : null}
             </div>
           </article>
         </div>
       </div>
-    </Dialog>
+    </DDialog>
   );
 }

@@ -12,6 +12,7 @@ export async function bootstrapBackoffice() {
   assertApplicationEnabled(runtime, 'backoffice');
 
   const session = await authPort.me();
+  if (!session) throw new Error('Backoffice requires an authenticated session.');
 
   return (
     <BackofficeProviders
