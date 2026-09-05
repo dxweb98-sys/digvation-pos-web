@@ -123,6 +123,49 @@ function createSaleWithLine(version = 2, quantity = '1.0000', total = '125000.00
   };
 }
 
+function createQueuedSale(version = 2, total = '125000.0000') {
+  const sale = createSaleWithLine(version, '1.0000', total);
+  return {
+    ...sale,
+    lines: [
+      {
+        ...sale.lines[0]!,
+        fulfillmentBehaviorSnapshot: 'TRACKED' as const,
+        fulfillment: {
+          saleId,
+          saleLineId: lineId,
+          status: 'WAITING' as const,
+          startedAt: null,
+          completedAt: null,
+          canceledAt: null,
+        },
+      },
+    ],
+  };
+}
+
+function createPendingPayment() {
+  return {
+    id: '66666666-6666-4666-8666-666666666666',
+    saleId,
+    method: 'QRIS' as const,
+    status: 'PENDING' as const,
+    currency: 'IDR',
+    appliedAmount: '25000.0000',
+    tenderedAmount: null,
+    changeAmount: null,
+    providerReference: null,
+    idempotencyKey: 'pending-payment',
+    createdByActorId: 'e2e-owner',
+    createdByActorKind: 'USER',
+    settledByActorId: null,
+    settledByActorKind: null,
+    terminalAt: null,
+    createdAt: '2026-09-02T00:01:00.000Z',
+    updatedAt: '2026-09-02T00:01:00.000Z',
+  };
+}
+
 function envelope<T>(data: T) {
   return {
     success: true,
@@ -144,22 +187,28 @@ function failure(code: string, message: string) {
 interface RouteState {
   currentSale: ReturnType<typeof createEmptySale> | ReturnType<typeof createSaleWithLine>;
   createRequests: number;
+  startRequests: number;
   addRequests: number;
+  employeeRequests: number;
+  getSaleRequests: number;
   quantityExpectedVersions: number[];
   removeExpectedVersions: number[];
   conflictOnNextQuantity: boolean;
-  failFirstAdd: boolean;
+  failStart: boolean;
 }
 
 async function installRoutes(page: Page, options: Partial<RouteState> = {}) {
   const state: RouteState = {
     currentSale: createEmptySale(),
     createRequests: 0,
+    startRequests: 0,
     addRequests: 0,
+    employeeRequests: 0,
+    getSaleRequests: 0,
     quantityExpectedVersions: [],
     removeExpectedVersions: [],
     conflictOnNextQuantity: false,
-    failFirstAdd: false,
+    failStart: false,
     ...options,
   };
 
@@ -172,11 +221,37 @@ async function installRoutes(page: Page, options: Partial<RouteState> = {}) {
     const url = new URL(request.url());
     const method = request.method();
 
+    if (method === 'POST' && url.pathname === '/api/v1/auth/login') {
+      expect(request.postDataJSON()).toEqual({
+        workspace: 'local',
+        identifier: 'owner',
+        password: 'e2e-password',
+      });
+      await route.fulfill({
+        status: 201,
+        json: envelope({ accessToken: 'e2e-access', refreshToken: 'e2e-refresh' }),
+      });
+      return;
+    }
+    if (method === 'GET' && url.pathname === '/api/v1/auth/me') {
+      await route.fulfill({
+        json: envelope({
+          id: 'e2e-owner',
+          username: 'owner@example.test',
+          phoneE164: '+62000000000',
+          displayName: 'E2E Owner',
+          roles: [{ permissions: ['sales:create', 'sales:read', 'sales:update'] }],
+        }),
+      });
+      return;
+    }
+
     if (method === 'GET' && url.pathname === '/api/v1/locations') {
       await route.fulfill({ json: envelope({ items: [branch], limit: 100, offset: 0 }) });
       return;
     }
     if (method === 'GET' && url.pathname === '/api/v1/employees') {
+      state.employeeRequests += 1;
       await route.fulfill({ json: envelope({ items: [], limit: 100, offset: 0 }) });
       return;
     }
@@ -219,7 +294,27 @@ async function installRoutes(page: Page, options: Partial<RouteState> = {}) {
       await route.fulfill({ status: 201, json: envelope(state.currentSale) });
       return;
     }
+    if (method === 'POST' && url.pathname === '/api/v1/sales/start') {
+      state.startRequests += 1;
+      expect(request.headers()['idempotency-key']).toBeTruthy();
+      expect(request.postDataJSON()).toEqual({
+        sellingLocationId: branch.id,
+        currency: 'IDR',
+        lines: [{ catalogItemId: catalogItem.id, quantity: '1.0000' }],
+      });
+      if (state.failStart) {
+        await route.fulfill({
+          status: 404,
+          json: failure('PRICE_NOT_FOUND', 'No effective price for this selection'),
+        });
+        return;
+      }
+      state.currentSale = createSaleWithLine(1);
+      await route.fulfill({ status: 201, json: envelope(state.currentSale) });
+      return;
+    }
     if (method === 'GET' && url.pathname === `/api/v1/sales/${saleId}`) {
+      state.getSaleRequests += 1;
       await route.fulfill({ json: envelope(state.currentSale) });
       return;
     }
@@ -237,13 +332,6 @@ async function installRoutes(page: Page, options: Partial<RouteState> = {}) {
         catalogItemId: catalogItem.id,
         quantity: '1',
       });
-      if (state.failFirstAdd && state.addRequests === 1) {
-        await route.fulfill({
-          status: 409,
-          json: failure('CATALOG_PRICE_NOT_FOUND', 'No effective price for this selection'),
-        });
-        return;
-      }
       state.currentSale = createSaleWithLine();
       await route.fulfill({ status: 201, json: envelope(state.currentSale) });
       return;
@@ -287,26 +375,45 @@ async function installRoutes(page: Page, options: Partial<RouteState> = {}) {
   return state;
 }
 
-async function startSaleFromFirstItem(page: Page) {
-  await page.goto('/sell');
-  await expect(page.getByRole('button', { name: /Active branch Main Branch/i })).toBeVisible();
-  await expect(page.getByText(/Rp\s?125\.000/)).toBeVisible();
-  await page.getByRole('button', { name: 'Add Hair Cut', exact: true }).click();
+async function openCashier(page: Page, path = '/sell') {
+  await page.goto(path);
+  if (await page.getByRole('heading', { name: 'Masuk', exact: true }).isVisible()) {
+    await page.getByLabel('ID pengguna').fill('owner');
+    await page.getByLabel('Kata sandi').fill('e2e-password');
+    await page.getByRole('button', { name: 'Masuk', exact: true }).click();
+  }
 }
 
-test('lazy start creates the Sale only when the first item is added', async ({ page }) => {
+async function commitSaleFromFirstItem(page: Page) {
+  await openCashier(page);
+  await expect(page.getByText('Main Branch', { exact: true }).first()).toBeVisible();
+  await page.getByRole('button', { name: 'Add Hair Cut', exact: true }).click();
+  await page.getByRole('button', { name: 'Cart', exact: true }).click();
+  await page
+    .locator('[role="dialog"][aria-label="Cart"]')
+    .first()
+    .getByRole('button', { name: 'Checkout' })
+    .click();
+}
+
+test('CartDraft stays local until checkout atomically starts the Sale', async ({ page }) => {
   const state = await installRoutes(page);
 
-  await page.goto('/sell');
+  await openCashier(page);
   await expect(
     page.locator('[role="dialog"][aria-label="Cart"]').first().getByText('Cart masih kosong'),
   ).toBeVisible();
   await expect(page.getByRole('button', { name: 'New Sale' })).toHaveCount(0);
-  await expect(page.getByRole('button', { name: /Active branch Main Branch/i })).toBeVisible();
+  await expect(page.getByText('Main Branch', { exact: true }).first()).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Services', exact: true })).toBeVisible();
+  expect(state.employeeRequests).toBe(0);
 
   await page.getByRole('button', { name: 'Add Hair Cut', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Add Hair Cut', exact: true })).toContainText(
+    /Rp\s?125\.000/,
+  );
 
-  await expect(page).toHaveURL(new RegExp(`/sell/${saleId}$`));
+  await expect(page).toHaveURL(/\/sell$/);
   await page.getByRole('button', { name: 'Cart', exact: true }).click();
   await expect(
     page
@@ -314,30 +421,47 @@ test('lazy start creates the Sale only when the first item is added', async ({ p
       .first()
       .getByText('Hair Cut', { exact: true }),
   ).toBeVisible();
-  expect(state.createRequests).toBe(1);
-  expect(state.addRequests).toBe(1);
-});
+  expect(state.startRequests).toBe(0);
+  expect(state.createRequests).toBe(0);
+  expect(state.addRequests).toBe(0);
 
-test('first-line failure preserves the created empty OPEN Sale', async ({ page }) => {
-  const state = await installRoutes(page, { failFirstAdd: true });
-
-  await startSaleFromFirstItem(page);
-
+  await page
+    .locator('[role="dialog"][aria-label="Cart"]')
+    .first()
+    .getByRole('button', { name: 'Checkout' })
+    .click();
   await expect(page).toHaveURL(new RegExp(`/sell/${saleId}$`));
-  await expect(page.getByRole('alert')).toContainText('No effective price for this selection');
-  await expect(page.getByText('No effective price for this selection')).toBeVisible();
-  expect(state.createRequests).toBe(1);
-  expect(state.addRequests).toBe(1);
+  expect(state.startRequests).toBe(1);
 });
 
-test('quantity and remove use the latest authoritative Sale version', async ({ page }) => {
-  const state = await installRoutes(page);
-  await startSaleFromFirstItem(page);
+test('atomic-start failure preserves the local draft without a partial Sale', async ({ page }) => {
+  const state = await installRoutes(page, { failStart: true });
+
+  await commitSaleFromFirstItem(page);
+
+  await expect(page).toHaveURL(/\/sell$/);
+  await expect(page.getByRole('alert')).toContainText('No effective price for this selection');
+  await expect(
+    page
+      .locator('[role="dialog"][aria-label="Cart"]')
+      .first()
+      .getByText('Hair Cut', { exact: true }),
+  ).toBeVisible();
+  expect(state.startRequests).toBe(1);
+  expect(state.createRequests).toBe(0);
+  expect(state.addRequests).toBe(0);
+});
+
+test('quantity and remove on a resumed Sale use the latest authoritative version', async ({
+  page,
+}) => {
+  const state = await installRoutes(page, { currentSale: createSaleWithLine() });
+  await openCashier(page, `/sell/${saleId}`);
 
   await page.getByRole('button', { name: 'Cart', exact: true }).click();
   const cart = page.locator('[role="dialog"][aria-label="Cart"]').first();
   await cart.getByRole('button', { name: 'Increase Hair Cut quantity' }).click();
-  await expect(cart.getByLabel('Quantity for Hair Cut')).toHaveValue('2');
+  await expect(cart.getByLabel('Quantity for Hair Cut')).toHaveText('2');
   expect(state.quantityExpectedVersions).toEqual([2]);
 
   await cart.getByRole('button', { name: 'Remove Hair Cut' }).click();
@@ -349,7 +473,8 @@ test('version conflict reloads latest Sale and never auto-replays the command', 
   page,
 }) => {
   const state = await installRoutes(page, { conflictOnNextQuantity: true });
-  await startSaleFromFirstItem(page);
+  state.currentSale = createSaleWithLine();
+  await openCashier(page, `/sell/${saleId}`);
 
   await page.getByRole('button', { name: 'Cart', exact: true }).click();
   await page
@@ -375,15 +500,12 @@ test('version conflict reloads latest Sale and never auto-replays the command', 
   ).toBeEnabled();
 });
 
-test('Open Sales switches active Sale by navigation only', async ({ page }) => {
+test('direct Sale navigation hydrates server state without creating another Sale', async ({
+  page,
+}) => {
   const state = await installRoutes(page, { currentSale: createSaleWithLine() });
 
-  await page.goto('/open-sales');
-  await expect(page.getByRole('heading', { name: 'Open Sales' })).toBeVisible();
-  await expect(page.getByText(`Sale ${saleId.slice(0, 8)}`)).toBeVisible();
-
-  await page.getByText(`Sale ${saleId.slice(0, 8)}`).click();
-  await expect(page).toHaveURL(new RegExp(`/sell/${saleId}$`));
+  await openCashier(page, `/sell/${saleId}`);
   await page.getByRole('button', { name: 'Cart', exact: true }).click();
   await expect(
     page
@@ -393,5 +515,25 @@ test('Open Sales switches active Sale by navigation only', async ({ page }) => {
   ).toBeVisible();
 
   expect(state.createRequests).toBe(0);
+  expect(state.startRequests).toBe(0);
   expect(state.addRequests).toBe(0);
+});
+
+test('queue payment hydrates latest readiness and uses available-to-pay', async ({ page }) => {
+  const state = await installRoutes(page, { currentSale: createQueuedSale() });
+  await openCashier(page);
+  await expect(page.getByText(`Sale ${saleId.slice(0, 8)}`)).toBeVisible();
+  await page.getByRole('button', { name: /Transaksi Antrian/ }).click();
+
+  state.currentSale = {
+    ...createQueuedSale(3),
+    payments: [createPendingPayment()],
+  };
+  await page.getByRole('button', { name: `Actions for Sale ${saleId.slice(0, 8)}` }).click();
+  await page.getByRole('menuitem', { name: 'Bayar' }).click();
+
+  await expect(page.getByRole('dialog', { name: 'Pay queued transaction' })).toContainText(
+    /Rp\s?100\.000/,
+  );
+  expect(state.getSaleRequests).toBe(1);
 });

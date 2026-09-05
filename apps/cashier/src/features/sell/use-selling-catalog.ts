@@ -12,13 +12,15 @@ interface UseSellingCatalogOptions {
   locale: string;
 }
 
-export function useSellingCatalog({
-  query,
-  locale,
-}: UseSellingCatalogOptions) {
+export function useSellingCatalog({ query, locale }: UseSellingCatalogOptions) {
   const queryClient = useQueryClient();
   const [search, setSearch] = useState('');
   const [itemType, setItemType] = useState<CatalogItemTypeFilter>('SERVICE');
+  const categoriesQuery = useQuery({
+    queryKey: cashierTransactionKeys.categories(),
+    queryFn: ({ signal }) => query.listCatalogCategories(signal),
+    staleTime: 300_000,
+  });
   const itemsQuery = useQuery({
     queryKey: cashierTransactionKeys.items(),
     queryFn: ({ signal }) => query.listCatalogItems(signal),
@@ -49,10 +51,13 @@ export function useSellingCatalog({
 
   return {
     items,
+    categories: (categoriesQuery.data?.items ?? []).filter(
+      (category) => category.status === 'ACTIVE',
+    ),
     search,
     itemType,
-    error: itemsQuery.error,
-    isLoading: itemsQuery.isLoading,
+    error: itemsQuery.error ?? categoriesQuery.error,
+    isLoading: itemsQuery.isLoading || categoriesQuery.isLoading,
     setSearch,
     setItemType,
     loadActiveVariants,

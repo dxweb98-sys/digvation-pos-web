@@ -48,6 +48,7 @@ import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 
 import { cashierTransactionKeys } from '../cashier-transaction-keys';
+import type { CartDisplayLine } from '../cart-draft';
 import {
   createCashierTransactionAdapter,
   isLocalCashierDemoEnabled,
@@ -229,6 +230,7 @@ function customerStatus(customer: PosCustomer | null): {
   return { label: 'Non-member', variant: 'outline' };
 }
 
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 function employeeSummary(line: SaleLine, employees: readonly Employee[]): string {
   const assigned = line.participations.filter((participation) => participation.assigned);
   if (!assigned.length) return 'Pilih karyawan';
@@ -275,7 +277,8 @@ function serviceWorkUnitsFor(
   const storedByIndex = new Map(storedUnits?.map((unit) => [unit.index, unit]));
   const fallbackContributors = defaultWorkContributors(line);
 
-  return Array.from({ length: count }, (_, index) => {
+  return Array.from({ length: count }, (value, index) => {
+    void value;
     const stored = storedByIndex.get(index);
     return {
       index,
@@ -366,8 +369,7 @@ function queueStatus(sale: Sale, includeOpenSales = false): QueueStatus | null {
     includeOpenSales ||
     sale.lines.some(
       (line) =>
-        line.fulfillmentBehaviorSnapshot === 'TRACKED' &&
-        line.fulfillment?.status === 'WAITING',
+        line.fulfillmentBehaviorSnapshot === 'TRACKED' && line.fulfillment?.status === 'WAITING',
     )
   ) {
     return 'QUEUED';
@@ -470,10 +472,9 @@ function groupWorkflowIssues(sale: Sale, issues: readonly string[]): WorkflowIss
   return [...groups.values()];
 }
 
-function processIssues(sale: Sale | null, lines: readonly SaleLine[]): string[] {
-  if (!sale) return ['Tambahkan setidaknya satu item ke cart.'];
-  if (sale.status !== 'OPEN') return ['Hanya transaksi aktif yang dapat diproses.'];
+function processIssues(sale: Sale | null, lines: readonly CartDisplayLine[]): string[] {
   if (!lines.length) return ['Tambahkan setidaknya satu item ke cart.'];
+  if (sale && sale.status !== 'OPEN') return ['Hanya transaksi aktif yang dapat diproses.'];
 
   return lines.flatMap((line) => {
     if (!isPositiveDecimal(line.quantity))
@@ -541,6 +542,7 @@ export function ReplatformedPosWorkspace({ workspace }: { workspace: Workspace }
   );
   const [adjustmentTarget, setAdjustmentTarget] = useState<Sale | null>(null);
   const [queuePaymentTarget, setQueuePaymentTarget] = useState<Sale | null>(null);
+  const [queuePaymentAmount, setQueuePaymentAmount] = useState<string | null>(null);
   const [cartOpen, setCartOpen] = useState(false);
   const [cartCustomer, setCartCustomer] = useState<PosCustomer | null>(() =>
     readStoredCustomer(CURRENT_CUSTOMER_KEY),
@@ -567,8 +569,8 @@ export function ReplatformedPosWorkspace({ workspace }: { workspace: Workspace }
   const [receiptSaleId, setReceiptSaleId] = useState<string | null>(null);
 
   const sale = workspace.viewModel.sale;
-  const lines = workspace.viewModel.activeLines;
-  const total = sale?.totalAmount ?? '0.0000';
+  const lines = workspace.cart.lines;
+  const total = workspace.cart.totalAmount;
 
   useEffect(() => {
     writeStoredCustomer(CURRENT_CUSTOMER_KEY, cartCustomer);
@@ -583,14 +585,11 @@ export function ReplatformedPosWorkspace({ workspace }: { workspace: Workspace }
     queuePaymentTarget && sale?.id === queuePaymentTarget.id ? sale : queuePaymentTarget;
 
   const categories = useMemo(
-    () => [
-      ...new Set(
-        workspace.items
-          .map((item) => item.categoryId)
-          .filter((value): value is string => Boolean(value)),
+    () =>
+      workspace.categories.filter((category) =>
+        workspace.items.some((item) => item.categoryId === category.id),
       ),
-    ],
-    [workspace.items],
+    [workspace.categories, workspace.items],
   );
   const visibleItems = useMemo(() => {
     const needle = search.trim().toLowerCase();
@@ -623,7 +622,7 @@ export function ReplatformedPosWorkspace({ workspace }: { workspace: Workspace }
     workspace.setItemType(type);
     setSelectedCategory('');
   };
-  const openCheckout = () => {
+  const openCheckout = async () => {
     const issues = processIssues(sale, lines);
     if (issues.length) {
       showToast({ title: 'Cart belum siap checkout', description: issues[0], variant: 'warning' });
@@ -638,7 +637,22 @@ export function ReplatformedPosWorkspace({ workspace }: { workspace: Workspace }
       return;
     }
 
-    setTender(total);
+    let checkoutTotal = total;
+    if (workspace.cart.isLocalDraft) {
+      try {
+        const committed = await workspace.commitDraft();
+        checkoutTotal = committed.totalAmount;
+      } catch {
+        showToast({
+          title: 'Cart belum dapat dibuat',
+          description: 'Tidak ada transaksi parsial yang disimpan. Periksa cart lalu coba lagi.',
+          variant: 'danger',
+        });
+        return;
+      }
+    }
+
+    setTender(checkoutTotal);
     setPayNow(true);
     setPaymentMethod('CASH');
     setProvider('');
@@ -698,6 +712,7 @@ export function ReplatformedPosWorkspace({ workspace }: { workspace: Workspace }
       variant: 'success',
     });
   };
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const resume = (transaction: Sale) => {
     workspace.resumeSale(transaction.id);
     const customer = readStoredCustomer(saleCustomerKey(transaction.id));
@@ -817,19 +832,24 @@ export function ReplatformedPosWorkspace({ workspace }: { workspace: Workspace }
     setAdjustmentTarget(transaction);
     workspace.resumeSale(transaction.id);
   };
-  const openQueuePayment = (transaction: Sale) => {
-    if (
-      transaction.status !== 'OPEN' ||
-      !isPositiveDecimal(financialSummary(transaction).balanceDue)
-    ) {
-      return;
+  const openQueuePayment = async (transaction: Sale) => {
+    try {
+      const { sale: hydrated, availableToPay } = await workspace.hydrateQueuedPayment(
+        transaction.id,
+      );
+      setQueueDetail(null);
+      setPaymentMethod('CASH');
+      setProvider('');
+      setTender(availableToPay);
+      setQueuePaymentTarget(hydrated);
+      setQueuePaymentAmount(availableToPay);
+    } catch {
+      showToast({
+        title: 'Transaksi gagal dimuat',
+        description: 'Muat ulang transaksi sebelum menerima pembayaran.',
+        variant: 'danger',
+      });
     }
-    setQueueDetail(null);
-    setPaymentMethod('CASH');
-    setProvider('');
-    setTender(financialSummary(transaction).balanceDue);
-    setQueuePaymentTarget(transaction);
-    workspace.resumeSale(transaction.id);
   };
   const requestCancel = (transaction: Sale) => {
     if (hasSuccessfulPayment(transaction)) {
@@ -925,8 +945,8 @@ export function ReplatformedPosWorkspace({ workspace }: { workspace: Workspace }
   };
   const payQueueBalance = async () => {
     const transaction = displayedQueuePaymentTarget;
-    if (!transaction || sale?.id !== transaction.id) return;
-    const due = financialSummary(sale).balanceDue;
+    if (!transaction || sale?.id !== transaction.id || !queuePaymentAmount) return;
+    const due = queuePaymentAmount;
     const applied = paymentMethod === 'CASH' ? tender || due : due;
     if (!isPositiveDecimal(applied)) return;
     if (paymentMethod === 'CASH' && createDecimal(applied).lessThan(createDecimal(due))) return;
@@ -939,6 +959,7 @@ export function ReplatformedPosWorkspace({ workspace }: { workspace: Workspace }
         provider || undefined,
       );
       setQueuePaymentTarget(null);
+      setQueuePaymentAmount(null);
       setQueueDetail(updatedSale);
       setReceiptSaleId(updatedSale.id);
       workspace.clearProcessedDraft();
@@ -1003,7 +1024,7 @@ export function ReplatformedPosWorkspace({ workspace }: { workspace: Workspace }
         locale={workspace.locale}
         onStartWork={(transaction) => void startQueuedWork(transaction)}
         onAdjust={openAdjustment}
-        onPay={openQueuePayment}
+        onPay={(transaction) => void openQueuePayment(transaction)}
         onCancel={requestCancel}
         onView={setQueueDetail}
         onViewReceipt={(transaction) => {
@@ -1050,12 +1071,12 @@ export function ReplatformedPosWorkspace({ workspace }: { workspace: Workspace }
                 </button>
                 {categories.map((category) => (
                   <button
-                    key={category}
+                    key={category.id}
                     type="button"
-                    onClick={() => setSelectedCategory(category)}
-                    className={`inline-flex h-9 shrink-0 items-center rounded-lg px-2.5 text-xs font-semibold transition-colors ${selectedCategory === category ? 'bg-[var(--color-brand)] text-white' : 'bg-[var(--color-surface-muted)] text-[var(--color-text-muted)]'}`}
+                    onClick={() => setSelectedCategory(category.id)}
+                    className={`inline-flex h-9 shrink-0 items-center rounded-lg px-2.5 text-xs font-semibold transition-colors ${selectedCategory === category.id ? 'bg-[var(--color-brand)] text-white' : 'bg-[var(--color-surface-muted)] text-[var(--color-text-muted)]'}`}
                   >
-                    {category}
+                    {category.name}
                   </button>
                 ))}
               </div>
@@ -1079,6 +1100,8 @@ export function ReplatformedPosWorkspace({ workspace }: { workspace: Workspace }
                 <ReferenceCatalogCard
                   key={item.id}
                   item={item}
+                  price={workspace.cachedCardPrice(item.id)}
+                  locale={workspace.locale}
                   disabled={workspace.viewModel.monetaryMutation.state !== 'AVAILABLE'}
                   onAdd={() => void workspace.selectItem(item)}
                 />
@@ -1093,13 +1116,26 @@ export function ReplatformedPosWorkspace({ workspace }: { workspace: Workspace }
         onOpenChange={setCartOpen}
         lines={lines}
         total={total}
-        gross={sale?.grossAmount ?? '0.0000'}
+        gross={workspace.cart.grossAmount}
+        isEstimate={workspace.cart.isLocalDraft}
         locale={workspace.locale}
         customer={cartCustomer}
         onChooseCustomer={() => setCustomerPickerOpen(true)}
-        onQuantity={(line, next) => workspace.changeQuantity(line, next)}
-        onRemove={workspace.removeLine}
-        onCheckout={openCheckout}
+        onQuantity={(line, next) => {
+          if (workspace.cart.isLocalDraft) workspace.changeDraftQuantity(line.id, next);
+          else {
+            const serverLine = workspace.viewModel.activeLines.find((item) => item.id === line.id);
+            if (serverLine) workspace.changeQuantity(serverLine, next);
+          }
+        }}
+        onRemove={(line) => {
+          if (workspace.cart.isLocalDraft) workspace.removeDraftLine(line.id);
+          else {
+            const serverLine = workspace.viewModel.activeLines.find((item) => item.id === line.id);
+            if (serverLine) workspace.removeLine(serverLine);
+          }
+        }}
+        onCheckout={() => void openCheckout()}
       />
 
       <ReferenceCustomerDialog
@@ -1124,8 +1160,8 @@ export function ReplatformedPosWorkspace({ workspace }: { workspace: Workspace }
         }}
         lines={lines}
         total={total}
-        gross={sale?.grossAmount ?? '0.0000'}
-        discountAmount={sale?.discountAmount ?? '0.0000'}
+        gross={workspace.cart.grossAmount}
+        discountAmount={workspace.cart.discountAmount}
         locale={workspace.locale}
         customer={cartCustomer}
         method={paymentMethod}
@@ -1176,11 +1212,13 @@ export function ReplatformedPosWorkspace({ workspace }: { workspace: Workspace }
         }}
         onAssign={(line) => {
           if (!displayedQueueDetail) return;
+          workspace.requestEmployeeOptions();
           setQueueAssignmentTarget({ sale: displayedQueueDetail, line });
         }}
         serviceWorkUnits={serviceWorkUnits}
         onManageServiceWork={(line) => {
           if (!displayedQueueDetail) return;
+          workspace.requestEmployeeOptions();
           setServiceWorkTarget({ sale: displayedQueueDetail, line });
         }}
         onComplete={() => {
@@ -1210,6 +1248,7 @@ export function ReplatformedPosWorkspace({ workspace }: { workspace: Workspace }
       />
       <ReferenceBalancePaymentDialog
         sale={displayedQueuePaymentTarget}
+        availableToPay={queuePaymentAmount}
         locale={workspace.locale}
         method={paymentMethod}
         provider={provider}
@@ -1217,6 +1256,7 @@ export function ReplatformedPosWorkspace({ workspace }: { workspace: Workspace }
         isMutating={workspace.isCoreMutating}
         onClose={() => {
           setQueuePaymentTarget(null);
+          setQueuePaymentAmount(null);
           workspace.clearProcessedDraft();
         }}
         onMethod={(next) => {
@@ -1369,10 +1409,14 @@ function ReferenceTypeButton({
 
 function ReferenceCatalogCard({
   item,
+  price,
+  locale,
   disabled,
   onAdd,
 }: {
   item: CatalogItem;
+  price: string | null;
+  locale: string;
   disabled: boolean;
   onAdd: () => void;
 }) {
@@ -1393,7 +1437,9 @@ function ReferenceCatalogCard({
       <p className="truncate font-mono text-[10px] text-[var(--color-text-muted)]">{item.code}</p>
       <p className="mt-1 line-clamp-2 min-h-10 text-sm font-semibold leading-tight">{item.name}</p>
       <div className="mt-2 flex items-center justify-between gap-2">
-        <p className="text-xs font-semibold text-[var(--color-text-muted)]">Harga saat dipilih</p>
+        <p className="text-xs font-semibold text-[var(--color-text-muted)]">
+          {price ? money(price, locale) : 'Harga saat dipilih'}
+        </p>
         <span
           className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${isService ? 'bg-cyan-500/10 text-cyan-700' : 'bg-[var(--color-brand)]/10 text-[var(--color-brand)]'}`}
         >
@@ -1729,6 +1775,7 @@ function ReferenceFloatingCart({
   lines,
   total,
   gross,
+  isEstimate,
   locale,
   customer,
   onChooseCustomer,
@@ -1738,14 +1785,15 @@ function ReferenceFloatingCart({
 }: {
   open: boolean;
   onOpenChange: (value: boolean) => void;
-  lines: readonly SaleLine[];
+  lines: readonly CartDisplayLine[];
   total: string;
   gross: string;
+  isEstimate: boolean;
   locale: string;
   customer: PosCustomer | null;
   onChooseCustomer: () => void;
-  onQuantity: (line: SaleLine, quantity: string) => void;
-  onRemove: (line: SaleLine) => void;
+  onQuantity: (line: CartDisplayLine, quantity: string) => void;
+  onRemove: (line: CartDisplayLine) => void;
   onCheckout: () => void;
 }) {
   const panel = (
@@ -1753,6 +1801,7 @@ function ReferenceFloatingCart({
       lines={lines}
       total={total}
       gross={gross}
+      isEstimate={isEstimate}
       locale={locale}
       customer={customer}
       onChooseCustomer={onChooseCustomer}
@@ -1850,6 +1899,7 @@ function ReferenceCartPanel({
   lines,
   total,
   gross,
+  isEstimate,
   locale,
   customer,
   onChooseCustomer,
@@ -1857,18 +1907,19 @@ function ReferenceCartPanel({
   onRemove,
   onCheckout,
 }: {
-  lines: readonly SaleLine[];
+  lines: readonly CartDisplayLine[];
   total: string;
   gross: string;
+  isEstimate: boolean;
   locale: string;
   customer: PosCustomer | null;
   onChooseCustomer: () => void;
-  onQuantity: (line: SaleLine, quantity: string) => void;
-  onRemove: (line: SaleLine) => void;
+  onQuantity: (line: CartDisplayLine, quantity: string) => void;
+  onRemove: (line: CartDisplayLine) => void;
   onCheckout: () => void;
 }) {
   const status = customerStatus(customer);
-  const increment = (line: SaleLine, direction: 'up' | 'down') => {
+  const increment = (line: CartDisplayLine, direction: 'up' | 'down') => {
     const next =
       direction === 'up'
         ? createDecimal(line.quantity).plus(createDecimal('1'))
@@ -1982,11 +2033,13 @@ function ReferenceCartPanel({
       <div className="shrink-0 bg-[var(--color-background)] p-4">
         <div className="space-y-2 rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] p-3">
           <div className="flex items-center justify-between text-xs">
-            <span className="text-[var(--color-text-muted)]">Subtotal</span>
+            <span className="text-[var(--color-text-muted)]">
+              {isEstimate ? 'Estimasi subtotal' : 'Subtotal'}
+            </span>
             <span className="font-medium">{money(gross, locale)}</span>
           </div>
           <div className="flex items-center justify-between border-t border-[var(--color-border)] pt-2">
-            <span className="text-sm font-bold">Total</span>
+            <span className="text-sm font-bold">{isEstimate ? 'Estimasi total' : 'Total'}</span>
             <span className="text-lg font-bold text-[var(--color-brand)]">
               {money(total, locale)}
             </span>
@@ -2001,7 +2054,7 @@ function ReferenceCartPanel({
           </Button>
           {lines.length ? (
             <p className="text-center text-[11px] text-[var(--color-text-muted)]">
-              Perubahan cart tersimpan pada transaksi aktif.
+              Harga dan total otoritatif dikonfirmasi saat Checkout.
             </p>
           ) : null}
         </div>
@@ -2193,7 +2246,7 @@ function ReferencePaymentDialog({
 }: {
   open: boolean;
   onClose: () => void;
-  lines: readonly SaleLine[];
+  lines: readonly CartDisplayLine[];
   total: string;
   gross: string;
   discountAmount: string;
@@ -3128,11 +3181,14 @@ function ReferenceOrderAdjustmentDialog({
   onRemove: (line: SaleLine) => void;
 }) {
   const [catalogSearch, setCatalogSearch] = useState('');
-  const [selectedVariantId, setSelectedVariantId] = useState<string | null>(null);
-
-  useEffect(() => {
-    setSelectedVariantId(null);
-  }, [variantPicker?.item.id]);
+  const [variantSelection, setVariantSelection] = useState<{
+    itemId: string;
+    variantId: string;
+  } | null>(null);
+  const selectedVariantId =
+    variantSelection && variantSelection.itemId === variantPicker?.item.id
+      ? variantSelection.variantId
+      : null;
 
   if (!sale) return null;
 
@@ -3279,12 +3335,25 @@ function ReferenceOrderAdjustmentDialog({
                 placeholder="Pilih varian"
                 options={variantPicker.variants.map((variant) => {
                   const price = variantPicker.pricesByVariantId?.[variant.id];
+                  const isUnavailable =
+                    variantPicker.unavailableVariantIds?.includes(variant.id) ?? false;
                   return {
                     value: variant.id,
-                    label: price ? `${variant.name} · ${money(price, locale)}` : variant.name,
+                    label: isUnavailable
+                      ? `${variant.name} · Harga belum tersedia`
+                      : price
+                        ? `${variant.name} · ${money(price, locale)}`
+                        : variant.name,
+                    disabled: isUnavailable,
                   };
                 })}
-                onChange={(value) => setSelectedVariantId(typeof value === 'string' ? value : null)}
+                onChange={(value) =>
+                  setVariantSelection(
+                    typeof value === 'string'
+                      ? { itemId: variantPicker.item.id, variantId: value }
+                      : null,
+                  )
+                }
                 disabled={isMutating}
                 className="w-full"
               />
@@ -3310,6 +3379,7 @@ function ReferenceOrderAdjustmentDialog({
 
 function ReferenceBalancePaymentDialog({
   sale,
+  availableToPay,
   locale,
   method,
   provider,
@@ -3322,6 +3392,7 @@ function ReferenceBalancePaymentDialog({
   onPay,
 }: {
   sale: Sale | null;
+  availableToPay: string | null;
   locale: string;
   method: PaymentMethod;
   provider: string;
@@ -3334,7 +3405,8 @@ function ReferenceBalancePaymentDialog({
   onPay: () => void;
 }) {
   if (!sale) return null;
-  const { totalPaid, balanceDue } = financialSummary(sale);
+  const { totalPaid } = financialSummary(sale);
+  const balanceDue = availableToPay ?? '0.0000';
   const isCash = method === 'CASH';
   const needsProvider = method === 'BANK_TRANSFER' || method === 'WALLET';
   const applied = isCash ? tender || balanceDue : balanceDue;
@@ -3383,7 +3455,7 @@ function ReferenceBalancePaymentDialog({
             <p className="mt-1 font-semibold">{money(totalPaid, locale)}</p>
           </div>
           <div className="text-right">
-            <p className="text-xs text-[var(--color-text-muted)]">Sisa</p>
+            <p className="text-xs text-[var(--color-text-muted)]">Tersedia dibayar</p>
             <p className="mt-1 font-bold text-[var(--color-brand)]">{money(balanceDue, locale)}</p>
           </div>
         </div>
@@ -3470,6 +3542,7 @@ function ReferenceInfoTile({
   );
 }
 
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 function ReferenceReviewDialog({
   sale,
   activeSale,
@@ -4024,7 +4097,7 @@ function ServiceWorkContributorEditor({
             type="button"
             disabled={rows.length === 1}
             aria-label={`Hapus karyawan ${index + 1}`}
-            onClick={() => onChange(rows.filter((_, rowIndex) => rowIndex !== index))}
+            onClick={() => onChange([...rows.slice(0, index), ...rows.slice(index + 1)])}
             className="mb-0.5 rounded-lg p-2 text-[var(--color-danger)] transition-colors hover:bg-[var(--color-danger)]/10 disabled:opacity-40"
           >
             <Trash2 className="size-3.5" />

@@ -28,6 +28,7 @@ The frontend orchestrates operator tasks; the POS backend remains authoritative 
 
 ## In scope
 
+- local pre-commit CartDraft mutations and atomic transaction start;
 - line price override and removal;
 - LINE and ORDER discount set/removal;
 - ACTIVE employee lookup for current transaction tasks;
@@ -114,10 +115,23 @@ Existing accepted gaps remain open:
 - priced catalog projection;
 - lightweight Open Sales projection;
 - POS-local runtime/capability bootstrap;
-- human-friendly Sale reference;
-- atomic transaction start.
+- human-friendly Sale reference.
 
 Contribution semantics remain tracked by GAP-07; the frontend follows the behavior exposed by backend v0.3.0 and does not reinterpret contribution as payroll/commission.
+
+### FRONTEND_CONTRACT_UPDATE_REQUIRED
+
+The Cashier adapter consumes the backend review-candidate atomic-start contract:
+
+```text
+POST /api/v1/sales/start
+```
+
+Cart selection and quantity stay local until Checkout. Checkout submits one
+idempotent selection-only command and hydrates the returned authoritative Sale before
+payment or queue work continues. The backend review branch is not yet an approved
+release, so `contracts/contract-lock.json` intentionally remains on the verified
+`v0.3.0` SHA.
 
 ### DOMAIN_DECISION_REQUIRED
 

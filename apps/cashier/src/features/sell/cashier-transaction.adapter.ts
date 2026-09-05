@@ -24,6 +24,14 @@ export interface CreateSaleInput {
   currency: string;
 }
 
+export interface StartSaleInput extends CreateSaleInput {
+  lines: Array<{
+    catalogItemId: string;
+    catalogVariantId?: string;
+    quantity: string;
+  }>;
+}
+
 export interface AddSaleLineInput {
   expectedVersion: number;
   catalogItemId: string;
@@ -108,6 +116,7 @@ export interface OpenSalesQuery {
 export interface SaleTransactionClient {
   getSale(saleId: string, signal?: AbortSignal): Promise<Sale>;
   createSale(input: CreateSaleInput, idempotencyKey: string): Promise<Sale>;
+  startSale(input: StartSaleInput, idempotencyKey: string): Promise<Sale>;
   addSaleLine(saleId: string, input: AddSaleLineInput, idempotencyKey: string): Promise<Sale>;
   setSaleLineQuantity(
     saleId: string,
@@ -235,6 +244,12 @@ export class HttpCashierTransactionAdapter
 
   public createSale(input: CreateSaleInput, idempotencyKey: string): Promise<Sale> {
     return this.client.post<Sale>(`${API_PREFIX}/sales`, input, {
+      headers: { 'Idempotency-Key': idempotencyKey },
+    });
+  }
+
+  public startSale(input: StartSaleInput, idempotencyKey: string): Promise<Sale> {
+    return this.client.post<Sale>(`${API_PREFIX}/sales/start`, input, {
       headers: { 'Idempotency-Key': idempotencyKey },
     });
   }

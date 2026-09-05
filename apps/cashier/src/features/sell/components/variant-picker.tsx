@@ -11,6 +11,7 @@ export interface VariantPickerState {
   item: CatalogItem;
   variants: readonly CatalogVariant[];
   pricesByVariantId?: Readonly<Record<string, string>>;
+  unavailableVariantIds?: readonly string[];
   locale?: string;
   currency?: string;
   context?: VariantPickerContext;
@@ -26,6 +27,7 @@ export function VariantPicker({
   item,
   variants,
   pricesByVariantId = {},
+  unavailableVariantIds = [],
   locale = 'id-ID',
   currency = 'IDR',
   context = 'CART',
@@ -74,14 +76,16 @@ export function VariantPicker({
       <div className="mt-4 divide-y divide-[var(--color-border)] overflow-hidden rounded-xl border border-[var(--color-border)]">
         {variants.map((variant) => {
           const price = pricesByVariantId[variant.id];
+          const isUnavailable = unavailableVariantIds.includes(variant.id);
           const selected = selectedVariantId === variant.id;
           return (
             <button
               key={variant.id}
               type="button"
+              disabled={isUnavailable}
               onClick={() => setSelectedVariantId(variant.id)}
               aria-pressed={selected}
-              className={`flex min-h-14 w-full items-center justify-between gap-4 px-3.5 py-2.5 text-left transition-colors ${selected ? 'bg-[var(--color-brand)]/7 shadow-[inset_2px_0_0_var(--color-brand)]' : 'bg-[var(--color-surface)] hover:bg-[var(--color-surface-muted)]/60'}`}
+              className={`flex min-h-14 w-full items-center justify-between gap-4 px-3.5 py-2.5 text-left transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${selected ? 'bg-[var(--color-brand)]/7 shadow-[inset_2px_0_0_var(--color-brand)]' : 'bg-[var(--color-surface)] hover:bg-[var(--color-surface-muted)]/60'}`}
             >
               <span className="min-w-0">
                 <span className="block truncate text-sm font-semibold">{variant.name}</span>
@@ -90,7 +94,11 @@ export function VariantPicker({
                 </span>
               </span>
               <span className="flex shrink-0 items-center gap-3">
-                {price ? (
+                {isUnavailable ? (
+                  <span className="text-xs font-semibold text-[var(--color-text-muted)]">
+                    Harga belum tersedia
+                  </span>
+                ) : price ? (
                   <span className="text-sm font-semibold text-[var(--color-text)]">
                     {formatMoney(price, currency, locale, 0)}
                   </span>

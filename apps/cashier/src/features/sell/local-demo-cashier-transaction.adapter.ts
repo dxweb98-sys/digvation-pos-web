@@ -15,6 +15,7 @@ import type {
   SaleTransactionClient,
   SellingCatalogQuery,
   SetSaleLineQuantityInput,
+  StartSaleInput,
 } from './cashier-transaction.adapter';
 import type {
   ApiPage,
@@ -117,8 +118,9 @@ function serviceItem(
   name: string,
   categoryId: string,
   duration: number,
-  _hasVariants: boolean,
+  hasVariants: boolean,
 ): CatalogItem {
+  void hasVariants;
   return {
     id,
     code,
@@ -145,8 +147,9 @@ function productItem(
   code: string,
   name: string,
   categoryId: string,
-  _hasVariants: boolean,
+  hasVariants: boolean,
 ): CatalogItem {
+  void hasVariants;
   return {
     id,
     code,
@@ -427,7 +430,8 @@ export class LocalDemoCashierTransactionAdapter
     return clone(requireSale(saleId));
   }
 
-  public async createSale(input: CreateSaleInput, _idempotencyKey: string): Promise<Sale> {
+  public async createSale(input: CreateSaleInput, idempotencyKey: string): Promise<Sale> {
+    void idempotencyKey;
     const createdAt = now();
     const id = `SALE-DEMO-${String(state.saleCounter++).padStart(4, '0')}`;
     const sale: Sale = {
@@ -456,11 +460,37 @@ export class LocalDemoCashierTransactionAdapter
     return clone(sale);
   }
 
+  public async startSale(input: StartSaleInput, idempotencyKey: string): Promise<Sale> {
+    const saleCounter = state.saleCounter;
+    const lineCounter = state.lineCounter;
+    let createdSaleId: string | null = null;
+    try {
+      let sale = await this.createSale(input, idempotencyKey);
+      createdSaleId = sale.id;
+      for (const [index, line] of input.lines.entries()) {
+        sale = await this.addSaleLine(
+          sale.id,
+          { ...line, expectedVersion: sale.version },
+          `${idempotencyKey}:line:${index}`,
+        );
+      }
+      const started = { ...sale, version: 1 };
+      state.sales.set(started.id, started);
+      return clone(started);
+    } catch (error) {
+      if (createdSaleId) state.sales.delete(createdSaleId);
+      state.saleCounter = saleCounter;
+      state.lineCounter = lineCounter;
+      throw error;
+    }
+  }
+
   public async addSaleLine(
     saleId: string,
     input: AddSaleLineInput,
-    _idempotencyKey: string,
+    idempotencyKey: string,
   ): Promise<Sale> {
+    void idempotencyKey;
     const sale = requireOpenSale(saleId);
     const item = items.find((candidate) => candidate.id === input.catalogItemId);
     if (!item) throw new Error('Catalog item was not found.');
