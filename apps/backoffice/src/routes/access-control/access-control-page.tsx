@@ -1,4 +1,3 @@
-import { ApiClient } from '@digvation/pos-api';
 import {
   DButton,
   DBadge,
@@ -7,6 +6,7 @@ import {
   DDataTable,
   DDialog,
   DInput,
+  useToast,
   type TableColumn,
 } from '@digvation-labs/ui';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -15,8 +15,9 @@ import { useMemo, useState } from 'react';
 
 import { useRuntime } from '@digvation/pos-runtime';
 import { canPerformBackofficeAction } from '../../auth/backoffice-access';
-import { useBackofficeAuth } from '../../auth/backoffice-auth-context';
+import { isSessionExpiredError, useBackofficeAuth } from '../../auth/backoffice-auth-context';
 import { BackofficePage, BackofficePageHeader } from '../../app/layout/backoffice-page';
+import { normalizeBackofficeApiError } from '../../app/api/backoffice-api-error';
 import { AccessControlApi, type AccessRole, type AccessUser } from './access-control-api';
 
 const accessControlKeys = {
@@ -26,17 +27,18 @@ const accessControlKeys = {
 };
 
 export function AccessControlPage() {
-  const { session, getAccessToken } = useBackofficeAuth();
+  const { session, createApiClient } = useBackofficeAuth();
   const runtime = useRuntime();
   const api = useMemo(
-    () => new AccessControlApi(new ApiClient({ baseUrl: runtime.apiBaseUrl, getAccessToken })),
-    [getAccessToken, runtime.apiBaseUrl],
+    () => new AccessControlApi(createApiClient(runtime.apiBaseUrl)),
+    [createApiClient, runtime.apiBaseUrl],
   );
   const [section, setSection] = useState<'roles' | 'users'>('roles');
   const [editingRole, setEditingRole] = useState<AccessRole | null | undefined>(undefined);
   const [editingUser, setEditingUser] = useState<AccessUser | null>(null);
   const [deactivatingRole, setDeactivatingRole] = useState<AccessRole | null>(null);
   const queryClient = useQueryClient();
+  const { showToast } = useToast();
   const rolesQuery = useQuery({
     queryKey: accessControlKeys.roles,
     queryFn: () => api.listRoles({ limit: 20, offset: 0 }),
@@ -63,35 +65,44 @@ export function AccessControlPage() {
 
   return (
     <BackofficePage>
-      <BackofficePageHeader eyebrow="Configuration" title="Access Control" description="Manage tenant roles and user role assignments. Permissions are defined by the POS platform." actions={section === 'roles' && canCreateRole ? <DButton onClick={() => setEditingRole(null)}>Create role</DButton> : null} />
-        <div className="mt-7 flex gap-1 border-b border-[var(--color-border)]">
-          <SectionButton active={section === 'roles'} onClick={() => setSection('roles')}>
-            Roles
+      <BackofficePageHeader
+        eyebrow="Configuration"
+        title="Access Control"
+        description="Manage tenant roles and user role assignments. Permissions are defined by the POS platform."
+        actions={
+          section === 'roles' && canCreateRole ? (
+            <DButton onClick={() => setEditingRole(null)}>Create role</DButton>
+          ) : null
+        }
+      />
+      <div className="mt-7 flex gap-1 border-b border-[var(--color-border)]">
+        <SectionButton active={section === 'roles'} onClick={() => setSection('roles')}>
+          Roles
+        </SectionButton>
+        {canPerformBackofficeAction(session, 'viewUsers') ? (
+          <SectionButton active={section === 'users'} onClick={() => setSection('users')}>
+            Users
           </SectionButton>
-          {canPerformBackofficeAction(session, 'viewUsers') ? (
-            <SectionButton active={section === 'users'} onClick={() => setSection('users')}>
-              Users
-            </SectionButton>
-          ) : null}
-        </div>
-        {section === 'roles' ? (
-          <RolesTable
-            roles={rolesQuery.data?.items ?? []}
-            isLoading={rolesQuery.isLoading}
-            onEdit={setEditingRole}
-            onDeactivate={setDeactivatingRole}
-            canEdit={canUpdateRole || canManagePermissions}
-            canDeactivate={canUpdateRole}
-          />
-        ) : (
-          <UsersTable
-            users={usersQuery.data?.items ?? []}
-            isLoading={usersQuery.isLoading}
-            onEdit={setEditingUser}
-            canEdit={canManageUsers}
-          />
-        )}
-      
+        ) : null}
+      </div>
+      {section === 'roles' ? (
+        <RolesTable
+          roles={rolesQuery.data?.items ?? []}
+          isLoading={rolesQuery.isLoading}
+          onEdit={setEditingRole}
+          onDeactivate={setDeactivatingRole}
+          canEdit={canUpdateRole || canManagePermissions}
+          canDeactivate={canUpdateRole}
+        />
+      ) : (
+        <UsersTable
+          users={usersQuery.data?.items ?? []}
+          isLoading={usersQuery.isLoading}
+          onEdit={setEditingUser}
+          canEdit={canManageUsers}
+        />
+      )}
+
       <RoleEditor
         key={editingRole?.id ?? (editingRole === null ? 'new' : 'closed')}
         role={editingRole}
@@ -116,10 +127,21 @@ export function AccessControlPage() {
         onClose={() => setDeactivatingRole(null)}
         onConfirm={() => {
           if (deactivatingRole)
-            void api.deactivateRole(deactivatingRole).then(() => {
-              invalidateRoles();
-              setDeactivatingRole(null);
-            });
+            void api
+              .deactivateRole(deactivatingRole)
+              .then(() => {
+                invalidateRoles();
+                showToast({ variant: 'success', title: 'Role berhasil dinonaktifkan.' });
+                setDeactivatingRole(null);
+              })
+              .catch((error) => {
+                if (!isSessionExpiredError(error))
+                  showToast({
+                    variant: 'danger',
+                    title: normalizeBackofficeApiError(error, 'Gagal menonaktifkan role.')
+                      .safeMessage,
+                  });
+              });
         }}
         title="Deactivate role?"
         message="Users will no longer receive this role's permissions."
@@ -157,12 +179,16 @@ function RolesTable({
       ),
     },
     { key: 'code', label: 'Code' },
-    { key: 'permissions', label: 'Permissions', render: (role) => `${role.permissions.length} permissions` },
+    {
+      key: 'permissions',
+      label: 'Permissions',
+      render: (role) => `${role.permissions.length} permissions`,
+    },
     {
       key: 'status',
       label: 'Status',
       render: (role) => (
-        <DBadge variant={role.status === 'ACTIVE' ? 'outline' : undefined}>
+        <DBadge variant={role.status === 'ACTIVE' ? 'outline' : 'secondary'}>
           {role.status === 'ACTIVE' ? 'Active' : 'Inactive'}
         </DBadge>
       ),
@@ -220,7 +246,7 @@ function UsersTable({
       key: 'status',
       label: 'Status',
       render: (user) => (
-        <DBadge variant={user.status === 'ACTIVE' ? 'outline' : undefined}>
+        <DBadge variant={user.status === 'ACTIVE' ? 'outline' : 'secondary'}>
           {formatUserStatus(user.status)}
         </DBadge>
       ),
@@ -265,6 +291,7 @@ function RoleEditor({
   canUpdate: boolean;
   canManagePermissions: boolean;
 }) {
+  const { showToast } = useToast();
   const [name, setName] = useState(role?.name ?? '');
   const [code, setCode] = useState('');
   const [selected, setSelected] = useState<string[]>(role?.permissions ?? []);
@@ -273,13 +300,28 @@ function RoleEditor({
   const current = role ?? undefined;
   const selectedPermissions = selected;
   const save = async () => {
-    if (isNew) await api.createRole({ code, name, permissions: selectedPermissions });
-    else if (current) {
-      if (canUpdate && name && name !== current.name) await api.updateRole(current, name);
-      if (canManagePermissions) await api.replacePermissions(current, selectedPermissions);
+    try {
+      if (isNew) await api.createRole({ code, name, permissions: selectedPermissions });
+      else if (current) {
+        if (canUpdate && name && name !== current.name) await api.updateRole(current, name);
+        if (canManagePermissions) await api.replacePermissions(current, selectedPermissions);
+      }
+      onChanged();
+      showToast({
+        variant: 'success',
+        title: isNew ? 'Role berhasil ditambahkan.' : 'Perubahan role berhasil disimpan.',
+      });
+      onClose();
+    } catch (error) {
+      if (!isSessionExpiredError(error))
+        showToast({
+          variant: 'danger',
+          title: normalizeBackofficeApiError(
+            error,
+            isNew ? 'Gagal menambahkan role.' : 'Gagal menyimpan perubahan role.',
+          ).safeMessage,
+        });
     }
-    onChanged();
-    onClose();
   };
   const toggle = (key: string) =>
     setSelected((value) =>
@@ -361,6 +403,7 @@ function UserRoleEditor({
   api: AccessControlApi;
   canManage: boolean;
 }) {
+  const { showToast } = useToast();
   const [selected, setSelected] = useState<string[]>(user?.roles.map((role) => role.id) ?? []);
   const current = selected;
   const toggle = (id: string) =>
@@ -382,10 +425,26 @@ function UserRoleEditor({
             <DButton
               onClick={() => {
                 if (user)
-                  void api.replaceUserRoles(user, current).then(() => {
-                    onChanged();
-                    onClose();
-                  });
+                  void api
+                    .replaceUserRoles(user, current)
+                    .then(() => {
+                      onChanged();
+                      showToast({
+                        variant: 'success',
+                        title: 'Peran pengguna berhasil diperbarui.',
+                      });
+                      onClose();
+                    })
+                    .catch((error) => {
+                      if (!isSessionExpiredError(error))
+                        showToast({
+                          variant: 'danger',
+                          title: normalizeBackofficeApiError(
+                            error,
+                            'Gagal memperbarui peran pengguna.',
+                          ).safeMessage,
+                        });
+                    });
               }}
             >
               Save assignments

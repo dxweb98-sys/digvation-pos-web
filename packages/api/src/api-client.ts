@@ -4,6 +4,7 @@ import type { ApiEnvelope, ApiFailureEnvelope } from './api.types';
 export interface ApiClientOptions {
   baseUrl: string;
   getAccessToken?: () => Promise<string | null>;
+  onUnauthorized?: () => void;
 }
 
 export interface ApiRequestOptions {
@@ -66,6 +67,7 @@ export class ApiClient {
     const payload = (await response.json()) as ApiEnvelope<T> | ApiFailureEnvelope;
 
     if (!response.ok || !payload.success) {
+      if (response.status === 401) this.options.onUnauthorized?.();
       if (!payload.success) {
         throw new ApiError(
           response.status,

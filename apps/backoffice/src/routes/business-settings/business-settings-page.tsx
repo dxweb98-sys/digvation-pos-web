@@ -1,13 +1,21 @@
-import { ApiClient } from '@digvation/pos-api';
-import { DBadge, DButton, DConfirmDialog, DDialog, DInput, DSkeleton } from '@digvation-labs/ui';
+import {
+  DBadge,
+  DButton,
+  DConfirmDialog,
+  DDialog,
+  DInput,
+  DSkeleton,
+  useToast,
+} from '@digvation-labs/ui';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Building2, CircleOff, MapPinPlus, Pencil } from 'lucide-react';
 import { useMemo, useState } from 'react';
 
 import { useRuntime } from '@digvation/pos-runtime';
 import { canPerformBackofficeAction } from '../../auth/backoffice-access';
-import { useBackofficeAuth } from '../../auth/backoffice-auth-context';
+import { isSessionExpiredError, useBackofficeAuth } from '../../auth/backoffice-auth-context';
 import { BackofficePage, BackofficePageHeader } from '../../app/layout/backoffice-page';
+import { normalizeBackofficeApiError } from '../../app/api/backoffice-api-error';
 import {
   BusinessSettingsApi,
   type BusinessProfile,
@@ -22,13 +30,14 @@ const businessSettingsKeys = {
 const locationPageLimit = 20;
 
 export function BusinessSettingsPage() {
-  const { session, getAccessToken } = useBackofficeAuth();
+  const { session, createApiClient } = useBackofficeAuth();
   const runtime = useRuntime();
   const api = useMemo(
-    () => new BusinessSettingsApi(new ApiClient({ baseUrl: runtime.apiBaseUrl, getAccessToken })),
-    [getAccessToken, runtime.apiBaseUrl],
+    () => new BusinessSettingsApi(createApiClient(runtime.apiBaseUrl)),
+    [createApiClient, runtime.apiBaseUrl],
   );
   const queryClient = useQueryClient();
+  const { showToast } = useToast();
   const [editingProfile, setEditingProfile] = useState<BusinessProfile | null>(null);
   const [editingLocation, setEditingLocation] = useState<SellingLocation | null | undefined>(
     undefined,
@@ -70,31 +79,37 @@ export function BusinessSettingsPage() {
 
   return (
     <BackofficePage>
-      <BackofficePageHeader eyebrow="Configuration" title="Business" description="Set your business identity and manage the selling locations available to this workspace." />
+      <BackofficePageHeader
+        eyebrow="Configuration"
+        title="Business"
+        description="Set your business identity and manage the selling locations available to this workspace."
+      />
 
-        {canViewProfile ? (
-          <ProfileCard
-            profile={profileQuery.data}
-            isLoading={profileQuery.isLoading}
-            canUpdate={canUpdateProfile}
-            onEdit={setEditingProfile}
-          />
-        ) : null}
-        {canViewLocations ? (
-          <LocationsPanel
-            locations={locationsQuery.data?.items}
-            isLoading={locationsQuery.isLoading}
-            canCreate={canCreateLocation}
-            canUpdate={canUpdateLocation}
-            onCreate={() => setEditingLocation(null)}
-            onEdit={setEditingLocation}
-            onDeactivate={setDeactivatingLocation}
-            offset={locationsQuery.data?.offset ?? locationsOffset}
-            hasNext={Boolean(locationsQuery.data && locationsQuery.data.items.length === locationsQuery.data.limit)}
-            onPrevious={() => setLocationsOffset((offset) => Math.max(0, offset - locationPageLimit))}
-            onNext={() => setLocationsOffset((offset) => offset + locationPageLimit)}
-          />
-        ) : null}
+      {canViewProfile ? (
+        <ProfileCard
+          profile={profileQuery.data}
+          isLoading={profileQuery.isLoading}
+          canUpdate={canUpdateProfile}
+          onEdit={setEditingProfile}
+        />
+      ) : null}
+      {canViewLocations ? (
+        <LocationsPanel
+          locations={locationsQuery.data?.items}
+          isLoading={locationsQuery.isLoading}
+          canCreate={canCreateLocation}
+          canUpdate={canUpdateLocation}
+          onCreate={() => setEditingLocation(null)}
+          onEdit={setEditingLocation}
+          onDeactivate={setDeactivatingLocation}
+          offset={locationsQuery.data?.offset ?? locationsOffset}
+          hasNext={Boolean(
+            locationsQuery.data && locationsQuery.data.items.length === locationsQuery.data.limit,
+          )}
+          onPrevious={() => setLocationsOffset((offset) => Math.max(0, offset - locationPageLimit))}
+          onNext={() => setLocationsOffset((offset) => offset + locationPageLimit)}
+        />
+      ) : null}
       <ProfileEditor
         key={editingProfile?.version ?? 'closed'}
         profile={editingProfile}
@@ -115,10 +130,26 @@ export function BusinessSettingsPage() {
         onClose={() => setDeactivatingLocation(null)}
         onConfirm={() => {
           if (deactivatingLocation)
-            void api.updateLocation(deactivatingLocation, { status: 'INACTIVE' }).then(() => {
-              invalidateLocations();
-              setDeactivatingLocation(null);
-            });
+            void api
+              .updateLocation(deactivatingLocation, { status: 'INACTIVE' })
+              .then(() => {
+                invalidateLocations();
+                showToast({
+                  variant: 'success',
+                  title: 'Lokasi penjualan berhasil dinonaktifkan.',
+                });
+                setDeactivatingLocation(null);
+              })
+              .catch((error) => {
+                if (!isSessionExpiredError(error))
+                  showToast({
+                    variant: 'danger',
+                    title: normalizeBackofficeApiError(
+                      error,
+                      'Gagal menonaktifkan lokasi penjualan.',
+                    ).safeMessage,
+                  });
+              });
         }}
         title="Deactivate selling location?"
         message="This location will remain in historical records but cannot be used as an active selling location."
@@ -237,11 +268,23 @@ function LocationsPanel({
                 </div>
                 {canUpdate ? (
                   <div className="flex items-center gap-1">
-                    <DButton variant="ghost" size="icon" aria-label={`Edit ${location.name}`} title="Edit selling location" onClick={() => onEdit(location)}>
+                    <DButton
+                      variant="ghost"
+                      size="icon"
+                      aria-label={`Edit ${location.name}`}
+                      title="Edit selling location"
+                      onClick={() => onEdit(location)}
+                    >
                       <Pencil className="size-4" />
                     </DButton>
                     {location.status === 'ACTIVE' ? (
-                      <DButton variant="ghost" size="icon" aria-label={`Deactivate ${location.name}`} title="Deactivate selling location" onClick={() => onDeactivate(location)}>
+                      <DButton
+                        variant="ghost"
+                        size="icon"
+                        aria-label={`Deactivate ${location.name}`}
+                        title="Deactivate selling location"
+                        onClick={() => onDeactivate(location)}
+                      >
                         <CircleOff className="size-4" />
                       </DButton>
                     ) : null}
@@ -253,7 +296,13 @@ function LocationsPanel({
         </div>
       )}
       {locations?.length ? (
-        <PaginationControls offset={offset} count={locations.length} hasNext={hasNext} onPrevious={onPrevious} onNext={onNext} />
+        <PaginationControls
+          offset={offset}
+          count={locations.length}
+          hasNext={hasNext}
+          onPrevious={onPrevious}
+          onNext={onNext}
+        />
       ) : null}
     </section>
   );
@@ -270,12 +319,22 @@ function ProfileEditor({
   onClose: () => void;
   onChanged: () => void;
 }) {
+  const { showToast } = useToast();
   const [name, setName] = useState(profile?.name ?? '');
   const save = async () => {
     if (!profile || !name.trim()) return;
-    await api.updateProfile(profile, name.trim());
-    onChanged();
-    onClose();
+    try {
+      await api.updateProfile(profile, name.trim());
+      onChanged();
+      showToast({ variant: 'success', title: 'Profil bisnis berhasil diperbarui.' });
+      onClose();
+    } catch (error) {
+      if (!isSessionExpiredError(error))
+        showToast({
+          variant: 'danger',
+          title: normalizeBackofficeApiError(error, 'Gagal memperbarui profil bisnis.').safeMessage,
+        });
+    }
   };
   return (
     <DDialog
@@ -312,17 +371,35 @@ function LocationEditor({
   onClose: () => void;
   onChanged: () => void;
 }) {
+  const { showToast } = useToast();
   const isNew = location === null;
   const [code, setCode] = useState('');
   const [name, setName] = useState(location?.name ?? '');
   const save = async () => {
     if (!name.trim()) return;
-    if (isNew) {
-      if (!code.trim()) return;
-      await api.createLocation({ code: code.trim().toUpperCase(), name: name.trim() });
-    } else if (location && canUpdate) await api.updateLocation(location, { name: name.trim() });
-    onChanged();
-    onClose();
+    try {
+      if (isNew) {
+        if (!code.trim()) return;
+        await api.createLocation({ code: code.trim().toUpperCase(), name: name.trim() });
+      } else if (location && canUpdate) await api.updateLocation(location, { name: name.trim() });
+      onChanged();
+      showToast({
+        variant: 'success',
+        title: isNew
+          ? 'Lokasi penjualan berhasil ditambahkan.'
+          : 'Lokasi penjualan berhasil diperbarui.',
+      });
+      onClose();
+    } catch (error) {
+      if (!isSessionExpiredError(error))
+        showToast({
+          variant: 'danger',
+          title: normalizeBackofficeApiError(
+            error,
+            isNew ? 'Gagal menambahkan lokasi penjualan.' : 'Gagal memperbarui lokasi penjualan.',
+          ).safeMessage,
+        });
+    }
   };
   return (
     <DDialog
@@ -357,6 +434,30 @@ function LocationEditor({
   );
 }
 
-function PaginationControls({ offset, count, hasNext, onPrevious, onNext }: { offset: number; count: number; hasNext: boolean; onPrevious: () => void; onNext: () => void }) {
-  return <div className="mt-4 flex items-center justify-end gap-2"><span className="mr-auto text-xs text-[var(--color-text-muted)]">Showing {offset + 1}–{offset + count}</span><DButton variant="secondary" size="sm" disabled={offset === 0} onClick={onPrevious}>Previous</DButton><DButton variant="secondary" size="sm" disabled={!hasNext} onClick={onNext}>Next</DButton></div>;
+function PaginationControls({
+  offset,
+  count,
+  hasNext,
+  onPrevious,
+  onNext,
+}: {
+  offset: number;
+  count: number;
+  hasNext: boolean;
+  onPrevious: () => void;
+  onNext: () => void;
+}) {
+  return (
+    <div className="mt-4 flex items-center justify-end gap-2">
+      <span className="mr-auto text-xs text-[var(--color-text-muted)]">
+        Showing {offset + 1}–{offset + count}
+      </span>
+      <DButton variant="secondary" size="sm" disabled={offset === 0} onClick={onPrevious}>
+        Previous
+      </DButton>
+      <DButton variant="secondary" size="sm" disabled={!hasNext} onClick={onNext}>
+        Next
+      </DButton>
+    </div>
+  );
 }

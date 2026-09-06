@@ -1,8 +1,9 @@
-import { DButton, DInput } from '@digvation-labs/ui';
+import { DButton, DInput, useToast } from '@digvation-labs/ui';
 import { useState, type FormEvent } from 'react';
 import { Navigate, useLocation } from 'react-router';
 
 import { useRuntime } from '@digvation/pos-runtime';
+import { normalizeBackofficeApiError } from '../app/api/backoffice-api-error';
 import { AuthenticationLoading } from './authentication-loading';
 import { useBackofficeAuth } from './backoffice-auth-context';
 
@@ -10,6 +11,7 @@ export function BackofficeLoginPage() {
   const runtime = useRuntime();
   const location = useLocation();
   const { status, login } = useBackofficeAuth();
+  const { showToast } = useToast();
   const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -25,8 +27,15 @@ export function BackofficeLoginPage() {
     setSubmitting(true);
     try {
       await login({ workspace: runtime.workspace, identifier, password });
-    } catch {
+    } catch (failure) {
       setError('Sign-in failed. Check your workspace credentials and try again.');
+      showToast({
+        variant: 'danger',
+        title: normalizeBackofficeApiError(
+          failure,
+          'Login gagal. Periksa kembali akun dan kata sandi.',
+        ).safeMessage,
+      });
     } finally {
       setSubmitting(false);
     }
