@@ -12,7 +12,13 @@ interface SessionResponse extends SessionCredentials {
 interface AuthUserResponse {
   id: string;
   displayName: string;
-  roles: Array<{ id: string; code: string; name: string; systemKey: string | null; permissions: string[] }>;
+  roles: Array<{
+    id: string;
+    code: string;
+    name: string;
+    systemKey: string | null;
+    permissions: string[];
+  }>;
 }
 
 interface ApiResponse<T> {
@@ -24,7 +30,10 @@ interface ApiResponse<T> {
 const SESSION_STORAGE_KEY = 'digvation.pos.backoffice.auth-session.v1';
 
 export class HttpAuthAdapter {
-  public constructor(private readonly apiBaseUrl: string, private readonly workspace: string) {}
+  public constructor(
+    private readonly apiBaseUrl: string,
+    private readonly workspace: string,
+  ) {}
 
   public async restore(): Promise<BackofficeSession | null> {
     const credentials = this.readCredentials();
@@ -88,7 +97,10 @@ export class HttpAuthAdapter {
     });
   }
 
-  private async getCurrentUser(accessToken: string, workspace = this.workspace): Promise<BackofficeSession> {
+  private async getCurrentUser(
+    accessToken: string,
+    workspace = this.workspace,
+  ): Promise<BackofficeSession> {
     const user = await this.request<AuthUserResponse>('/api/v1/auth/me', {
       method: 'GET',
       accessToken,
@@ -100,11 +112,20 @@ export class HttpAuthAdapter {
     });
 
     return {
-      identity: { userId: user.id, displayName: user.displayName, workspace, permissions: [...permissions], roles },
+      identity: {
+        userId: user.id,
+        displayName: user.displayName,
+        workspace,
+        permissions: [...permissions],
+        roles,
+      },
     };
   }
 
-  private async request<T>(path: string, options: { method: 'GET' | 'POST'; body?: unknown; accessToken?: string }): Promise<T> {
+  private async request<T>(
+    path: string,
+    options: { method: 'GET' | 'POST'; body?: unknown; accessToken?: string },
+  ): Promise<T> {
     const headers = new Headers();
     if (options.body !== undefined) headers.set('content-type', 'application/json');
     if (options.accessToken) headers.set('authorization', `Bearer ${options.accessToken}`);
@@ -117,7 +138,11 @@ export class HttpAuthAdapter {
     });
     const payload = (await response.json()) as ApiResponse<T>;
     if (!response.ok || !payload.success || payload.data === undefined) {
-      throw new AuthenticationError(response.status, payload.error?.code ?? 'AUTH_REQUEST_FAILED', payload.error?.message ?? 'Authentication request failed.');
+      throw new AuthenticationError(
+        response.status,
+        payload.error?.code ?? 'AUTH_REQUEST_FAILED',
+        payload.error?.message ?? 'Authentication request failed.',
+      );
     }
     return payload.data;
   }
@@ -144,7 +169,11 @@ export class HttpAuthAdapter {
 }
 
 class AuthenticationError extends Error {
-  public constructor(public readonly status: number, public readonly code: string, message: string) {
+  public constructor(
+    public readonly status: number,
+    public readonly code: string,
+    message: string,
+  ) {
     super(message);
   }
 }
@@ -154,5 +183,10 @@ function isAuthenticationFailure(error: unknown): boolean {
 }
 
 function isSessionCredentials(value: unknown): value is SessionCredentials {
-  return Boolean(value) && typeof value === 'object' && typeof (value as SessionCredentials).accessToken === 'string' && typeof (value as SessionCredentials).refreshToken === 'string';
+  return (
+    Boolean(value) &&
+    typeof value === 'object' &&
+    typeof (value as SessionCredentials).accessToken === 'string' &&
+    typeof (value as SessionCredentials).refreshToken === 'string'
+  );
 }

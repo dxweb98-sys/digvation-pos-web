@@ -21,12 +21,37 @@ export const backofficeRouter = createBrowserRouter([
             element: <AuthorizedRoute capability="dashboard" />,
             children: [{ index: true, element: <DashboardPage /> }],
           },
-          { element: <AuthorizedRoute capability="catalog" />, children: [{ path: '/catalog', element: <PlaceholderPage title="Catalog" /> }] },
-          { element: <AuthorizedRoute capability="employees" />, children: [{ path: '/employees', element: <PlaceholderPage title="Employees" /> }] },
-          { element: <AuthorizedRoute capability="finance" />, children: [{ path: '/financial-accounts', element: <PlaceholderPage title="Financial Accounts" /> }, { path: '/expenses', element: <PlaceholderPage title="Expenses" /> }, { path: '/reconciliation', element: <PlaceholderPage title="Reconciliation" /> }] },
-          { element: <AuthorizedRoute capability="reports" />, children: [{ path: '/reports', element: <PlaceholderPage title="Reports" /> }] },
-          { element: <AuthorizedRoute capability="configuration" />, children: [{ path: '/business', element: <PlaceholderPage title="Business" /> }] },
-          { element: <AuthorizedRoute capability="accessControl" />, children: [{ path: '/access-control', element: <AccessControlPage /> }] },
+          {
+            element: <AuthorizedRoute capability="catalog" />,
+            children: [{ path: '/catalog', element: <PlaceholderPage title="Catalog" /> }],
+          },
+          {
+            element: <AuthorizedRoute capability="employees" />,
+            children: [{ path: '/employees', element: <PlaceholderPage title="Employees" /> }],
+          },
+          {
+            element: <AuthorizedRoute capability="finance" />,
+            children: [
+              {
+                path: '/financial-accounts',
+                element: <PlaceholderPage title="Financial Accounts" />,
+              },
+              { path: '/expenses', element: <PlaceholderPage title="Expenses" /> },
+              { path: '/reconciliation', element: <PlaceholderPage title="Reconciliation" /> },
+            ],
+          },
+          {
+            element: <AuthorizedRoute capability="reports" />,
+            children: [{ path: '/reports', element: <PlaceholderPage title="Reports" /> }],
+          },
+          {
+            element: <AuthorizedRoute capability="configuration" />,
+            children: [{ path: '/business', element: <PlaceholderPage title="Business" /> }],
+          },
+          {
+            element: <AuthorizedRoute capability="accessControl" />,
+            children: [{ path: '/access-control', element: <AccessControlPage /> }],
+          },
           { path: '/unauthorized', element: <UnauthorizedPage /> },
         ],
       },

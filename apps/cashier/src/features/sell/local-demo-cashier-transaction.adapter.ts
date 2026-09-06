@@ -33,9 +33,7 @@ import type {
 
 const DEMO_CREATED_AT = '2026-09-04T09:00:00.000Z';
 
-const locations: SellingLocation[] = [
-  namedRecord('loc-demo-main', 'MAIN', 'Main Branch'),
-];
+const locations: SellingLocation[] = [namedRecord('loc-demo-main', 'MAIN', 'Main Branch')];
 
 const categories: CatalogCategory[] = [
   namedRecord('Hair', 'HAIR', 'Hair'),
@@ -44,12 +42,12 @@ const categories: CatalogCategory[] = [
 ];
 
 const items: CatalogItem[] = [
-  serviceItem('svc-hair-cut', 'SVC-HAIRCUT', 'Hair Cut', 'Hair', 45, false),
-  serviceItem('svc-creambath', 'SVC-CREAMBATH', 'Creambath', 'Treatment', 60, false),
-  serviceItem('svc-facial-care', 'SVC-FACIAL', 'Facial Care', 'Treatment', 60, true),
-  serviceItem('svc-hair-coloring', 'SVC-COLOR', 'Hair Coloring', 'Hair', 90, true),
-  productItem('prd-shampoo', 'PRD-SHAMPOO', 'Shampoo', 'Retail', false),
-  productItem('prd-hair-serum', 'PRD-SERUM', 'Hair Serum', 'Retail', true),
+  serviceItem('svc-hair-cut', 'SVC-HAIRCUT', 'Hair Cut', 'Hair', 45),
+  serviceItem('svc-creambath', 'SVC-CREAMBATH', 'Creambath', 'Treatment', 60),
+  serviceItem('svc-facial-care', 'SVC-FACIAL', 'Facial Care', 'Treatment', 60),
+  serviceItem('svc-hair-coloring', 'SVC-COLOR', 'Hair Coloring', 'Hair', 90),
+  productItem('prd-shampoo', 'PRD-SHAMPOO', 'Shampoo', 'Retail'),
+  productItem('prd-hair-serum', 'PRD-SERUM', 'Hair Serum', 'Retail'),
 ];
 
 const variants: CatalogVariant[] = [
@@ -119,7 +117,6 @@ function serviceItem(
   name: string,
   categoryId: string,
   duration: number,
-  _hasVariants: boolean,
 ): CatalogItem {
   return {
     id,
@@ -142,13 +139,7 @@ function serviceItem(
   };
 }
 
-function productItem(
-  id: string,
-  code: string,
-  name: string,
-  categoryId: string,
-  _hasVariants: boolean,
-): CatalogItem {
+function productItem(id: string, code: string, name: string, categoryId: string): CatalogItem {
   return {
     id,
     code,
@@ -228,11 +219,14 @@ function toMoney(value: ReturnType<typeof createDecimal>): string {
   return value.toDecimalPlaces(4).toFixed(4);
 }
 
-function discountAmount(type: 'PERCENTAGE' | 'FIXED_AMOUNT' | null, value: string | null, base: string) {
+function discountAmount(
+  type: 'PERCENTAGE' | 'FIXED_AMOUNT' | null,
+  value: string | null,
+  base: string,
+) {
   if (!type || !value) return createDecimal('0');
   const baseAmount = decimal(base);
-  const requested =
-    type === 'PERCENTAGE' ? baseAmount.times(decimal(value)) : decimal(value);
+  const requested = type === 'PERCENTAGE' ? baseAmount.times(decimal(value)) : decimal(value);
   if (requested.lessThan(0)) return createDecimal('0');
   return requested.greaterThan(baseAmount) ? baseAmount : requested;
 }
@@ -253,7 +247,10 @@ function recalculateSale(sale: Sale): void {
   const active = sale.lines.filter((line) => line.removedAt === null);
   for (const line of active) recalculateLineBase(line);
 
-  const gross = active.reduce((sum, line) => sum.plus(decimal(line.grossAmount)), createDecimal('0'));
+  const gross = active.reduce(
+    (sum, line) => sum.plus(decimal(line.grossAmount)),
+    createDecimal('0'),
+  );
   const lineDiscount = active.reduce(
     (sum, line) => sum.plus(decimal(line.lineDiscountAmount)),
     createDecimal('0'),
@@ -287,7 +284,10 @@ function recalculateSale(sale: Sale): void {
     line.totalAmount = toMoney(net);
   });
 
-  const total = active.reduce((sum, line) => sum.plus(decimal(line.totalAmount)), createDecimal('0'));
+  const total = active.reduce(
+    (sum, line) => sum.plus(decimal(line.totalAmount)),
+    createDecimal('0'),
+  );
   sale.grossAmount = toMoney(gross);
   sale.orderDiscountAmount = toMoney(orderDiscount);
   sale.discountAmount = toMoney(lineDiscount.plus(orderDiscount));
@@ -352,7 +352,10 @@ function validateReadyToFinalize(sale: Sale): void {
     throw new Error('Pembayaran berhasil harus sama dengan total transaksi.');
   }
   for (const line of active) {
-    if (line.fulfillmentBehaviorSnapshot === 'TRACKED' && line.fulfillment?.status !== 'COMPLETED') {
+    if (
+      line.fulfillmentBehaviorSnapshot === 'TRACKED' &&
+      line.fulfillment?.status !== 'COMPLETED'
+    ) {
       throw new Error(`${line.itemNameSnapshot}: pekerjaan belum selesai.`);
     }
     if (
@@ -423,7 +426,7 @@ export class LocalDemoCashierTransactionAdapter
     return clone(requireSale(saleId));
   }
 
-  public async createSale(input: CreateSaleInput, _idempotencyKey: string): Promise<Sale> {
+  public async createSale(input: CreateSaleInput): Promise<Sale> {
     const createdAt = now();
     const id = `SALE-DEMO-${String(state.saleCounter++).padStart(4, '0')}`;
     const sale: Sale = {
@@ -452,11 +455,7 @@ export class LocalDemoCashierTransactionAdapter
     return clone(sale);
   }
 
-  public async addSaleLine(
-    saleId: string,
-    input: AddSaleLineInput,
-    _idempotencyKey: string,
-  ): Promise<Sale> {
+  public async addSaleLine(saleId: string, input: AddSaleLineInput): Promise<Sale> {
     const sale = requireOpenSale(saleId);
     const item = items.find((candidate) => candidate.id === input.catalogItemId);
     if (!item) throw new Error('Catalog item was not found.');
@@ -464,7 +463,12 @@ export class LocalDemoCashierTransactionAdapter
       ? variants.find((candidate) => candidate.id === input.catalogVariantId)
       : undefined;
     if (input.catalogVariantId && !variantRecord) throw new Error('Variant was not found.');
-    const price = resolvePriceRecord(item.id, input.catalogVariantId, sale.sellingLocationId, sale.currency);
+    const price = resolvePriceRecord(
+      item.id,
+      input.catalogVariantId,
+      sale.sellingLocationId,
+      sale.currency,
+    );
     const lineId = `line-demo-${String(state.lineCounter++).padStart(4, '0')}`;
     const createdAt = now();
     const service = item.serviceDefinition;
@@ -646,7 +650,10 @@ export class LocalDemoCashierTransactionAdapter
     const sale = requireOpenSale(saleId);
     const line = requireLine(sale, saleLineId);
     const shareByEmployee = new Map(
-      input.contributors.map((contributor) => [contributor.employeeId, contributor.shareRate ?? null]),
+      input.contributors.map((contributor) => [
+        contributor.employeeId,
+        contributor.shareRate ?? null,
+      ]),
     );
     line.participations = line.participations.map((participation) => ({
       ...participation,
@@ -688,7 +695,8 @@ export class LocalDemoCashierTransactionAdapter
     if (!line.fulfillment) throw new Error('This line does not use tracked fulfillment.');
     const at = now();
     line.fulfillment.status = input.status;
-    if (input.status === 'IN_PROGRESS') line.fulfillment.startedAt = line.fulfillment.startedAt ?? at;
+    if (input.status === 'IN_PROGRESS')
+      line.fulfillment.startedAt = line.fulfillment.startedAt ?? at;
     if (input.status === 'COMPLETED') {
       line.fulfillment.startedAt = line.fulfillment.startedAt ?? at;
       line.fulfillment.completedAt = at;

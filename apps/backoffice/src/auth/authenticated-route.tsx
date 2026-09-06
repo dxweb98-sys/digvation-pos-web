@@ -7,6 +7,7 @@ export function AuthenticatedRoute() {
   const location = useLocation();
   const { status } = useBackofficeAuth();
   if (status === 'hydrating') return <AuthenticationLoading />;
-  if (status === 'unauthenticated') return <Navigate to="/login" replace state={{ from: location.pathname }} />;
+  if (status === 'unauthenticated')
+    return <Navigate to="/login" replace state={{ from: location.pathname }} />;
   return <Outlet />;
 }
