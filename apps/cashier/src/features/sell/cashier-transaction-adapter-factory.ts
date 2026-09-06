@@ -14,10 +14,18 @@ export function isLocalCashierDemoEnabled(): boolean {
 }
 
 /** Selects the transaction boundary once; Cashier presentation never selects a transport. */
-export function createCashierTransactionAdapter(runtime: RuntimeConfig): SaleTransactionPort {
+export function createCashierTransactionAdapter(
+  runtime: RuntimeConfig,
+  getAccessToken?: () => Promise<string | null>,
+): SaleTransactionPort {
   if (isLocalCashierDemoEnabled()) {
     localDemoAdapter ??= new LocalCashierTransactionAdapter();
     return localDemoAdapter;
   }
-  return new HttpCashierTransactionAdapter(new ApiClient({ baseUrl: runtime.apiBaseUrl }));
+  return new HttpCashierTransactionAdapter(
+    new ApiClient({
+      baseUrl: runtime.apiBaseUrl,
+      ...(getAccessToken ? { getAccessToken } : {}),
+    }),
+  );
 }

@@ -7,10 +7,8 @@ import { useNavigate } from 'react-router';
 import { useCashierSession } from '../../app/providers/cashier-session-provider';
 import { cashierTransactionErrorMessage } from './cashier-transaction-errors';
 import { cashierTransactionKeys } from './cashier-transaction-keys';
-import { fetchResolvedPrice, fetchResolvedVariantPrices } from './resolved-price-query';
 import type {
   CatalogItem,
-  CatalogVariant,
   PaymentMethod,
   Sale,
   SaleLine,
@@ -19,13 +17,15 @@ import {
   createCashierTransactionAdapter,
   isLocalCashierDemoEnabled,
 } from './cashier-transaction-adapter-factory';
-import type { VariantPickerContext, VariantPickerState } from './components/variant-picker';
+import type { VariantPickerState } from './components/variant-picker';
 import { useEmployeeOptions } from './use-employee-options';
 import { createSaleWorkspaceViewModel } from './sale-workspace-view-model';
 import { useSaleCommandCoordinator } from './use-sale-command-coordinator';
 import { useSaleCoreController } from './use-sale-core-controller';
 import { useSaleWorkspaceController } from './use-sale-workspace-controller';
 import { useSellingCatalog } from './use-selling-catalog';
+
+type VariantPickerContext = 'CART' | 'TRANSACTION_ADJUSTMENT';
 
 export function useCashierTransactionWorkspace(routeSaleId?: string) {
   const runtime = useRuntime();
@@ -40,7 +40,11 @@ export function useCashierTransactionWorkspace(routeSaleId?: string) {
   const [resumedSaleId, setResumedSaleId] = useState<string | null>(null);
   const [areEmployeeOptionsEnabled, setEmployeeOptionsEnabled] = useState(false);
   const transactionAdapter = useMemo(
-    () => createCashierTransactionAdapter(runtime, authPort.getAccessToken.bind(authPort)),
+    () =>
+      createCashierTransactionAdapter(
+        runtime,
+        authPort.getAccessToken ? authPort.getAccessToken.bind(authPort) : undefined,
+      ),
     [authPort, runtime],
   );
   const effectiveConnectivity = isLocalCashierDemoEnabled() ? 'ONLINE' : connectivity.state;
@@ -54,7 +58,7 @@ export function useCashierTransactionWorkspace(routeSaleId?: string) {
     currency: runtime.currency,
   });
 
-  const employeeOptions = useEmployeeOptions(transactionAdapter, areEmployeeOptionsEnabled);
+  const employeeOptions = useEmployeeOptions(transactionAdapter);
 
   const activeSaleId = routeSaleId ?? resumedSaleId ?? undefined;
   const saleWorkspace = useSaleWorkspaceController({
@@ -98,7 +102,6 @@ export function useCashierTransactionWorkspace(routeSaleId?: string) {
     catalogVariantId: string | undefined,
     context: VariantPickerContext,
     targetSaleId?: string,
-    catalogVariant: CatalogVariant | null = null,
   ) => {
     if (context === 'CART' && resumedSaleId) {
       throw new Error('Selesaikan penyesuaian transaksi sebelum menambahkan item ke cart.');
@@ -112,16 +115,16 @@ export function useCashierTransactionWorkspace(routeSaleId?: string) {
       saleWorkspace.addItem(item.id, catalogVariantId);
       return;
     }
-    const resolvedPrice = await fetchResolvedPrice(queryClient, transactionAdapter, {
+    const resolvedPrice = await transactionAdapter.resolvePrice({
       catalogItemId: item.id,
       ...(catalogVariantId ? { catalogVariantId } : {}),
       sellingLocationId: selectedLocationId,
       currency: runtime.currency,
+      effectiveAt: new Date().toISOString(),
     });
 
     saleWorkspace.addItem(item.id, catalogVariantId, {
       catalogItem: item,
-      catalogVariant,
       resolvedPrice,
     });
   };
@@ -138,23 +141,26 @@ export function useCashierTransactionWorkspace(routeSaleId?: string) {
       }
       const variants = await catalog.loadActiveVariants(item);
       if (variants.length > 0) {
-        const resolvedVariants = selectedLocationId
-          ? await fetchResolvedVariantPrices(queryClient, transactionAdapter, {
-              catalogItemId: item.id,
-              catalogVariantIds: variants.map((variant) => variant.id),
-              sellingLocationId: selectedLocationId,
-              currency: runtime.currency,
-            })
-          : { pricesByVariantId: {}, unavailableVariantIds: [] };
+        const priceEntries = selectedLocationId
+          ? await Promise.all(
+              variants.map(async (variant) => {
+                const price = await transactionAdapter.resolvePrice({
+                  catalogItemId: item.id,
+                  catalogVariantId: variant.id,
+                  sellingLocationId: selectedLocationId,
+                  currency: runtime.currency,
+                  effectiveAt: new Date().toISOString(),
+                });
+                return [variant.id, price.amount] as const;
+              }),
+            )
+          : [];
         setVariantPicker({
           item,
           variants,
-          pricesByVariantId: resolvedVariants.pricesByVariantId,
-          unavailableVariantIds: resolvedVariants.unavailableVariantIds,
+          pricesByVariantId: Object.fromEntries(priceEntries),
           locale: runtime.locale,
           currency: runtime.currency,
-          context,
-          ...(targetSaleId ? { targetSaleId } : {}),
         });
         return;
       }
@@ -167,19 +173,9 @@ export function useCashierTransactionWorkspace(routeSaleId?: string) {
   const selectVariant = async (catalogVariantId: string | null) => {
     if (!variantPicker) return;
     const item = variantPicker.item;
-    const context = variantPicker.context ?? 'CART';
-    const targetSaleId = variantPicker.targetSaleId;
-    const catalogVariant =
-      variantPicker.variants.find((variant) => variant.id === catalogVariantId) ?? null;
     setVariantPicker(null);
     try {
-      await addCatalogItem(
-        item,
-        catalogVariantId ?? undefined,
-        context,
-        targetSaleId,
-        catalogVariant,
-      );
+      await addCatalogItem(item, catalogVariantId ?? undefined, 'CART');
     } catch (error) {
       command.reportError(error);
     }
@@ -197,7 +193,6 @@ export function useCashierTransactionWorkspace(routeSaleId?: string) {
     setCompletionOpen(false);
     setLineTaskId(null);
     command.clearAttention();
-    saleWorkspace.clearDraft();
   };
 
   const clearProcessedDraft = () => {
@@ -206,7 +201,6 @@ export function useCashierTransactionWorkspace(routeSaleId?: string) {
     setCompletionOpen(false);
     setLineTaskId(null);
     command.clearAttention();
-    saleWorkspace.clearDraft();
   };
 
   const resumeSale = (saleId: string) => {
@@ -433,6 +427,7 @@ export function useCashierTransactionWorkspace(routeSaleId?: string) {
     locale: runtime.locale,
     currency: runtime.currency,
     items: catalog.items,
+    priceByItemId: catalog.priceByItemId,
     categories: catalog.categories,
     employees: employeeOptions.employees,
     selectedLocationId: selectedLocationId ?? '',
@@ -465,10 +460,6 @@ export function useCashierTransactionWorkspace(routeSaleId?: string) {
     closeVariantPicker: () => setVariantPicker(null),
     changeQuantity: saleWorkspace.changeQuantity,
     removeLine: saleWorkspace.removeLine,
-    changeDraftQuantity: saleWorkspace.changeDraftQuantity,
-    removeDraftLine: saleWorkspace.removeDraftLine,
-    commitDraft: saleWorkspace.commitDraft,
-    cart: saleWorkspace.cart,
     openLineTask,
     closeLineTask: () => setLineTaskId(null),
     setPriceOverride: core.setPriceOverride,
