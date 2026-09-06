@@ -71,6 +71,9 @@ importers:
 
   apps/backoffice:
     dependencies:
+      '@digvation/pos-api':
+        specifier: workspace:*
+        version: link:../../packages/api
       '@digvation/pos-auth':
         specifier: workspace:*
         version: link:../../packages/auth
@@ -82,7 +85,7 @@ importers:
         version: link:../../packages/ui
       '@digvation/ui':
         specifier: file:C:/Users/dicky/Documents/work/digvation/Digvation-Design-System/packages/ui
-        version: file:../../../Digvation-Design-System/packages/ui(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
+        version: '@digvation-labs/ui@file:../../../Digvation-Design-System/packages/ui(react-dom@19.2.8(react@19.2.8))(react@19.2.8)'
       '@tanstack/react-query':
         specifier: 5.102.8
         version: 5.102.8(react@19.2.8)
@@ -120,9 +123,12 @@ importers:
       '@digvation/pos-runtime':
         specifier: workspace:*
         version: link:../../packages/runtime
+      '@digvation/pos-ui':
+        specifier: workspace:*
+        version: link:../../packages/ui
       '@digvation/ui':
         specifier: file:C:/Users/dicky/Documents/work/digvation/Digvation-Design-System/packages/ui
-        version: file:../../../Digvation-Design-System/packages/ui(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
+        version: '@digvation-labs/ui@file:../../../Digvation-Design-System/packages/ui(react-dom@19.2.8(react@19.2.8))(react@19.2.8)'
       '@tanstack/react-query':
         specifier: 5.102.8
         version: 5.102.8(react@19.2.8)
@@ -179,7 +185,7 @@ importers:
     dependencies:
       '@digvation/ui':
         specifier: file:C:/Users/dicky/Documents/work/digvation/Digvation-Design-System/packages/ui
-        version: file:../../../Digvation-Design-System/packages/ui(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
+        version: '@digvation-labs/ui@file:../../../Digvation-Design-System/packages/ui(react-dom@19.2.8(react@19.2.8))(react@19.2.8)'
       clsx:
         specifier: 2.1.1
         version: 2.1.1
@@ -300,8 +306,9 @@ packages:
     resolution: {integrity: sha512-Vd/9EVDiu6PPJt9yAh6roZP6El1xHrdvIVGjyBsHR0RYwNHgL7FJPyIIW4fANJNG6FtyZfvlRPpFI4ZM/lubvw==}
     engines: {node: '>=18'}
 
-  '@digvation/ui@file:../../../Digvation-Design-System/packages/ui':
+  '@digvation-labs/ui@file:../../../Digvation-Design-System/packages/ui':
     resolution: {directory: ../../../Digvation-Design-System/packages/ui, type: directory}
+    engines: {node: '>=20'}
     peerDependencies:
       react: '>=18.2.0'
       react-dom: '>=18.2.0'
@@ -2006,7 +2013,7 @@ snapshots:
 
   '@csstools/css-tokenizer@3.0.4': {}
 
-  '@digvation/ui@file:../../../Digvation-Design-System/packages/ui(react-dom@19.2.8(react@19.2.8))(react@19.2.8)':
+  '@digvation-labs/ui@file:../../../Digvation-Design-System/packages/ui(react-dom@19.2.8(react@19.2.8))(react@19.2.8)':
     dependencies:
       clsx: 2.1.1
       react: 19.2.8
