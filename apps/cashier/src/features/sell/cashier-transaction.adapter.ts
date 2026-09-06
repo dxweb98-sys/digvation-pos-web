@@ -85,10 +85,19 @@ export interface PaymentTransitionInput {
   status: Exclude<PaymentStatus, 'PENDING'>;
 }
 
+export interface SellingCatalogDisplayInput {
+  sellingLocationId: string;
+  currency: string;
+}
+
 export interface SellingCatalogQuery {
   listSellingLocations(signal?: AbortSignal): Promise<ApiPage<SellingLocation>>;
   listCatalogCategories(signal?: AbortSignal): Promise<ApiPage<CatalogCategory>>;
   listCatalogItems(signal?: AbortSignal): Promise<ApiPage<CatalogItem>>;
+  listSellingCatalogItems?(
+    input: SellingCatalogDisplayInput,
+    signal?: AbortSignal,
+  ): Promise<ApiPage<CatalogItem>>;
   listCatalogVariants(
     catalogItemId: string,
     signal?: AbortSignal,
@@ -193,9 +202,23 @@ export class HttpCashierTransactionAdapter
   }
 
   public listCatalogItems(signal?: AbortSignal): Promise<ApiPage<CatalogItem>> {
-    return this.client.get<ApiPage<CatalogItem>>(pagePath(`${API_PREFIX}/catalog/items`), {
-      signal,
+    return this.client.get<ApiPage<CatalogItem>>(pagePath(`${API_PREFIX}/catalog/items`), { signal });
+  }
+
+  public listSellingCatalogItems(
+    input: SellingCatalogDisplayInput,
+    signal?: AbortSignal,
+  ): Promise<ApiPage<CatalogItem>> {
+    const query = new URLSearchParams({
+      locationId: input.sellingLocationId,
+      currency: input.currency,
+      limit: String(PAGE_SIZE),
+      offset: '0',
     });
+    return this.client.get<ApiPage<CatalogItem>>(
+      `${API_PREFIX}/catalog/items/selling?${query.toString()}`,
+      { signal },
+    );
   }
 
   public listCatalogVariants(

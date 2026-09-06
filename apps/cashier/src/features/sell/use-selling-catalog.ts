@@ -10,9 +10,16 @@ export type CatalogItemTypeFilter = 'ALL' | 'PRODUCT' | 'SERVICE';
 interface UseSellingCatalogOptions {
   query: SellingCatalogQuery;
   locale: string;
+  sellingLocationId: string;
+  currency: string;
 }
 
-export function useSellingCatalog({ query, locale }: UseSellingCatalogOptions) {
+export function useSellingCatalog({
+  query,
+  locale,
+  sellingLocationId,
+  currency,
+}: UseSellingCatalogOptions) {
   const queryClient = useQueryClient();
   const [search, setSearch] = useState('');
   const [itemType, setItemType] = useState<CatalogItemTypeFilter>('SERVICE');
@@ -22,8 +29,17 @@ export function useSellingCatalog({ query, locale }: UseSellingCatalogOptions) {
     staleTime: 300_000,
   });
   const itemsQuery = useQuery({
-    queryKey: cashierTransactionKeys.items(),
-    queryFn: ({ signal }) => query.listCatalogItems(signal),
+    queryKey: cashierTransactionKeys.items(sellingLocationId, currency),
+    queryFn: ({ signal }) => {
+      if (query.listSellingCatalogItems && sellingLocationId && currency) {
+        return query.listSellingCatalogItems(
+          { sellingLocationId, currency },
+          signal,
+        );
+      }
+      return query.listCatalogItems(signal);
+    },
+    enabled: Boolean(sellingLocationId && currency),
     staleTime: 300_000,
   });
 

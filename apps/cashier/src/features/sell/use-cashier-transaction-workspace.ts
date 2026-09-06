@@ -1,6 +1,5 @@
 import { useConnectivity, useRuntime } from '@digvation/pos-runtime';
 import { useAuth } from '@digvation/pos-auth';
-import { createDecimal } from '@digvation/pos-money';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router';
@@ -12,7 +11,7 @@ import { fetchResolvedPrice, fetchResolvedVariantPrices } from './resolved-price
 import type {
   CatalogItem,
   CatalogVariant,
-  ResolvedPrice,
+  PaymentMethod,
   Sale,
   SaleLine,
 } from './cashier-transaction.types';
@@ -51,6 +50,8 @@ export function useCashierTransactionWorkspace(routeSaleId?: string) {
   const catalog = useSellingCatalog({
     query: transactionAdapter,
     locale: runtime.locale,
+    sellingLocationId: selectedLocationId ?? '',
+    currency: runtime.currency,
   });
 
   const employeeOptions = useEmployeeOptions(transactionAdapter, areEmployeeOptionsEnabled);
@@ -235,26 +236,8 @@ export function useCashierTransactionWorkspace(routeSaleId?: string) {
   };
 
   const cachedCardPrice = (itemId: string): string | null => {
-    const prices = queryClient
-      .getQueriesData<ResolvedPrice>({
-        queryKey: ['cashier-transaction', 'resolved-price', itemId],
-      })
-      .filter(
-        (entry): entry is [readonly unknown[], ResolvedPrice] =>
-          entry[1] !== undefined &&
-          entry[0][4] === selectedLocationId &&
-          entry[0][5] === runtime.currency,
-      )
-      .map(([, price]) => price);
-    return (
-      prices.reduce<ResolvedPrice | null>(
-        (lowest, price) =>
-          !lowest || createDecimal(price.amount).lessThan(createDecimal(lowest.amount))
-            ? price
-            : lowest,
-        null,
-      )?.amount ?? null
-    );
+    const item = catalog.items.find((candidate) => candidate.id === itemId);
+    return item?.displayPrice?.kind === 'EXACT' ? item.displayPrice.amount : null;
   };
 
   const retryLastCommand = () => {
@@ -288,8 +271,40 @@ export function useCashierTransactionWorkspace(routeSaleId?: string) {
     }
   };
 
-  const startQueuedFulfillment = (sale: Sale, line: SaleLine) =>
-    transitionQueuedFulfillment(sale, line, 'IN_PROGRESS');
+  const startQueuedFulfillment = async (sale: Sale, preferredLine: SaleLine) => {
+    command.clearNotice();
+    try {
+      let current = sale;
+      const waitingLineIds = current.lines
+        .filter(
+          (line) =>
+            line.removedAt === null &&
+            line.fulfillmentBehaviorSnapshot === 'TRACKED' &&
+            line.fulfillment?.status === 'WAITING',
+        )
+        .map((line) => line.id);
+      const orderedLineIds = [
+        preferredLine.id,
+        ...waitingLineIds.filter((lineId) => lineId !== preferredLine.id),
+      ].filter((lineId) => waitingLineIds.includes(lineId));
+      if (!orderedLineIds.length) {
+        throw new Error('No queued work remains to start.');
+      }
+      for (const lineId of orderedLineIds) {
+        current = await command.runMutation(() =>
+          transactionAdapter.transitionSaleLineFulfillment(current.id, lineId, {
+            expectedVersion: current.version,
+            status: 'IN_PROGRESS',
+          }),
+        );
+      }
+      command.commitSale(current);
+      return current;
+    } catch (error) {
+      command.reportError(error);
+      throw error;
+    }
+  };
 
   const setQueuedAssignments = async (
     sale: Sale,
@@ -324,10 +339,34 @@ export function useCashierTransactionWorkspace(routeSaleId?: string) {
   const finalizeQueuedSale = async (sale: Sale) => {
     command.clearNotice();
     try {
+      let current = (await command.refetchSale(sale.id)) ?? sale;
+      const trackedLines = current.lines.filter(
+        (line) => line.removedAt === null && line.fulfillmentBehaviorSnapshot === 'TRACKED',
+      );
+      if (trackedLines.some((line) => line.fulfillment?.status === 'WAITING')) {
+        throw new Error('Mulai semua pekerjaan sebelum menyelesaikan transaksi.');
+      }
+      if (
+        trackedLines.some(
+          (line) => !line.fulfillment || line.fulfillment.status === 'CANCELED',
+        )
+      ) {
+        throw new Error('Pekerjaan yang dibatalkan tidak dapat diselesaikan sebagai transaksi aktif.');
+      }
+      for (const trackedLine of trackedLines) {
+        const liveLine = current.lines.find((line) => line.id === trackedLine.id);
+        if (liveLine?.fulfillment?.status !== 'IN_PROGRESS') continue;
+        current = await command.runMutation(() =>
+          transactionAdapter.transitionSaleLineFulfillment(current.id, liveLine.id, {
+            expectedVersion: current.version,
+            status: 'COMPLETED',
+          }),
+        );
+      }
       const updated = await command.runMutation(() =>
         transactionAdapter.finalizeSale(
-          sale.id,
-          sale.version,
+          current.id,
+          current.version,
           `cashier-finalize-${crypto.randomUUID()}`,
         ),
       );
@@ -337,6 +376,57 @@ export function useCashierTransactionWorkspace(routeSaleId?: string) {
       command.reportError(error);
       throw error;
     }
+  };
+
+  const createQueuedPayment = async (
+    targetSale: Sale,
+    method: PaymentMethod,
+    appliedAmount: string,
+    tenderedAmount?: string,
+    providerReference?: string,
+  ) => {
+    command.clearNotice();
+    try {
+      const updated = await command.runMutation(() =>
+        transactionAdapter.createSalePayment(
+          targetSale.id,
+          {
+            expectedVersion: targetSale.version,
+            method,
+            appliedAmount,
+            ...(tenderedAmount ? { tenderedAmount } : {}),
+            ...(providerReference ? { providerReference } : {}),
+          },
+          `cashier-payment-${crypto.randomUUID()}`,
+        ),
+      );
+      command.commitSale(updated);
+      return updated;
+    } catch (error) {
+      command.reportError(error);
+      throw error;
+    }
+  };
+
+  const createPayment = async (
+    method: PaymentMethod,
+    appliedAmount: string,
+    tenderedAmount?: string,
+    providerReference?: string,
+  ) => {
+    if (resumedSaleId) {
+      const targetSale = queryClient.getQueryData<Sale>(cashierTransactionKeys.sale(resumedSaleId));
+      if (targetSale) {
+        return createQueuedPayment(
+          targetSale,
+          method,
+          appliedAmount,
+          tenderedAmount,
+          providerReference,
+        );
+      }
+    }
+    return core.createPayment(method, appliedAmount, tenderedAmount, providerReference);
   };
 
   return {
@@ -392,11 +482,12 @@ export function useCashierTransactionWorkspace(routeSaleId?: string) {
     transitionQueuedFulfillment,
     setQueuedAssignments,
     finalizeQueuedSale,
+    createQueuedPayment,
     openCompletion: () => setCompletionOpen(true),
     closeCompletion: () => setCompletionOpen(false),
     setOrderDiscount: core.setOrderDiscount,
     clearOrderDiscount: core.clearOrderDiscount,
-    createPayment: core.createPayment,
+    createPayment,
     transitionPayment: core.transitionPayment,
     finalizeSale: core.finalizeSale,
     voidSale: core.voidSale,
