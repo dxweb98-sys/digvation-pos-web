@@ -5,6 +5,7 @@ import { AuthorizedRoute } from '../../auth/authorized-route';
 import { BackofficeLoginPage } from '../../auth/backoffice-login-page';
 import { UnauthorizedPage } from '../../routes/authorization/unauthorized-page';
 import { AccessControlPage } from '../../routes/access-control/access-control-page';
+import { BusinessSettingsPage } from '../../routes/business-settings/business-settings-page';
 import { DashboardPage } from '../../routes/dashboard/dashboard-page';
 import { PlaceholderPage } from '../../routes/placeholder/placeholder-page';
 import { BackofficeShell } from '../shell/backoffice-shell';
@@ -25,7 +26,7 @@ export const backofficeRouter = createBrowserRouter([
           { element: <AuthorizedRoute capability="employees" />, children: [{ path: '/employees', element: <PlaceholderPage title="Employees" /> }] },
           { element: <AuthorizedRoute capability="finance" />, children: [{ path: '/financial-accounts', element: <PlaceholderPage title="Financial Accounts" /> }, { path: '/expenses', element: <PlaceholderPage title="Expenses" /> }, { path: '/reconciliation', element: <PlaceholderPage title="Reconciliation" /> }] },
           { element: <AuthorizedRoute capability="reports" />, children: [{ path: '/reports', element: <PlaceholderPage title="Reports" /> }] },
-          { element: <AuthorizedRoute capability="configuration" />, children: [{ path: '/business', element: <PlaceholderPage title="Business" /> }] },
+          { element: <AuthorizedRoute capability="configuration" />, children: [{ path: '/business', element: <BusinessSettingsPage /> }] },
           { element: <AuthorizedRoute capability="accessControl" />, children: [{ path: '/access-control', element: <AccessControlPage /> }] },
           { path: '/unauthorized', element: <UnauthorizedPage /> },
         ],
