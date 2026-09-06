@@ -5,6 +5,7 @@ import type { RouterProviderProps } from 'react-router';
 import { RouterProvider } from 'react-router/dom';
 
 import { BackofficeAuthProvider } from '../../auth/backoffice-auth-context';
+import { BackofficeLocalizationProvider } from '../localization/backoffice-localization';
 import type { HttpAuthAdapter } from '../../auth/http-auth-adapter';
 
 const queryClient = new QueryClient({
@@ -23,13 +24,15 @@ interface BackofficeProvidersProps {
 export function BackofficeProviders({ runtime, auth, router }: BackofficeProvidersProps) {
   return (
     <RuntimeProvider config={runtime}>
-      <DToastProvider>
-        <BackofficeAuthProvider auth={auth}>
+      <BackofficeLocalizationProvider>
+        <DToastProvider>
+          <BackofficeAuthProvider auth={auth}>
           <QueryClientProvider client={queryClient}>
             <RouterProvider router={router} />
           </QueryClientProvider>
-        </BackofficeAuthProvider>
-      </DToastProvider>
+          </BackofficeAuthProvider>
+        </DToastProvider>
+      </BackofficeLocalizationProvider>
     </RuntimeProvider>
   );
 }

@@ -18,6 +18,7 @@ import { canPerformBackofficeAction } from '../../auth/backoffice-access';
 import { isSessionExpiredError, useBackofficeAuth } from '../../auth/backoffice-auth-context';
 import { BackofficePage, BackofficePageHeader } from '../../app/layout/backoffice-page';
 import { normalizeBackofficeApiError } from '../../app/api/backoffice-api-error';
+import { useBackofficeLocalization } from '../../app/localization/backoffice-localization';
 import { AccessControlApi, type AccessRole, type AccessUser } from './access-control-api';
 
 const accessControlKeys = {
@@ -39,6 +40,7 @@ export function AccessControlPage() {
   const [deactivatingRole, setDeactivatingRole] = useState<AccessRole | null>(null);
   const queryClient = useQueryClient();
   const { showToast } = useToast();
+  const { copy } = useBackofficeLocalization();
   const rolesQuery = useQuery({
     queryKey: accessControlKeys.roles,
     queryFn: () => api.listRoles({ limit: 20, offset: 0 }),
@@ -66,22 +68,22 @@ export function AccessControlPage() {
   return (
     <BackofficePage>
       <BackofficePageHeader
-        eyebrow="Configuration"
-        title="Access Control"
+        eyebrow={copy('Configuration')}
+        title={copy('Access Control')}
         description="Manage tenant roles and user role assignments. Permissions are defined by the POS platform."
         actions={
           section === 'roles' && canCreateRole ? (
-            <DButton onClick={() => setEditingRole(null)}>Create role</DButton>
+            <DButton onClick={() => setEditingRole(null)}>{copy('Create role')}</DButton>
           ) : null
         }
       />
       <div className="mt-7 flex gap-1 border-b border-[var(--color-border)]">
         <SectionButton active={section === 'roles'} onClick={() => setSection('roles')}>
-          Roles
+          {copy('Roles')}
         </SectionButton>
         {canPerformBackofficeAction(session, 'viewUsers') ? (
           <SectionButton active={section === 'users'} onClick={() => setSection('users')}>
-            Users
+            {copy('Users')}
           </SectionButton>
         ) : null}
       </div>
@@ -143,9 +145,9 @@ export function AccessControlPage() {
                   });
               });
         }}
-        title="Deactivate role?"
+        title={copy('Deactivate role?')}
         message="Users will no longer receive this role's permissions."
-        confirmLabel="Deactivate"
+        confirmLabel={copy('Deactivate')}
         variant="danger"
       />
     </BackofficePage>
@@ -167,10 +169,11 @@ function RolesTable({
   canEdit: boolean;
   canDeactivate: boolean;
 }) {
+  const { copy } = useBackofficeLocalization();
   const columns: TableColumn<AccessRole>[] = [
     {
       key: 'name',
-      label: 'Role',
+      label: copy('Role'),
       render: (role) => (
         <div className="flex flex-wrap items-center gap-2">
           <span className="font-semibold">{role.name}</span>
@@ -178,15 +181,15 @@ function RolesTable({
         </div>
       ),
     },
-    { key: 'code', label: 'Code' },
+    { key: 'code', label: copy('Code') },
     {
       key: 'permissions',
-      label: 'Permissions',
+      label: copy('Permissions'),
       render: (role) => `${role.permissions.length} permissions`,
     },
     {
       key: 'status',
-      label: 'Status',
+      label: copy('Status'),
       render: (role) => (
         <DBadge variant={role.status === 'ACTIVE' ? 'outline' : 'secondary'}>
           {role.status === 'ACTIVE' ? 'Active' : 'Inactive'}
@@ -205,13 +208,13 @@ function RolesTable({
         emptyMessage="No roles are available for this workspace."
         actions={[
           {
-            label: 'Manage role',
+            label: copy('Manage role'),
             icon: <Pencil className="size-4" />,
             onClick: onEdit,
             show: (role) => !role.systemKey && canEdit,
           },
           {
-            label: 'Deactivate role',
+            label: copy('Deactivate role'),
             icon: <Ban className="size-4" />,
             variant: 'danger',
             onClick: onDeactivate,
@@ -234,17 +237,18 @@ function UsersTable({
   onEdit: (user: AccessUser) => void;
   canEdit: boolean;
 }) {
+  const { copy } = useBackofficeLocalization();
   const columns: TableColumn<AccessUser>[] = [
     { key: 'displayName', label: 'User' },
     { key: 'username', label: 'Username', render: (user) => user.username ?? 'No username' },
     {
       key: 'roles',
-      label: 'Roles',
+      label: copy('Roles'),
       render: (user) => user.roles.map((role) => role.name).join(', ') || 'No roles assigned',
     },
     {
       key: 'status',
-      label: 'Status',
+      label: copy('Status'),
       render: (user) => (
         <DBadge variant={user.status === 'ACTIVE' ? 'outline' : 'secondary'}>
           {formatUserStatus(user.status)}
@@ -263,7 +267,7 @@ function UsersTable({
         emptyMessage="No POS users are available for this workspace."
         actions={[
           {
-            label: 'Manage roles',
+            label: copy('Manage roles'),
             icon: <UserCog className="size-4" />,
             onClick: onEdit,
             show: () => canEdit,
@@ -292,6 +296,7 @@ function RoleEditor({
   canManagePermissions: boolean;
 }) {
   const { showToast } = useToast();
+  const { copy } = useBackofficeLocalization();
   const [name, setName] = useState(role?.name ?? '');
   const [code, setCode] = useState('');
   const [selected, setSelected] = useState<string[]>(role?.permissions ?? []);
@@ -331,7 +336,7 @@ function RoleEditor({
     <DDialog
       open={open}
       onClose={onClose}
-      title={isNew ? 'Create role' : `Manage ${current?.name ?? ''}`}
+      title={isNew ? copy('Create role') : `${copy('Manage role')}: ${current?.name ?? ''}`}
       description={
         current?.systemKey
           ? 'System roles are protected by the POS authorization policy.'
@@ -341,11 +346,11 @@ function RoleEditor({
       footer={
         <div className="flex justify-end gap-2">
           <DButton variant="secondary" onClick={onClose}>
-            Cancel
+            {copy('Cancel')}
           </DButton>
           {!current?.systemKey && (isNew || canUpdate || canManagePermissions) ? (
             <DButton onClick={() => void save()} disabled={!name || (isNew && !code)}>
-              Save role
+              {copy('Save role')}
             </DButton>
           ) : null}
         </div>
@@ -355,10 +360,10 @@ function RoleEditor({
         {!current?.systemKey ? (
           <div className="grid gap-4 sm:grid-cols-2">
             {isNew ? (
-              <DInput label="Role code" value={code} onChange={setCode} placeholder="MANAGER" />
+              <DInput label={copy('Role code')} value={code} onChange={setCode} placeholder="MANAGER" />
             ) : null}
             <DInput
-              label="Role name"
+              label={copy('Role name')}
               value={name || current?.name || ''}
               onChange={setName}
               disabled={!isNew && !canUpdate}
@@ -366,7 +371,7 @@ function RoleEditor({
           </div>
         ) : null}
         <div>
-          <p className="text-sm font-semibold">Permissions</p>
+          <p className="text-sm font-semibold">{copy('Permissions')}</p>
           <div className="mt-3 grid gap-2 sm:grid-cols-2">
             {permissions.map((key) => (
               <label
@@ -404,6 +409,7 @@ function UserRoleEditor({
   canManage: boolean;
 }) {
   const { showToast } = useToast();
+  const { copy } = useBackofficeLocalization();
   const [selected, setSelected] = useState<string[]>(user?.roles.map((role) => role.id) ?? []);
   const current = selected;
   const toggle = (id: string) =>
@@ -414,12 +420,12 @@ function UserRoleEditor({
     <DDialog
       open={Boolean(user)}
       onClose={onClose}
-      title="Manage user roles"
+      title={copy('Manage user roles')}
       description={user?.displayName}
       footer={
         <div className="flex justify-end gap-2">
           <DButton variant="secondary" onClick={onClose}>
-            Cancel
+            {copy('Cancel')}
           </DButton>
           {canManage ? (
             <DButton
@@ -447,7 +453,7 @@ function UserRoleEditor({
                     });
               }}
             >
-              Save assignments
+              {copy('Save assignments')}
             </DButton>
           ) : null}
         </div>
@@ -465,7 +471,7 @@ function UserRoleEditor({
               onChange={() => toggle(role.id)}
             />
             <span>{role.name}</span>
-            {role.systemKey ? <DBadge variant="outline">Protected</DBadge> : null}
+            {role.systemKey ? <DBadge variant="outline">{copy('Protected')}</DBadge> : null}
           </label>
         ))}
       </div>
