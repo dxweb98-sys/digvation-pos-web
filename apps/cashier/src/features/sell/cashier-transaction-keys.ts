@@ -2,7 +2,8 @@ export const cashierTransactionKeys = {
   all: ['cashier-transaction'] as const,
   locations: () => ['cashier-transaction', 'locations'] as const,
   categories: () => ['cashier-transaction', 'catalog-categories'] as const,
-  items: () => ['cashier-transaction', 'catalog-items'] as const,
+  items: (sellingLocationId: string, currency: string) =>
+    ['cashier-transaction', 'catalog-items', sellingLocationId, currency] as const,
   variants: (catalogItemId: string) =>
     ['cashier-transaction', 'catalog-variants', catalogItemId] as const,
   resolvedPrice: (

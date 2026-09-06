@@ -1,16 +1,39 @@
-import { Navigate, createBrowserRouter } from 'react-router';
+import { createBrowserRouter } from 'react-router';
 
-import { AccountPage } from '../../routes/account/account-page';
-import { OperationsHomePage } from '../../routes/operations-home/operations-home-page';
+import { AuthenticatedRoute } from '../../auth/authenticated-route';
+import { AuthorizedRoute } from '../../auth/authorized-route';
+import { BackofficeLoginPage } from '../../auth/backoffice-login-page';
+import { UnauthorizedPage } from '../../routes/authorization/unauthorized-page';
+import { AccessControlPage } from '../../routes/access-control/access-control-page';
+import { DashboardPage } from '../../routes/dashboard/dashboard-page';
+import { PlaceholderPage } from '../../routes/placeholder/placeholder-page';
 import { BackofficeShell } from '../shell/backoffice-shell';
 
 export const backofficeRouter = createBrowserRouter([
+  { path: '/login', element: <BackofficeLoginPage /> },
   {
-    element: <BackofficeShell />,
+    element: <AuthenticatedRoute />,
     children: [
-      { index: true, element: <Navigate to="/operations" replace /> },
-      { path: '/operations', element: <OperationsHomePage /> },
-      { path: '/account', element: <AccountPage /> },
+      {
+        element: <BackofficeShell />,
+        children: [
+          {
+            element: <AuthorizedRoute capability="dashboard" />,
+            children: [{ index: true, element: <DashboardPage /> }],
+          },
+          { element: <AuthorizedRoute capability="catalog" />, children: [{ path: '/catalog', element: <PlaceholderPage title="Catalog" /> }] },
+          { element: <AuthorizedRoute capability="employees" />, children: [{ path: '/employees', element: <PlaceholderPage title="Employees" /> }] },
+          { element: <AuthorizedRoute capability="finance" />, children: [{ path: '/financial-accounts', element: <PlaceholderPage title="Financial Accounts" /> }, { path: '/expenses', element: <PlaceholderPage title="Expenses" /> }, { path: '/reconciliation', element: <PlaceholderPage title="Reconciliation" /> }] },
+          { element: <AuthorizedRoute capability="reports" />, children: [{ path: '/reports', element: <PlaceholderPage title="Reports" /> }] },
+          { element: <AuthorizedRoute capability="configuration" />, children: [{ path: '/business', element: <PlaceholderPage title="Business" /> }] },
+          { element: <AuthorizedRoute capability="accessControl" />, children: [{ path: '/access-control', element: <AccessControlPage /> }] },
+          { path: '/unauthorized', element: <UnauthorizedPage /> },
+        ],
+      },
     ],
+  },
+  {
+    path: '*',
+    element: <BackofficeLoginPage />,
   },
 ]);

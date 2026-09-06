@@ -1,31 +1,46 @@
-import { useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useMemo, useState } from 'react';
 
 import type { SellingCatalogQuery } from './cashier-transaction.adapter';
 import { cashierTransactionKeys } from './cashier-transaction-keys';
-import type { CatalogItem, CatalogVariant, ResolvedPrice } from './cashier-transaction.types';
+import type { CatalogItem, CatalogVariant } from './cashier-transaction.types';
 
 export type CatalogItemTypeFilter = 'ALL' | 'PRODUCT' | 'SERVICE';
 
 interface UseSellingCatalogOptions {
   query: SellingCatalogQuery;
-  selectedLocationId: string | null;
-  currency: string;
   locale: string;
+  sellingLocationId: string;
+  currency: string;
 }
 
 export function useSellingCatalog({
   query,
-  selectedLocationId,
-  currency,
   locale,
+  sellingLocationId,
+  currency,
 }: UseSellingCatalogOptions) {
   const queryClient = useQueryClient();
   const [search, setSearch] = useState('');
   const [itemType, setItemType] = useState<CatalogItemTypeFilter>('SERVICE');
+  const categoriesQuery = useQuery({
+    queryKey: cashierTransactionKeys.categories(),
+    queryFn: ({ signal }) => query.listCatalogCategories(signal),
+    staleTime: 300_000,
+  });
   const itemsQuery = useQuery({
-    queryKey: cashierTransactionKeys.items(),
-    queryFn: ({ signal }) => query.listCatalogItems(signal),
+    queryKey: cashierTransactionKeys.items(sellingLocationId, currency),
+    queryFn: ({ signal }) => {
+      if (query.listSellingCatalogItems && sellingLocationId && currency) {
+        return query.listSellingCatalogItems(
+          { sellingLocationId, currency },
+          signal,
+        );
+      }
+      return query.listCatalogItems(signal);
+    },
+    enabled: Boolean(sellingLocationId && currency),
+    staleTime: 300_000,
   });
 
   const activeItems = useMemo(
@@ -41,41 +56,21 @@ export function useSellingCatalog({
     });
   }, [activeItems, itemType, locale, search]);
 
-  const priceQueries = useQueries({
-    queries: items.map((item) => ({
-      queryKey: selectedLocationId
-        ? cashierTransactionKeys.resolvedPrice(item.id, null, selectedLocationId, currency)
-        : cashierTransactionKeys.resolvedPrice(item.id, null, 'unselected', currency),
-      queryFn: ({ signal }: { signal: AbortSignal }) =>
-        query.resolvePrice(
-          {
-            catalogItemId: item.id,
-            sellingLocationId: selectedLocationId!,
-            currency,
-            effectiveAt: new Date().toISOString(),
-          },
-          signal,
+  const priceByItemId = useMemo(
+    () =>
+      new Map(
+        items.flatMap((item) =>
+          item.displayPrice?.kind === 'EXACT' ? [[item.id, { amount: item.displayPrice.amount }]] : [],
         ),
-      enabled: Boolean(selectedLocationId),
-      staleTime: 60_000,
-      retry: false,
-    })),
-  });
-
-  const priceByItemId = useMemo(() => {
-    const prices = new Map<string, ResolvedPrice>();
-    items.forEach((item, index) => {
-      const price = priceQueries[index]?.data;
-      if (price) prices.set(item.id, price);
-    });
-    return prices;
-  }, [items, priceQueries]);
+      ),
+    [items],
+  );
 
   const loadActiveVariants = async (item: CatalogItem): Promise<CatalogVariant[]> => {
     const page = await queryClient.fetchQuery({
       queryKey: cashierTransactionKeys.variants(item.id),
       queryFn: ({ signal }) => query.listCatalogVariants(item.id, signal),
-      staleTime: 60_000,
+      staleTime: 300_000,
     });
     return page.items.filter((variant) => variant.status === 'ACTIVE');
   };
@@ -83,10 +78,13 @@ export function useSellingCatalog({
   return {
     items,
     priceByItemId,
+    categories: (categoriesQuery.data?.items ?? []).filter(
+      (category) => category.status === 'ACTIVE',
+    ),
     search,
     itemType,
-    error: itemsQuery.error,
-    isLoading: itemsQuery.isLoading,
+    error: itemsQuery.error ?? categoriesQuery.error,
+    isLoading: itemsQuery.isLoading || categoriesQuery.isLoading,
     setSearch,
     setItemType,
     loadActiveVariants,

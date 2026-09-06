@@ -23,11 +23,23 @@ export class ApiClient {
   }
 
   public post<T>(path: string, body: unknown, options: ApiRequestOptions = {}): Promise<T> {
+    return this.withJsonBody<T>('POST', path, body, options);
+  }
+
+  public put<T>(path: string, body: unknown, options: ApiRequestOptions = {}): Promise<T> {
+    return this.withJsonBody<T>('PUT', path, body, options);
+  }
+
+  public patch<T>(path: string, body: unknown, options: ApiRequestOptions = {}): Promise<T> {
+    return this.withJsonBody<T>('PATCH', path, body, options);
+  }
+
+  private withJsonBody<T>(method: 'POST' | 'PUT' | 'PATCH', path: string, body: unknown, options: ApiRequestOptions): Promise<T> {
     const headers = new Headers(options.headers);
     headers.set('content-type', 'application/json');
 
     return this.request<T>(path, {
-      method: 'POST',
+      method,
       signal: options.signal ?? null,
       headers,
       body: JSON.stringify(body),

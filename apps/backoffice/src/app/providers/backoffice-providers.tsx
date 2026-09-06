@@ -1,9 +1,11 @@
-import { AuthProvider, type AuthPort, type AuthSession } from '@digvation/pos-auth';
 import { RuntimeProvider, type RuntimeConfig } from '@digvation/pos-runtime';
 import { DToastProvider as ToastProvider } from '@digvation/ui';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { RouterProviderProps } from 'react-router';
 import { RouterProvider } from 'react-router/dom';
+
+import { BackofficeAuthProvider } from '../../auth/backoffice-auth-context';
+import { HttpAuthAdapter } from '../../auth/http-auth-adapter';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -14,26 +16,24 @@ const queryClient = new QueryClient({
 
 interface BackofficeProvidersProps {
   runtime: RuntimeConfig;
-  session: AuthSession;
-  authPort: AuthPort;
+  auth: HttpAuthAdapter;
   router: RouterProviderProps['router'];
 }
 
 export function BackofficeProviders({
   runtime,
-  session,
-  authPort,
+  auth,
   router,
 }: BackofficeProvidersProps) {
   return (
     <RuntimeProvider config={runtime}>
-      <AuthProvider session={session} authPort={authPort}>
+      <BackofficeAuthProvider auth={auth}>
         <QueryClientProvider client={queryClient}>
           <ToastProvider>
             <RouterProvider router={router} />
           </ToastProvider>
         </QueryClientProvider>
-      </AuthProvider>
+      </BackofficeAuthProvider>
     </RuntimeProvider>
   );
 }
