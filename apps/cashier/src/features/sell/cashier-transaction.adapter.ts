@@ -193,7 +193,9 @@ export class HttpCashierTransactionAdapter
   }
 
   public listCatalogItems(signal?: AbortSignal): Promise<ApiPage<CatalogItem>> {
-    return this.client.get<ApiPage<CatalogItem>>(pagePath(`${API_PREFIX}/catalog/items`), { signal });
+    return this.client.get<ApiPage<CatalogItem>>(pagePath(`${API_PREFIX}/catalog/items`), {
+      signal,
+    });
   }
 
   public listSellingCatalogItems(

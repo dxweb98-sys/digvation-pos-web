@@ -6,3 +6,6 @@ packages:
 # MSW's install script is not required for this browser/test setup, so keep it blocked.
 allowBuilds:
   msw: false
+
+minimumReleaseAgeExclude:
+  - '@digvation-labs/ui@1.0.0'

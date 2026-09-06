@@ -34,7 +34,12 @@ export class ApiClient {
     return this.withJsonBody<T>('PATCH', path, body, options);
   }
 
-  private withJsonBody<T>(method: 'POST' | 'PUT' | 'PATCH', path: string, body: unknown, options: ApiRequestOptions): Promise<T> {
+  private withJsonBody<T>(
+    method: 'POST' | 'PUT' | 'PATCH',
+    path: string,
+    body: unknown,
+    options: ApiRequestOptions,
+  ): Promise<T> {
     const headers = new Headers(options.headers);
     headers.set('content-type', 'application/json');
 

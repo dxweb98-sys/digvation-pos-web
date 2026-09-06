@@ -11,11 +11,5 @@ export async function bootstrapBackoffice() {
   assertApplicationEnabled(runtime, 'backoffice');
   const auth = new HttpAuthAdapter(runtime.apiBaseUrl, runtime.workspace);
 
-  return (
-    <BackofficeProviders
-      runtime={runtime}
-      auth={auth}
-      router={backofficeRouter}
-    />
-  );
+  return <BackofficeProviders runtime={runtime} auth={auth} router={backofficeRouter} />;
 }

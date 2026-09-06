@@ -1,7 +1,15 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+  type ReactNode,
+} from 'react';
 
 import type { BackofficeSession, LoginCredentials } from './auth-session';
-import { HttpAuthAdapter } from './http-auth-adapter';
+import type { HttpAuthAdapter } from './http-auth-adapter';
 
 type AuthenticationStatus = 'hydrating' | 'authenticated' | 'unauthenticated';
 
@@ -15,7 +23,13 @@ interface BackofficeAuthContextValue {
 
 const BackofficeAuthContext = createContext<BackofficeAuthContextValue | null>(null);
 
-export function BackofficeAuthProvider({ auth, children }: { auth: HttpAuthAdapter; children: ReactNode }) {
+export function BackofficeAuthProvider({
+  auth,
+  children,
+}: {
+  auth: HttpAuthAdapter;
+  children: ReactNode;
+}) {
   const [status, setStatus] = useState<AuthenticationStatus>('hydrating');
   const [session, setSession] = useState<BackofficeSession | null>(null);
 
@@ -38,11 +52,14 @@ export function BackofficeAuthProvider({ auth, children }: { auth: HttpAuthAdapt
     };
   }, [auth]);
 
-  const login = useCallback(async (input: LoginCredentials) => {
-    const authenticated = await auth.login(input);
-    setSession(authenticated);
-    setStatus('authenticated');
-  }, [auth]);
+  const login = useCallback(
+    async (input: LoginCredentials) => {
+      const authenticated = await auth.login(input);
+      setSession(authenticated);
+      setStatus('authenticated');
+    },
+    [auth],
+  );
 
   const logout = useCallback(async () => {
     await auth.logout();
@@ -52,7 +69,10 @@ export function BackofficeAuthProvider({ auth, children }: { auth: HttpAuthAdapt
 
   const getAccessToken = useCallback(() => auth.getAccessToken(), [auth]);
 
-  const value = useMemo(() => ({ status, session, login, logout, getAccessToken }), [getAccessToken, login, logout, session, status]);
+  const value = useMemo(
+    () => ({ status, session, login, logout, getAccessToken }),
+    [getAccessToken, login, logout, session, status],
+  );
   return <BackofficeAuthContext.Provider value={value}>{children}</BackofficeAuthContext.Provider>;
 }
 
