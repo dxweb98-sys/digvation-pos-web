@@ -1,12 +1,13 @@
 import { ApiClient } from '@digvation/pos-api';
 import { DBadge, DButton, DConfirmDialog, DDialog, DInput, DSkeleton } from '@digvation-labs/ui';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Building2, MapPinPlus } from 'lucide-react';
+import { Building2, CircleOff, MapPinPlus, Pencil } from 'lucide-react';
 import { useMemo, useState } from 'react';
 
 import { useRuntime } from '@digvation/pos-runtime';
 import { canPerformBackofficeAction } from '../../auth/backoffice-access';
 import { useBackofficeAuth } from '../../auth/backoffice-auth-context';
+import { BackofficePage, BackofficePageHeader } from '../../app/layout/backoffice-page';
 import {
   BusinessSettingsApi,
   type BusinessProfile,
@@ -17,6 +18,8 @@ const businessSettingsKeys = {
   profile: ['business-settings', 'profile'] as const,
   locations: ['business-settings', 'locations'] as const,
 };
+
+const locationPageLimit = 20;
 
 export function BusinessSettingsPage() {
   const { session, getAccessToken } = useBackofficeAuth();
@@ -31,6 +34,7 @@ export function BusinessSettingsPage() {
     undefined,
   );
   const [deactivatingLocation, setDeactivatingLocation] = useState<SellingLocation | null>(null);
+  const [locationsOffset, setLocationsOffset] = useState(0);
 
   const canViewProfile = session
     ? canPerformBackofficeAction(session, 'viewBusinessProfile')
@@ -53,8 +57,8 @@ export function BusinessSettingsPage() {
     enabled: canViewProfile,
   });
   const locationsQuery = useQuery({
-    queryKey: businessSettingsKeys.locations,
-    queryFn: () => api.listLocations(),
+    queryKey: [...businessSettingsKeys.locations, locationsOffset],
+    queryFn: () => api.listLocations({ limit: locationPageLimit, offset: locationsOffset }),
     enabled: canViewLocations,
   });
   const invalidateProfile = () =>
@@ -65,15 +69,8 @@ export function BusinessSettingsPage() {
   if (!session) return null;
 
   return (
-    <section className="px-5 py-8 sm:px-6 lg:px-8 lg:py-10">
-      <div className="max-w-6xl">
-        <p className="text-xs font-bold uppercase tracking-[0.14em] text-[var(--color-brand)]">
-          Configuration
-        </p>
-        <h1 className="mt-2 text-2xl font-bold tracking-[-0.02em]">Business</h1>
-        <p className="mt-2 max-w-2xl text-sm leading-6 text-[var(--color-text-muted)]">
-          Set your business identity and manage the selling locations available to this workspace.
-        </p>
+    <BackofficePage>
+      <BackofficePageHeader eyebrow="Configuration" title="Business" description="Set your business identity and manage the selling locations available to this workspace." />
 
         {canViewProfile ? (
           <ProfileCard
@@ -92,9 +89,12 @@ export function BusinessSettingsPage() {
             onCreate={() => setEditingLocation(null)}
             onEdit={setEditingLocation}
             onDeactivate={setDeactivatingLocation}
+            offset={locationsQuery.data?.offset ?? locationsOffset}
+            hasNext={Boolean(locationsQuery.data && locationsQuery.data.items.length === locationsQuery.data.limit)}
+            onPrevious={() => setLocationsOffset((offset) => Math.max(0, offset - locationPageLimit))}
+            onNext={() => setLocationsOffset((offset) => offset + locationPageLimit)}
           />
         ) : null}
-      </div>
       <ProfileEditor
         key={editingProfile?.version ?? 'closed'}
         profile={editingProfile}
@@ -125,7 +125,7 @@ export function BusinessSettingsPage() {
         confirmLabel="Deactivate"
         variant="danger"
       />
-    </section>
+    </BackofficePage>
   );
 }
 
@@ -177,6 +177,10 @@ function LocationsPanel({
   onCreate,
   onEdit,
   onDeactivate,
+  offset,
+  hasNext,
+  onPrevious,
+  onNext,
 }: {
   locations?: SellingLocation[] | undefined;
   isLoading: boolean;
@@ -185,6 +189,10 @@ function LocationsPanel({
   onCreate: () => void;
   onEdit: (location: SellingLocation) => void;
   onDeactivate: (location: SellingLocation) => void;
+  offset: number;
+  hasNext: boolean;
+  onPrevious: () => void;
+  onNext: () => void;
 }) {
   return (
     <section className="mt-6">
@@ -229,12 +237,12 @@ function LocationsPanel({
                 </div>
                 {canUpdate ? (
                   <div className="flex items-center gap-1">
-                    <DButton variant="ghost" size="sm" onClick={() => onEdit(location)}>
-                      Edit
+                    <DButton variant="ghost" size="icon" aria-label={`Edit ${location.name}`} title="Edit selling location" onClick={() => onEdit(location)}>
+                      <Pencil className="size-4" />
                     </DButton>
                     {location.status === 'ACTIVE' ? (
-                      <DButton variant="ghost" size="sm" onClick={() => onDeactivate(location)}>
-                        Deactivate
+                      <DButton variant="ghost" size="icon" aria-label={`Deactivate ${location.name}`} title="Deactivate selling location" onClick={() => onDeactivate(location)}>
+                        <CircleOff className="size-4" />
                       </DButton>
                     ) : null}
                   </div>
@@ -244,6 +252,9 @@ function LocationsPanel({
           </div>
         </div>
       )}
+      {locations?.length ? (
+        <PaginationControls offset={offset} count={locations.length} hasNext={hasNext} onPrevious={onPrevious} onNext={onNext} />
+      ) : null}
     </section>
   );
 }
@@ -273,14 +284,14 @@ function ProfileEditor({
       title="Business profile"
       description="Set the name that identifies this business in POS records."
       footer={
-        <>
+        <div className="flex justify-end gap-2">
           <DButton variant="secondary" onClick={onClose}>
             Cancel
           </DButton>
           <DButton onClick={() => void save()} disabled={!name.trim()}>
             Save profile
           </DButton>
-        </>
+        </div>
       }
     >
       <DInput label="Business name" value={name} onChange={setName} autoFocus />
@@ -324,14 +335,14 @@ function LocationEditor({
           : 'Location codes are permanent once created.'
       }
       footer={
-        <>
+        <div className="flex justify-end gap-2">
           <DButton variant="secondary" onClick={onClose}>
             Cancel
           </DButton>
           <DButton onClick={() => void save()} disabled={!name.trim() || (isNew && !code.trim())}>
             Save location
           </DButton>
-        </>
+        </div>
       }
     >
       <div className="grid gap-4 sm:grid-cols-2">
@@ -344,4 +355,8 @@ function LocationEditor({
       </div>
     </DDialog>
   );
+}
+
+function PaginationControls({ offset, count, hasNext, onPrevious, onNext }: { offset: number; count: number; hasNext: boolean; onPrevious: () => void; onNext: () => void }) {
+  return <div className="mt-4 flex items-center justify-end gap-2"><span className="mr-auto text-xs text-[var(--color-text-muted)]">Showing {offset + 1}–{offset + count}</span><DButton variant="secondary" size="sm" disabled={offset === 0} onClick={onPrevious}>Previous</DButton><DButton variant="secondary" size="sm" disabled={!hasNext} onClick={onNext}>Next</DButton></div>;
 }

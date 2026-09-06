@@ -8,6 +8,7 @@ import { AccessControlPage } from '../../routes/access-control/access-control-pa
 import { DashboardPage } from '../../routes/dashboard/dashboard-page';
 import { PlaceholderPage } from '../../routes/placeholder/placeholder-page';
 import { BackofficeShell } from '../shell/backoffice-shell';
+import { BusinessSettingsPage } from '../../routes/business-settings/business-settings-page';
 
 export const backofficeRouter = createBrowserRouter([
   { path: '/login', element: <BackofficeLoginPage /> },
@@ -46,7 +47,7 @@ export const backofficeRouter = createBrowserRouter([
           },
           {
             element: <AuthorizedRoute capability="configuration" />,
-            children: [{ path: '/business', element: <PlaceholderPage title="Business" /> }],
+            children: [{ path: '/business', element: <BusinessSettingsPage /> }],
           },
           {
             element: <AuthorizedRoute capability="accessControl" />,

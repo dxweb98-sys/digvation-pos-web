@@ -1,15 +1,19 @@
 import { useRuntime } from '@digvation/pos-runtime';
-import { DAvatar, DBadge, DButton } from '@digvation-labs/ui';
+import { DAvatar, DBadge, DButton, DDropdown } from '@digvation-labs/ui';
 import {
+  Bell,
   BookOpen,
   Building2,
   ChartNoAxesCombined,
   CircleUserRound,
+  KeyRound,
   LayoutDashboard,
   LogOut,
+  Menu,
   ReceiptText,
   Tags,
   UserRound,
+  UserCircle,
   UsersRound,
   WalletCards,
   type LucideIcon,
@@ -18,6 +22,7 @@ import { NavLink, Outlet } from 'react-router';
 
 import { canAccessBackoffice, type BackofficeCapability } from '../../auth/backoffice-access';
 import { useBackofficeAuth } from '../../auth/backoffice-auth-context';
+import type { BackofficeSession } from '../../auth/auth-session';
 
 interface NavigationItem {
   label: string;
@@ -60,7 +65,7 @@ const navigationSections: ReadonlyArray<{ label: string; items: readonly Navigat
     ],
   },
   {
-    label: 'Reports',
+    label: 'Reporting',
     items: [{ label: 'Reports', to: '/reports', icon: ChartNoAxesCombined, capability: 'reports' }],
   },
   {
@@ -93,8 +98,8 @@ export function BackofficeShell() {
   }).format(new Date());
 
   return (
-    <div className="flex h-screen overflow-hidden bg-[var(--color-background)] lg:grid lg:grid-cols-[280px_minmax(0,1fr)]">
-      <aside className="flex min-h-0 shrink-0 flex-col border-b border-[var(--color-border)] bg-[var(--color-surface)] lg:border-b-0 lg:border-r lg:shadow-[1px_0_0_var(--color-border)]">
+    <div className="backoffice-shell flex h-screen w-full min-w-0 overflow-hidden bg-[var(--color-background)]">
+      <aside className="backoffice-shell__sidebar hidden min-h-0 shrink-0 flex-col border-r border-[var(--color-border)] bg-[var(--color-surface)] shadow-[1px_0_0_var(--color-border)] md:flex md:w-[232px] lg:w-[280px]">
         <div className="flex min-h-16 items-center gap-3 border-b border-[var(--color-border)] px-5 py-3">
           <div className="grid size-9 shrink-0 place-items-center overflow-hidden rounded-[var(--radius-control)] bg-[var(--color-brand)]/10 text-[var(--color-brand)]">
             {runtime.branding.logoUrl ? (
@@ -117,27 +122,11 @@ export function BackofficeShell() {
           </div>
         </div>
 
-        <nav className="flex gap-1 overflow-x-auto px-3 py-3 lg:flex-col lg:overflow-visible">
-          <NavigationLink item={dashboardItem} />
-          {navigationSections.map((section) => {
-            const items = section.items.filter((item) =>
-              canAccessBackoffice(session, item.capability),
-            );
-            if (!items.length) return null;
-            return (
-              <div key={section.label} className="min-w-max lg:mt-3">
-                <p className="hidden px-2.5 pb-1 text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--color-text-muted)] lg:block">
-                  {section.label}
-                </p>
-                {items.map((item) => (
-                  <NavigationLink key={item.label} item={item} />
-                ))}
-              </div>
-            );
-          })}
+        <nav className="px-3 py-3">
+          <NavigationGroups session={session} />
         </nav>
 
-        <div className="mt-auto hidden border-t border-[var(--color-border)] lg:block">
+        <div className="mt-auto hidden border-t border-[var(--color-border)] md:block">
           <div className="px-4 py-3">
             <div className="flex min-w-0 items-center gap-3">
               <DAvatar
@@ -161,7 +150,7 @@ export function BackofficeShell() {
             <DButton
               variant="ghost"
               type="button"
-              rightIcon={<LogOut className="size-4 shrink-0" />}
+              leftIcon={<LogOut className="size-4 shrink-0" />}
               onClick={() => void logout()}
               className="flex h-9 w-full items-center justify-start gap-2.5 px-3 text-[var(--color-text-muted)] hover:bg-[var(--color-surface-muted)] hover:text-[var(--color-text)]"
             >
@@ -171,33 +160,92 @@ export function BackofficeShell() {
         </div>
       </aside>
 
-      <main className="grid min-h-0 min-w-0 flex-1 grid-rows-[64px_minmax(0,1fr)] overflow-hidden">
-        <header className="flex h-16 items-center justify-between gap-4 border-b border-[var(--color-border)] bg-[var(--color-surface)] px-5 shadow-[0_1px_0_var(--color-border)] lg:px-8">
-          <div className="min-w-0">
-            <p className="text-sm font-semibold text-[var(--color-text)]">Backoffice</p>
-            <p className="truncate text-xs text-[var(--color-text-muted)]">{brandSubtitle}</p>
+      <main className="backoffice-shell__main flex min-h-0 min-w-0 w-full flex-1 flex-col overflow-hidden">
+        <header className="flex h-16 w-full shrink-0 items-center justify-between gap-4 border-b border-[var(--color-border)] bg-[var(--color-surface)] px-5 shadow-[0_1px_0_var(--color-border)] md:px-6 lg:px-8">
+          <div className="flex min-w-0 items-center gap-2 md:gap-0">
+            <div className="backoffice-shell__mobile-navigation md:hidden">
+              <DDropdown
+                placement="bottom-start"
+                contentPadding={false}
+                closeOnItemClick
+                minWidth={0}
+                contentClassName="w-[min(320px,calc(100vw-24px))] max-h-[calc(100vh-88px)] overflow-y-auto"
+                trigger={() => <DButton variant="ghost" size="icon" aria-label="Open navigation menu"><Menu className="size-[18px]" /></DButton>}
+              >
+                <nav className="p-3">
+                  <NavigationGroups session={session} />
+                </nav>
+              </DDropdown>
+            </div>
+            <div className="min-w-0">
+              <p className="text-sm font-semibold text-[var(--color-text)]">Backoffice</p>
+              <p className="truncate text-xs text-[var(--color-text-muted)]">
+                {session.identity.workspace}
+              </p>
+            </div>
           </div>
-          <div className="flex items-center gap-3">
-            <p className="hidden text-xs text-[var(--color-text-muted)] md:block">{currentDate}</p>
+          <div className="flex items-center gap-2 sm:gap-3">
+            <p className="backoffice-shell__header-date hidden text-xs text-[var(--color-text-muted)] md:block">{currentDate}</p>
             <span
-              className="hidden h-5 w-px bg-[var(--color-border)] md:block"
+              className="backoffice-shell__header-metadata hidden h-5 w-px bg-[var(--color-border)] md:block"
               aria-hidden="true"
             />
-            <DBadge variant="outline" className="hidden sm:inline-flex">
+            <DBadge variant="outline" className="backoffice-shell__header-workspace hidden md:inline-flex">
               {session.identity.workspace}
             </DBadge>
-            <DButton
-              variant="ghost"
-              size="icon"
-              className="lg:hidden"
-              aria-label="Log out"
-              onClick={() => void logout()}
-            >
-              <LogOut className="size-[18px]" />
+            <span className="backoffice-shell__header-status hidden items-center gap-1.5 text-xs text-[var(--color-text-muted)] md:flex">
+              <span className="size-1.5 rounded-full bg-[var(--color-success)]" aria-hidden="true" />
+              Online
+            </span>
+            <DButton variant="ghost" size="icon" aria-label="Notifications">
+              <Bell className="size-[18px]" />
             </DButton>
+            <DDropdown
+              placement="bottom-end"
+              contentPadding={false}
+              minWidth={240}
+              closeOnItemClick
+              trigger={() => (
+                <button
+                  type="button"
+                  className="grid size-9 place-items-center border-0 bg-transparent p-0 rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-focus)]/25"
+                  aria-label="Open account menu"
+                >
+                  <DAvatar
+                    alt=""
+                    name={session.identity.displayName}
+                    fallback={session.identity.displayName.trim() ? undefined : <UserRound className="size-4" aria-label="User account" />}
+                    size="sm"
+                    className="shrink-0 text-xs font-bold text-[var(--color-brand)]"
+                  />
+                </button>
+              )}
+            >
+              <div className="p-1.5">
+                <div className="border-b border-[var(--color-border)] px-2.5 py-2.5">
+                  <p className="truncate text-sm font-semibold text-[var(--color-text)]">
+                    {session.identity.displayName}
+                  </p>
+                  <p className="mt-0.5 truncate text-xs text-[var(--color-text-muted)]">{roleContext}</p>
+                </div>
+                <button type="button" disabled className="mt-1 flex h-9 w-full items-center gap-2 rounded-[var(--radius-control)] px-2.5 text-left text-sm text-[var(--color-text-muted)] disabled:cursor-not-allowed disabled:opacity-60">
+                  <UserCircle className="size-4" />
+                  Profile
+                </button>
+                <button type="button" disabled className="flex h-9 w-full items-center gap-2 rounded-[var(--radius-control)] px-2.5 text-left text-sm text-[var(--color-text-muted)] disabled:cursor-not-allowed disabled:opacity-60">
+                  <KeyRound className="size-4" />
+                  Change Password
+                </button>
+                <div className="my-1 border-t border-[var(--color-border)]" />
+                <button type="button" role="menuitem" onClick={() => void logout()} className="flex h-9 w-full items-center gap-2 rounded-[var(--radius-control)] px-2.5 text-left text-sm font-medium text-[var(--color-text)] hover:bg-[var(--color-surface-muted)]">
+                  <LogOut className="size-4" />
+                  Logout
+                </button>
+              </div>
+            </DDropdown>
           </div>
         </header>
-        <div className="min-h-0 overflow-y-auto overscroll-contain">
+        <div className="min-h-0 min-w-0 w-full flex-1 overflow-y-auto overscroll-contain">
           <Outlet />
         </div>
       </main>
@@ -205,16 +253,25 @@ export function BackofficeShell() {
   );
 }
 
-function NavigationLink({ item }: { item: NavigationItem }) {
+function NavigationGroups({ session }: { session: BackofficeSession }) {
+  return <><div className="mb-3"><NavigationLink item={dashboardItem} /></div>{navigationSections.map((section) => {
+    const items = section.items.filter((item) => canAccessBackoffice(session, item.capability));
+    if (!items.length) return null;
+    return <div key={section.label} className="mt-3"><p className="px-3 pb-1 text-[12px] font-semibold text-[var(--color-text-muted)]">{section.label}</p><div className="space-y-0.5 pl-3">{items.map((item) => <NavigationLink key={item.label} item={item} nested />)}</div></div>;
+  })}</>;
+}
+
+function NavigationLink({ item, nested = false }: { item: NavigationItem; nested?: boolean }) {
   const Icon = item.icon;
   return (
     <NavLink
       to={item.to}
       className={({ isActive }) =>
         [
-          'flex h-8 items-center justify-start gap-2 rounded-[var(--radius-control)] border border-transparent px-2.5 text-sm font-medium transition-colors duration-150',
+          'flex h-9 items-center justify-start gap-2 rounded-[var(--radius-control)] text-sm font-medium transition-colors duration-150',
+          nested ? 'px-3' : 'px-3',
           isActive
-            ? 'border-[var(--color-brand)]/10 bg-[var(--color-brand)]/10 text-[var(--color-brand)]'
+            ? 'bg-[var(--color-brand)]/10 text-[var(--color-brand)]'
             : 'text-[var(--color-text-muted)] hover:bg-[var(--color-surface-muted)] hover:text-[var(--color-text)]',
         ].join(' ')
       }

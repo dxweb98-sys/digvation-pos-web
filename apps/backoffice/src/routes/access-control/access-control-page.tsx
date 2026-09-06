@@ -4,16 +4,19 @@ import {
   DBadge,
   DCheckbox,
   DConfirmDialog,
+  DDataTable,
   DDialog,
   DInput,
-  DSkeleton,
+  type TableColumn,
 } from '@digvation-labs/ui';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { Ban, Pencil, UserCog } from 'lucide-react';
 import { useMemo, useState } from 'react';
 
 import { useRuntime } from '@digvation/pos-runtime';
 import { canPerformBackofficeAction } from '../../auth/backoffice-access';
 import { useBackofficeAuth } from '../../auth/backoffice-auth-context';
+import { BackofficePage, BackofficePageHeader } from '../../app/layout/backoffice-page';
 import { AccessControlApi, type AccessRole, type AccessUser } from './access-control-api';
 
 const accessControlKeys = {
@@ -36,7 +39,7 @@ export function AccessControlPage() {
   const queryClient = useQueryClient();
   const rolesQuery = useQuery({
     queryKey: accessControlKeys.roles,
-    queryFn: () => api.listRoles(),
+    queryFn: () => api.listRoles({ limit: 20, offset: 0 }),
   });
   const permissionsQuery = useQuery({
     queryKey: accessControlKeys.permissions,
@@ -44,7 +47,7 @@ export function AccessControlPage() {
   });
   const usersQuery = useQuery({
     queryKey: accessControlKeys.users,
-    queryFn: () => api.listUsers(),
+    queryFn: () => api.listUsers({ limit: 20, offset: 0 }),
     enabled: Boolean(session && canPerformBackofficeAction(session, 'viewUsers')),
   });
 
@@ -59,23 +62,8 @@ export function AccessControlPage() {
     void queryClient.invalidateQueries({ queryKey: accessControlKeys.users });
 
   return (
-    <section className="px-5 py-8 sm:px-6 lg:px-8 lg:py-10">
-      <div className="max-w-6xl">
-        <div className="flex flex-wrap items-end justify-between gap-4">
-          <div>
-            <p className="text-xs font-bold uppercase tracking-[0.14em] text-[var(--color-brand)]">
-              Configuration
-            </p>
-            <h1 className="mt-2 text-2xl font-bold tracking-[-0.02em]">Access Control</h1>
-            <p className="mt-2 max-w-2xl text-sm leading-6 text-[var(--color-text-muted)]">
-              Manage tenant roles and user role assignments. Permissions are defined by the POS
-              platform.
-            </p>
-          </div>
-          {section === 'roles' && canCreateRole ? (
-            <DButton onClick={() => setEditingRole(null)}>Create role</DButton>
-          ) : null}
-        </div>
+    <BackofficePage>
+      <BackofficePageHeader eyebrow="Configuration" title="Access Control" description="Manage tenant roles and user role assignments. Permissions are defined by the POS platform." actions={section === 'roles' && canCreateRole ? <DButton onClick={() => setEditingRole(null)}>Create role</DButton> : null} />
         <div className="mt-7 flex gap-1 border-b border-[var(--color-border)]">
           <SectionButton active={section === 'roles'} onClick={() => setSection('roles')}>
             Roles
@@ -87,8 +75,8 @@ export function AccessControlPage() {
           ) : null}
         </div>
         {section === 'roles' ? (
-          <RolesPanel
-            roles={rolesQuery.data?.items}
+          <RolesTable
+            roles={rolesQuery.data?.items ?? []}
             isLoading={rolesQuery.isLoading}
             onEdit={setEditingRole}
             onDeactivate={setDeactivatingRole}
@@ -96,14 +84,14 @@ export function AccessControlPage() {
             canDeactivate={canUpdateRole}
           />
         ) : (
-          <UsersPanel
-            users={usersQuery.data?.items}
+          <UsersTable
+            users={usersQuery.data?.items ?? []}
             isLoading={usersQuery.isLoading}
             onEdit={setEditingUser}
             canEdit={canManageUsers}
           />
         )}
-      </div>
+      
       <RoleEditor
         key={editingRole?.id ?? (editingRole === null ? 'new' : 'closed')}
         role={editingRole}
@@ -138,11 +126,11 @@ export function AccessControlPage() {
         confirmLabel="Deactivate"
         variant="danger"
       />
-    </section>
+    </BackofficePage>
   );
 }
 
-function RolesPanel({
+function RolesTable({
   roles,
   isLoading,
   onEdit,
@@ -150,96 +138,112 @@ function RolesPanel({
   canEdit,
   canDeactivate,
 }: {
-  roles?: AccessRole[] | undefined;
+  roles: AccessRole[];
   isLoading: boolean;
   onEdit: (role: AccessRole) => void;
   onDeactivate: (role: AccessRole) => void;
   canEdit: boolean;
   canDeactivate: boolean;
 }) {
-  if (isLoading)
-    return (
-      <div className="mt-6 space-y-3">
-        <DSkeleton className="h-14 w-full" />
-        <DSkeleton className="h-14 w-full" />
-      </div>
-    );
-  if (!roles?.length) return <EmptyState text="No roles are available for this workspace." />;
+  const columns: TableColumn<AccessRole>[] = [
+    {
+      key: 'name',
+      label: 'Role',
+      render: (role) => (
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="font-semibold">{role.name}</span>
+          {role.systemKey ? <DBadge variant="outline">System role</DBadge> : null}
+        </div>
+      ),
+    },
+    { key: 'code', label: 'Code' },
+    { key: 'permissions', label: 'Permissions', render: (role) => `${role.permissions.length} permissions` },
+    {
+      key: 'status',
+      label: 'Status',
+      render: (role) => (
+        <DBadge variant={role.status === 'ACTIVE' ? 'outline' : undefined}>
+          {role.status === 'ACTIVE' ? 'Active' : 'Inactive'}
+        </DBadge>
+      ),
+    },
+  ];
+
   return (
-    <div className="mt-6 overflow-hidden rounded-[var(--radius-card)] border border-[var(--color-border)] bg-[var(--color-surface)]">
-      <div className="divide-y divide-[var(--color-border)]">
-        {roles.map((role) => (
-          <div key={role.id} className="flex items-center justify-between gap-4 px-5 py-4">
-            <div className="min-w-0">
-              <div className="flex flex-wrap items-center gap-2">
-                <p className="font-semibold">{role.name}</p>
-                {role.systemKey ? <DBadge variant="outline">System role</DBadge> : null}
-                {role.status === 'INACTIVE' ? <DBadge>Inactive</DBadge> : null}
-              </div>
-              <p className="mt-1 text-xs text-[var(--color-text-muted)]">
-                {role.code} · {role.permissions.length} permissions
-              </p>
-            </div>
-            {!role.systemKey ? (
-              <div className="flex items-center gap-1">
-                {canEdit ? (
-                  <DButton variant="ghost" size="sm" onClick={() => onEdit(role)}>
-                    Manage
-                  </DButton>
-                ) : null}
-                {canDeactivate && role.status === 'ACTIVE' ? (
-                  <DButton variant="ghost" size="sm" onClick={() => onDeactivate(role)}>
-                    Deactivate
-                  </DButton>
-                ) : null}
-              </div>
-            ) : null}
-          </div>
-        ))}
-      </div>
+    <div className="mt-6">
+      <DDataTable
+        columns={columns}
+        data={roles}
+        rowKey="id"
+        loading={isLoading}
+        emptyMessage="No roles are available for this workspace."
+        actions={[
+          {
+            label: 'Manage role',
+            icon: <Pencil className="size-4" />,
+            onClick: onEdit,
+            show: (role) => !role.systemKey && canEdit,
+          },
+          {
+            label: 'Deactivate role',
+            icon: <Ban className="size-4" />,
+            variant: 'danger',
+            onClick: onDeactivate,
+            show: (role) => !role.systemKey && canDeactivate && role.status === 'ACTIVE',
+          },
+        ]}
+      />
     </div>
   );
 }
 
-function UsersPanel({
+function UsersTable({
   users,
   isLoading,
   onEdit,
   canEdit,
 }: {
-  users?: AccessUser[] | undefined;
+  users: AccessUser[];
   isLoading: boolean;
   onEdit: (user: AccessUser) => void;
   canEdit: boolean;
 }) {
-  if (isLoading)
-    return (
-      <div className="mt-6 space-y-3">
-        <DSkeleton className="h-14 w-full" />
-        <DSkeleton className="h-14 w-full" />
-      </div>
-    );
-  if (!users?.length) return <EmptyState text="No POS users are available for this workspace." />;
+  const columns: TableColumn<AccessUser>[] = [
+    { key: 'displayName', label: 'User' },
+    { key: 'username', label: 'Username', render: (user) => user.username ?? 'No username' },
+    {
+      key: 'roles',
+      label: 'Roles',
+      render: (user) => user.roles.map((role) => role.name).join(', ') || 'No roles assigned',
+    },
+    {
+      key: 'status',
+      label: 'Status',
+      render: (user) => (
+        <DBadge variant={user.status === 'ACTIVE' ? 'outline' : undefined}>
+          {formatUserStatus(user.status)}
+        </DBadge>
+      ),
+    },
+  ];
+
   return (
-    <div className="mt-6 overflow-hidden rounded-[var(--radius-card)] border border-[var(--color-border)] bg-[var(--color-surface)]">
-      <div className="divide-y divide-[var(--color-border)]">
-        {users.map((user) => (
-          <div key={user.id} className="flex items-center justify-between gap-4 px-5 py-4">
-            <div className="min-w-0">
-              <p className="font-semibold">{user.displayName}</p>
-              <p className="mt-1 truncate text-xs text-[var(--color-text-muted)]">
-                {user.username ?? 'No username'} ·{' '}
-                {user.roles.map((role) => role.name).join(', ') || 'No roles assigned'}
-              </p>
-            </div>
-            {canEdit ? (
-              <DButton variant="ghost" size="sm" onClick={() => onEdit(user)}>
-                Manage roles
-              </DButton>
-            ) : null}
-          </div>
-        ))}
-      </div>
+    <div className="mt-6">
+      <DDataTable
+        columns={columns}
+        data={users}
+        rowKey="id"
+        loading={isLoading}
+        emptyMessage="No POS users are available for this workspace."
+        actions={[
+          {
+            label: 'Manage roles',
+            icon: <UserCog className="size-4" />,
+            onClick: onEdit,
+            show: () => canEdit,
+          },
+        ]}
+      />
     </div>
   );
 }
@@ -293,7 +297,7 @@ function RoleEditor({
       }
       size="lg"
       footer={
-        <>
+        <div className="flex justify-end gap-2">
           <DButton variant="secondary" onClick={onClose}>
             Cancel
           </DButton>
@@ -302,7 +306,7 @@ function RoleEditor({
               Save role
             </DButton>
           ) : null}
-        </>
+        </div>
       }
     >
       <div className="space-y-5">
@@ -370,7 +374,7 @@ function UserRoleEditor({
       title="Manage user roles"
       description={user?.displayName}
       footer={
-        <>
+        <div className="flex justify-end gap-2">
           <DButton variant="secondary" onClick={onClose}>
             Cancel
           </DButton>
@@ -387,7 +391,7 @@ function UserRoleEditor({
               Save assignments
             </DButton>
           ) : null}
-        </>
+        </div>
       }
     >
       <div className="space-y-2">
@@ -429,16 +433,16 @@ function SectionButton({
     </button>
   );
 }
-function EmptyState({ text }: { text: string }) {
-  return (
-    <div className="mt-6 rounded-[var(--radius-card)] border border-dashed border-[var(--color-border)] p-6 text-sm text-[var(--color-text-muted)]">
-      {text}
-    </div>
-  );
-}
 function formatPermission(key: string) {
   return key
     .split(':')
     .map((part) => part.replaceAll('-', ' ').replace(/\b\w/g, (letter) => letter.toUpperCase()))
     .join(' · ');
+}
+
+function formatUserStatus(status: AccessUser['status']) {
+  return status
+    .split('_')
+    .map((part) => part.charAt(0) + part.slice(1).toLowerCase())
+    .join(' ');
 }

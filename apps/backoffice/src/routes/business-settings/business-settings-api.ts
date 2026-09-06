@@ -15,8 +15,15 @@ export interface SellingLocation {
   version: number;
 }
 
-interface Page<T> {
+export interface Page<T> {
   items: T[];
+  limit: number;
+  offset: number;
+}
+
+export interface PageRequest {
+  limit: number;
+  offset: number;
 }
 
 export class BusinessSettingsApi {
@@ -24,7 +31,7 @@ export class BusinessSettingsApi {
 
   getProfile() { return this.client.get<BusinessProfile>('/api/v1/business-profile'); }
   updateProfile(profile: BusinessProfile, name: string) { return this.client.patch<BusinessProfile>('/api/v1/business-profile', { expectedVersion: profile.version, name }); }
-  listLocations() { return this.client.get<Page<SellingLocation>>('/api/v1/locations?limit=100&offset=0'); }
+  listLocations(page: PageRequest) { return this.client.get<Page<SellingLocation>>(`/api/v1/locations?limit=${page.limit}&offset=${page.offset}`); }
   createLocation(input: { code: string; name: string }) { return this.client.post<SellingLocation>('/api/v1/locations', input); }
   updateLocation(location: SellingLocation, input: { name?: string; status?: SellingLocation['status'] }) { return this.client.patch<SellingLocation>(`/api/v1/locations/${location.id}`, { expectedVersion: location.version, ...input }); }
 }
