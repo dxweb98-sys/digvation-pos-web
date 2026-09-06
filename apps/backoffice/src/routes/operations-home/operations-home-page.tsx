@@ -1,4 +1,6 @@
 import { Boxes, Building2, Tags } from 'lucide-react';
+import { DCard } from '@digvation-labs/ui';
+import { BackofficePage, BackofficePageHeader } from '../../app/layout/backoffice-page';
 
 const UPCOMING = [
   ['Branches', Building2, 'Branch configuration maps to the backend Selling Location contract.'],
@@ -8,18 +10,10 @@ const UPCOMING = [
 
 export function OperationsHomePage() {
   return (
-    <section className="px-5 py-6 lg:px-8 lg:py-8">
-      <div className="max-w-5xl">
-        <p className="text-xs font-bold uppercase tracking-[0.18em] text-[var(--color-brand)]">
-          Operations
-        </p>
-        <h1 className="mt-3 text-3xl font-bold tracking-[-0.04em]">Backoffice foundation</h1>
-        <p className="mt-3 max-w-2xl text-sm leading-7 text-[var(--color-text-muted)]">
-          No fake dashboard metrics are shown. Management capabilities appear only when their
-          backend contract and frontend checkpoint are approved.
-        </p>
+    <BackofficePage>
+      <BackofficePageHeader eyebrow="Operations" title="Backoffice foundation" description="No fake dashboard metrics are shown. Management capabilities appear only when their backend contract and frontend checkpoint are approved." />
 
-        <div className="mt-7 grid gap-3 md:grid-cols-3">
+        <div className="mt-6 grid gap-3 md:grid-cols-3">
           {UPCOMING.map(([title, Icon, description], index) => {
             const accents = [
               'var(--color-accent-yellow)',
@@ -28,9 +22,9 @@ export function OperationsHomePage() {
             ] as const;
 
             return (
-              <article
+              <DCard
                 key={title}
-                className="rounded-[var(--radius-card)] border border-[var(--color-border)] bg-[var(--color-surface)] p-5 shadow-sm"
+                className="p-5"
               >
                 <div
                   className="grid size-9 place-items-center rounded-[var(--radius-control)]"
@@ -42,11 +36,10 @@ export function OperationsHomePage() {
                 <p className="mt-2 text-sm leading-6 text-[var(--color-text-muted)]">
                   {description}
                 </p>
-              </article>
+              </DCard>
             );
           })}
         </div>
-      </div>
-    </section>
+    </BackofficePage>
   );
 }
