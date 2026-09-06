@@ -42,6 +42,12 @@ export interface ServiceDefinition {
   allowEmployeeContribution: boolean;
 }
 
+export interface CatalogDisplayPrice {
+  amount: string;
+  currency: string;
+  kind: 'EXACT' | 'FROM';
+}
+
 export interface CatalogItem {
   id: string;
   code: string;
@@ -56,6 +62,7 @@ export interface CatalogItem {
   createdAt: string;
   updatedAt: string;
   serviceDefinition: ServiceDefinition | null;
+  displayPrice?: CatalogDisplayPrice | null;
 }
 
 export interface CatalogVariant extends NamedRecord {
