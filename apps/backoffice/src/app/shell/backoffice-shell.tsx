@@ -2,6 +2,7 @@ import { useRuntime } from '@digvation/pos-runtime';
 import { DAvatar, DBadge, DButton, DDropdown } from '@digvation-labs/ui';
 import {
   Bell,
+  BadgePercent,
   BookOpen,
   Building2,
   ChartNoAxesCombined,
@@ -72,6 +73,7 @@ const navigationSections: ReadonlyArray<{ label: string; items: readonly Navigat
     label: 'Configuration',
     items: [
       { label: 'Business', to: '/business', icon: Building2, capability: 'configuration' },
+      { label: 'Tax', to: '/tax', icon: BadgePercent, capability: 'tax' },
       {
         label: 'Access Control',
         to: '/access-control',
@@ -170,7 +172,11 @@ export function BackofficeShell() {
                 closeOnItemClick
                 minWidth={0}
                 contentClassName="w-[min(320px,calc(100vw-24px))] max-h-[calc(100vh-88px)] overflow-y-auto"
-                trigger={() => <DButton variant="ghost" size="icon" aria-label="Open navigation menu"><Menu className="size-[18px]" /></DButton>}
+                trigger={() => (
+                  <DButton variant="ghost" size="icon" aria-label="Open navigation menu">
+                    <Menu className="size-[18px]" />
+                  </DButton>
+                )}
               >
                 <nav className="p-3">
                   <NavigationGroups session={session} />
@@ -185,16 +191,24 @@ export function BackofficeShell() {
             </div>
           </div>
           <div className="flex items-center gap-2 sm:gap-3">
-            <p className="backoffice-shell__header-date hidden text-xs text-[var(--color-text-muted)] md:block">{currentDate}</p>
+            <p className="backoffice-shell__header-date hidden text-xs text-[var(--color-text-muted)] md:block">
+              {currentDate}
+            </p>
             <span
               className="backoffice-shell__header-metadata hidden h-5 w-px bg-[var(--color-border)] md:block"
               aria-hidden="true"
             />
-            <DBadge variant="outline" className="backoffice-shell__header-workspace hidden md:inline-flex">
+            <DBadge
+              variant="outline"
+              className="backoffice-shell__header-workspace hidden md:inline-flex"
+            >
               {session.identity.workspace}
             </DBadge>
             <span className="backoffice-shell__header-status hidden items-center gap-1.5 text-xs text-[var(--color-text-muted)] md:flex">
-              <span className="size-1.5 rounded-full bg-[var(--color-success)]" aria-hidden="true" />
+              <span
+                className="size-1.5 rounded-full bg-[var(--color-success)]"
+                aria-hidden="true"
+              />
               Online
             </span>
             <DButton variant="ghost" size="icon" aria-label="Notifications">
@@ -214,7 +228,11 @@ export function BackofficeShell() {
                   <DAvatar
                     alt=""
                     name={session.identity.displayName}
-                    fallback={session.identity.displayName.trim() ? undefined : <UserRound className="size-4" aria-label="User account" />}
+                    fallback={
+                      session.identity.displayName.trim() ? undefined : (
+                        <UserRound className="size-4" aria-label="User account" />
+                      )
+                    }
                     size="sm"
                     className="shrink-0 text-xs font-bold text-[var(--color-brand)]"
                   />
@@ -226,18 +244,33 @@ export function BackofficeShell() {
                   <p className="truncate text-sm font-semibold text-[var(--color-text)]">
                     {session.identity.displayName}
                   </p>
-                  <p className="mt-0.5 truncate text-xs text-[var(--color-text-muted)]">{roleContext}</p>
+                  <p className="mt-0.5 truncate text-xs text-[var(--color-text-muted)]">
+                    {roleContext}
+                  </p>
                 </div>
-                <button type="button" disabled className="mt-1 flex h-9 w-full items-center gap-2 rounded-[var(--radius-control)] px-2.5 text-left text-sm text-[var(--color-text-muted)] disabled:cursor-not-allowed disabled:opacity-60">
+                <button
+                  type="button"
+                  disabled
+                  className="mt-1 flex h-9 w-full items-center gap-2 rounded-[var(--radius-control)] px-2.5 text-left text-sm text-[var(--color-text-muted)] disabled:cursor-not-allowed disabled:opacity-60"
+                >
                   <UserCircle className="size-4" />
                   Profile
                 </button>
-                <button type="button" disabled className="flex h-9 w-full items-center gap-2 rounded-[var(--radius-control)] px-2.5 text-left text-sm text-[var(--color-text-muted)] disabled:cursor-not-allowed disabled:opacity-60">
+                <button
+                  type="button"
+                  disabled
+                  className="flex h-9 w-full items-center gap-2 rounded-[var(--radius-control)] px-2.5 text-left text-sm text-[var(--color-text-muted)] disabled:cursor-not-allowed disabled:opacity-60"
+                >
                   <KeyRound className="size-4" />
                   Change Password
                 </button>
                 <div className="my-1 border-t border-[var(--color-border)]" />
-                <button type="button" role="menuitem" onClick={() => void logout()} className="flex h-9 w-full items-center gap-2 rounded-[var(--radius-control)] px-2.5 text-left text-sm font-medium text-[var(--color-text)] hover:bg-[var(--color-surface-muted)]">
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={() => void logout()}
+                  className="flex h-9 w-full items-center gap-2 rounded-[var(--radius-control)] px-2.5 text-left text-sm font-medium text-[var(--color-text)] hover:bg-[var(--color-surface-muted)]"
+                >
                   <LogOut className="size-4" />
                   Logout
                 </button>
@@ -254,11 +287,29 @@ export function BackofficeShell() {
 }
 
 function NavigationGroups({ session }: { session: BackofficeSession }) {
-  return <><div className="mb-3"><NavigationLink item={dashboardItem} /></div>{navigationSections.map((section) => {
-    const items = section.items.filter((item) => canAccessBackoffice(session, item.capability));
-    if (!items.length) return null;
-    return <div key={section.label} className="mt-3"><p className="px-3 pb-1 text-[12px] font-semibold text-[var(--color-text-muted)]">{section.label}</p><div className="space-y-0.5 pl-3">{items.map((item) => <NavigationLink key={item.label} item={item} nested />)}</div></div>;
-  })}</>;
+  return (
+    <>
+      <div className="mb-3">
+        <NavigationLink item={dashboardItem} />
+      </div>
+      {navigationSections.map((section) => {
+        const items = section.items.filter((item) => canAccessBackoffice(session, item.capability));
+        if (!items.length) return null;
+        return (
+          <div key={section.label} className="mt-3">
+            <p className="px-3 pb-1 text-[12px] font-semibold text-[var(--color-text-muted)]">
+              {section.label}
+            </p>
+            <div className="space-y-0.5 pl-3">
+              {items.map((item) => (
+                <NavigationLink key={item.label} item={item} nested />
+              ))}
+            </div>
+          </div>
+        );
+      })}
+    </>
+  );
 }
 
 function NavigationLink({ item, nested = false }: { item: NavigationItem; nested?: boolean }) {

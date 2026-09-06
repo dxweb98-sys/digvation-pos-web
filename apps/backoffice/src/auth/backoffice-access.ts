@@ -7,6 +7,7 @@ export type BackofficeCapability =
   | 'finance'
   | 'reports'
   | 'configuration'
+  | 'tax'
   | 'accessControl';
 
 export type BackofficeAction =
@@ -19,17 +20,24 @@ export type BackofficeAction =
   | 'updateBusinessProfile'
   | 'viewSellingLocations'
   | 'createSellingLocation'
-  | 'updateSellingLocation';
+  | 'updateSellingLocation'
+  | 'viewCatalog'
+  | 'createCatalog'
+  | 'updateCatalog'
+  | 'viewPricing'
+  | 'createPricing'
+  | 'cancelPricing'
+  | 'viewTax'
+  | 'createTax'
+  | 'updateTax'
+  | 'cancelTax';
 
 interface PermissionRequirement {
   allOf?: readonly string[];
   anyOf?: readonly string[];
 }
 
-const capabilityPermissions: Record<
-  BackofficeCapability,
-  PermissionRequirement
-> = {
+const capabilityPermissions: Record<BackofficeCapability, PermissionRequirement> = {
   dashboard: { allOf: ['auth:self'] },
   catalog: { allOf: ['catalog:read'] },
   employees: { allOf: ['employees:read'] },
@@ -39,6 +47,8 @@ const capabilityPermissions: Record<
   configuration: {
     anyOf: ['business-profile:read', 'locations:read'],
   },
+
+  tax: { allOf: ['tax:read'] },
 
   accessControl: {
     allOf: ['roles:read'],
@@ -58,6 +68,16 @@ const actionPermissions: Record<BackofficeAction, readonly string[]> = {
   viewSellingLocations: ['locations:read'],
   createSellingLocation: ['locations:create'],
   updateSellingLocation: ['locations:update'],
+  viewCatalog: ['catalog:read'],
+  createCatalog: ['catalog:create'],
+  updateCatalog: ['catalog:update'],
+  viewPricing: ['pricing:read'],
+  createPricing: ['pricing:create'],
+  cancelPricing: ['pricing:cancel'],
+  viewTax: ['tax:read'],
+  createTax: ['tax:create'],
+  updateTax: ['tax:update'],
+  cancelTax: ['tax:cancel'],
 };
 
 export function canAccessBackoffice(
@@ -72,9 +92,7 @@ export function canAccessBackoffice(
 
   const hasAny =
     !requirement.anyOf ||
-    requirement.anyOf.some((permission) =>
-      session.identity.permissions.includes(permission),
-    );
+    requirement.anyOf.some((permission) => session.identity.permissions.includes(permission));
 
   return hasAll && hasAny;
 }
