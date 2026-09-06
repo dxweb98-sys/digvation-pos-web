@@ -1,4 +1,4 @@
-import { DSkeleton } from '@digvation/ui';
+import { DSkeleton } from '@digvation-labs/ui';
 
 export function AuthenticationLoading() {
   return (
@@ -7,7 +7,10 @@ export function AuthenticationLoading() {
         <DSkeleton className="h-16 w-full" />
         <div className="grid gap-6 lg:grid-cols-[220px_minmax(0,1fr)]">
           <DSkeleton className="h-64" />
-          <div className="space-y-4"><DSkeleton className="h-8 w-52" /><DSkeleton className="h-28 w-full" /></div>
+          <div className="space-y-4">
+            <DSkeleton className="h-8 w-52" />
+            <DSkeleton className="h-28 w-full" />
+          </div>
         </div>
       </div>
     </main>

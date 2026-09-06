@@ -14,7 +14,7 @@ import {
   DInput as Input,
   DSearchInput as SearchInput,
   DSkeleton as Skeleton,
-} from '@digvation/ui';
+} from '@digvation-labs/ui';
 import { useQuery } from '@tanstack/react-query';
 import {
   AlertCircle,

@@ -7,12 +7,7 @@ import { useNavigate } from 'react-router';
 import { useCashierSession } from '../../app/providers/cashier-session-provider';
 import { cashierTransactionErrorMessage } from './cashier-transaction-errors';
 import { cashierTransactionKeys } from './cashier-transaction-keys';
-import type {
-  CatalogItem,
-  PaymentMethod,
-  Sale,
-  SaleLine,
-} from './cashier-transaction.types';
+import type { CatalogItem, PaymentMethod, Sale, SaleLine } from './cashier-transaction.types';
 import {
   createCashierTransactionAdapter,
   isLocalCashierDemoEnabled,
@@ -38,7 +33,6 @@ export function useCashierTransactionWorkspace(routeSaleId?: string) {
   const [lineTaskId, setLineTaskId] = useState<string | null>(null);
   const [isCompletionOpen, setCompletionOpen] = useState(false);
   const [resumedSaleId, setResumedSaleId] = useState<string | null>(null);
-  const [areEmployeeOptionsEnabled, setEmployeeOptionsEnabled] = useState(false);
   const transactionAdapter = useMemo(
     () =>
       createCashierTransactionAdapter(
@@ -240,7 +234,6 @@ export function useCashierTransactionWorkspace(routeSaleId?: string) {
   };
 
   const openLineTask = (line: SaleLine) => {
-    setEmployeeOptionsEnabled(true);
     setLineTaskId(line.id);
   };
 
@@ -341,11 +334,11 @@ export function useCashierTransactionWorkspace(routeSaleId?: string) {
         throw new Error('Mulai semua pekerjaan sebelum menyelesaikan transaksi.');
       }
       if (
-        trackedLines.some(
-          (line) => !line.fulfillment || line.fulfillment.status === 'CANCELED',
-        )
+        trackedLines.some((line) => !line.fulfillment || line.fulfillment.status === 'CANCELED')
       ) {
-        throw new Error('Pekerjaan yang dibatalkan tidak dapat diselesaikan sebagai transaksi aktif.');
+        throw new Error(
+          'Pekerjaan yang dibatalkan tidak dapat diselesaikan sebagai transaksi aktif.',
+        );
       }
       for (const trackedLine of trackedLines) {
         const liveLine = current.lines.find((line) => line.id === trackedLine.id);
@@ -456,7 +449,6 @@ export function useCashierTransactionWorkspace(routeSaleId?: string) {
     selectItem,
     selectVariant,
     cachedCardPrice,
-    requestEmployeeOptions: () => setEmployeeOptionsEnabled(true),
     closeVariantPicker: () => setVariantPicker(null),
     changeQuantity: saleWorkspace.changeQuantity,
     removeLine: saleWorkspace.removeLine,

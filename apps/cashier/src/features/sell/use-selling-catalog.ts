@@ -32,10 +32,7 @@ export function useSellingCatalog({
     queryKey: cashierTransactionKeys.items(sellingLocationId, currency),
     queryFn: ({ signal }) => {
       if (query.listSellingCatalogItems && sellingLocationId && currency) {
-        return query.listSellingCatalogItems(
-          { sellingLocationId, currency },
-          signal,
-        );
+        return query.listSellingCatalogItems({ sellingLocationId, currency }, signal);
       }
       return query.listCatalogItems(signal);
     },
@@ -60,7 +57,9 @@ export function useSellingCatalog({
     () =>
       new Map(
         items.flatMap((item) =>
-          item.displayPrice?.kind === 'EXACT' ? [[item.id, { amount: item.displayPrice.amount }]] : [],
+          item.displayPrice?.kind === 'EXACT'
+            ? [[item.id, { amount: item.displayPrice.amount }]]
+            : [],
         ),
       ),
     [items],
